@@ -3,6 +3,15 @@
 
 const STORAGE_PREFIX = "imaginex_";
 
+function safeParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 export interface PlayerProfile {
   nickname: string;
   avatarColor: string;
@@ -25,8 +34,7 @@ export interface LeaderboardEntry {
 
 // Profile
 export function getProfile(): PlayerProfile | null {
-  const raw = localStorage.getItem(`${STORAGE_PREFIX}profile`);
-  return raw ? JSON.parse(raw) : null;
+  return safeParse(localStorage.getItem(`${STORAGE_PREFIX}profile`), null);
 }
 
 export function saveProfile(profile: PlayerProfile): void {
@@ -35,8 +43,7 @@ export function saveProfile(profile: PlayerProfile): void {
 
 // Game saves
 export function getGameSave(gameId: string): GameSaveData | null {
-  const raw = localStorage.getItem(`${STORAGE_PREFIX}save_${gameId}`);
-  return raw ? JSON.parse(raw) : null;
+  return safeParse(localStorage.getItem(`${STORAGE_PREFIX}save_${gameId}`), null);
 }
 
 export function saveGameData(gameId: string, data: GameSaveData): void {
@@ -58,8 +65,10 @@ export function updatePlayTime(gameId: string, seconds: number): void {
 
 // Leaderboard (local for now)
 export function getLeaderboard(gameId?: string): LeaderboardEntry[] {
-  const raw = localStorage.getItem(`${STORAGE_PREFIX}leaderboard`);
-  const entries: LeaderboardEntry[] = raw ? JSON.parse(raw) : [];
+  const entries: LeaderboardEntry[] = safeParse(
+    localStorage.getItem(`${STORAGE_PREFIX}leaderboard`),
+    []
+  );
   if (gameId) {
     return entries
       .filter((e) => e.gameId === gameId)
@@ -91,9 +100,8 @@ export function getStats() {
   let lastPlayed = 0;
 
   for (const key of allKeys) {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const save: GameSaveData = JSON.parse(raw);
+    const save = safeParse<GameSaveData | null>(localStorage.getItem(key), null);
+    if (save) {
       totalPlayTime += save.totalPlayTime;
       if (save.totalPlayTime > 0) gamesPlayed++;
       if (save.lastPlayed > lastPlayed) lastPlayed = save.lastPlayed;

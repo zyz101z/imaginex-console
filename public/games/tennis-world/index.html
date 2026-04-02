@@ -112,8 +112,8 @@
 
         /* --- HUD --- */
         .stats-bar { background: rgba(0, 0, 0, 0.9); padding: 10px 15px; border-bottom: 3px solid #444; font-size: 10px; display: flex; justify-content: space-between; color: #0f0; pointer-events: all; }
-        .dialog-box, .shop-box, #admin-panel { pointer-events: all; background: rgba(10, 10, 30, 0.98); border: 4px solid #fff; padding: 20px; font-size: 10px; display: none; box-shadow: 0 10px 0 rgba(0,0,0,0.7); max-width: 85%; margin: 100px auto; }
-        #admin-panel { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); width: 320px; z-index: 110; border-color: #ef4444; margin: 0; }
+        .dialog-box, .shop-box { pointer-events: all; background: rgba(10, 10, 30, 0.98); border: 4px solid #fff; padding: 20px; font-size: 10px; display: none; box-shadow: 0 10px 0 rgba(0,0,0,0.7); max-width: 85%; margin: 100px auto; }
+        /* admin panel removed for production */
         .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 350px; overflow-y: auto; }
         .shop-item { border: 2px solid #333; padding: 10px; cursor: pointer; text-align: center; background: #111; display: flex; flex-direction: column; align-items: center; transition: 0.1s; }
         .shop-item:hover { border-color: #0f0; }
@@ -142,7 +142,7 @@
         .score-label { font-size: 6px; color: #888; }
         .score-val { font-size: 18px; font-weight: bold; }
         #save-status { position: absolute; top: 60px; right: 20px; font-size: 8px; color: #0f0; display: none; pointer-events: none; }
-        #debug-toggle { position: absolute; bottom: 10px; left: 10px; width: 10px; height: 10px; pointer-events: all; cursor: default; }
+        /* debug toggle removed for production */
     </style>
 </head>
 <body>
@@ -198,22 +198,7 @@
             <div id="dialog" class="dialog-box"><div id="dialog-text">...</div><div id="dialog-actions"><button id="dialog-confirm-btn" class="btn">Confirm</button><button id="dialog-rematch-btn" class="btn" style="display:none; margin-left:8px; border-color:#fbbf24; color:#fbbf24;">Rematch?</button></div></div>
             <div id="shop" class="shop-box"><div class="mb-2 text-blue-400">PRO SHOP</div><div class="shop-grid" id="shop-grid"></div><button id="shop-exit-btn" class="btn w-full mt-4">Exit Shop</button></div>
 
-            <div id="admin-panel">
-                <div class="flex justify-between items-center mb-2"><span class="text-red-500">ADMIN</span><button id="admin-close-btn">X</button></div>
-                <div class="space-y-3">
-                    <button id="admin-add-rep-btn" class="btn btn-sm w-full">+500 REP</button>
-                    <button id="admin-medal-btn" class="btn btn-sm w-full">GIVE MEDAL</button>
-                    <div class="border-t border-gray-700 pt-2"><p class="mb-1 text-gray-400">MARK GYMS BEAT:</p>
-                        <div class="grid grid-cols-2 gap-1">
-                            <label class="flex items-center gap-1"><input type="checkbox" id="check-plant"> PLANT</label>
-                            <label class="flex items-center gap-1"><input type="checkbox" id="check-ice"> ICE</label>
-                            <label class="flex items-center gap-1"><input type="checkbox" id="check-water"> WATER</label>
-                            <label class="flex items-center gap-1"><input type="checkbox" id="check-fire"> FIRE</label>
-                        </div>
-                    </div>
-                    <button class="btn btn-sm w-full border-red-500 text-red-500 mt-2" onclick="window.location.reload()">HARD RELOAD</button>
-                </div>
-            </div>
+            <!-- admin panel removed for production -->
             <div id="pause-menu" style="pointer-events:all; display:none; position:absolute; inset:0; background:rgba(0,0,0,0.85); z-index:90; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
                 <div style="font-size:20px; color:#fff; margin-bottom:10px;">PAUSED</div>
                 <button id="pause-resume-btn" class="btn" style="width:200px;">RESUME</button>
@@ -227,14 +212,12 @@
                 <button id="ach-close-btn" class="btn" style="margin-top:16px; width:200px; border-color:#fbbf24; color:#fbbf24;">CLOSE</button>
             </div>
             <div id="bottom-bar" class="control-guide hidden">WASD: Move | SPACE: Interact/Serve | ESC: Pause</div>
-            <div id="debug-toggle"></div>
+            <!-- debug toggle removed for production -->
         </div>
     </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    // Firebase removed for production - using localStorage only
 
     // --- 1. GLOBALS & CONSTANTS ---
     const WORLD_W = 2400, WORLD_H = 3200, TILE_SIZE = 40;
@@ -259,17 +242,8 @@
     worldBg.width = WORLD_W; worldBg.height = WORLD_H;
     const wctx = worldBg.getContext('2d');
     
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'pixel-tennis-elemental-v55-stable';
-    let app_init = null, auth_init = null, db_init = null, firebaseOk = false;
-    try {
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : 'null');
-        if (firebaseConfig) {
-            app_init = initializeApp(firebaseConfig);
-            auth_init = getAuth(app_init);
-            db_init = getFirestore(app_init);
-            firebaseOk = true;
-        }
-    } catch(e) { console.log('Firebase unavailable, using localStorage'); }
+    const appId = 'pixel-tennis-elemental-v55-stable';
+    const firebaseOk = false;
 
     // --- GAME STATE ---
     const keys = {};
@@ -1217,12 +1191,7 @@
         for(let y=0; y<WORLD_H; y+=TILE_SIZE) { wctx.beginPath(); wctx.moveTo(0,y); wctx.lineTo(WORLD_W, y); wctx.stroke(); }
     }
 
-    function toggleAdmin() { const p = document.getElementById('admin-panel'); p.style.display = (p.style.display === 'block') ? 'none' : 'block'; }
-    function adminUpdateGyms() {
-        defeatedGyms = []; if(document.getElementById('check-plant').checked) defeatedGyms.push('plant_gym');
-        if(document.getElementById('check-ice').checked) defeatedGyms.push('ice_gym'); if(document.getElementById('check-water').checked) defeatedGyms.push('water_gym');
-        if(document.getElementById('check-fire').checked) defeatedGyms.push('fire_gym'); saveGameData();
-    }
+    // admin functions removed for production
 
     function distToSegment(px, py, ax, ay, bx, by) {
         const dx = bx - ax, dy = by - ay;
@@ -1650,19 +1619,7 @@
         bindUI('dialog-confirm-btn', () => { document.getElementById('dialog-rematch-btn').style.display = 'none'; handleDialogAction(); });
         bindUI('dialog-rematch-btn', () => { document.getElementById('dialog-rematch-btn').style.display = 'none'; document.getElementById('dialog').style.display = 'none'; if(activeNPC) { activeNPC.action = 'MATCH'; startStandardMatch(); } });
         bindUI('shop-exit-btn', () => { gameState = 'OVERWORLD'; document.getElementById('shop').style.display = 'none'; });
-        bindUI('admin-close-btn', () => { document.getElementById('admin-panel').style.display = 'none'; });
-        bindUI('debug-toggle', () => { 
-            const p = document.getElementById('admin-panel');
-            if(p) p.style.display = (p.style.display === 'block') ? 'none' : 'block';
-        });
-        bindUI('admin-add-rep-btn', () => { rep += 500; if(document.getElementById('rep-val')) document.getElementById('rep-val').innerText = rep; saveGameData(); });
-        bindUI('admin-medal-btn', () => { hasGoldMedal = true; if(document.getElementById('medal-icon')) document.getElementById('medal-icon').classList.remove('hidden'); saveGameData(); });
-        
-        const bindCheck = (id) => {
-            const el = document.getElementById(id);
-            if(el) el.onchange = adminUpdateGyms;
-        }
-        ['check-plant', 'check-ice', 'check-water', 'check-fire'].forEach(bindCheck);
+        // admin bindings removed for production
 
         bindUI('pause-resume-btn', () => togglePause());
         bindUI('pause-forfeit-btn', () => forfeitMatch());
@@ -1676,13 +1633,8 @@
         });
         window.addEventListener('keyup', e => keys[e.code] = false);
 
-        if (firebaseOk) {
-            await signInAnonymously(auth_init);
-            onAuthStateChanged(auth_init, (u) => { user = u; if (u) scanSlots(); });
-        } else {
-            user = { uid: 'local' };
-            scanSlots();
-        }
+        user = { uid: 'local' };
+        scanSlots();
 
         musicLoop();
         loop();

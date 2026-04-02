@@ -438,13 +438,13 @@ function GamePlayer({
         ref={(el) => { if (el) setTimeout(() => el.focus(), 100); }}
         src={game.url}
         className="w-full h-full border-0"
+        sandbox="allow-scripts allow-same-origin allow-popups"
         allow="autoplay; fullscreen"
         title={game.title}
         tabIndex={0}
         onLoad={(e) => {
           const iframe = e.target as HTMLIFrameElement;
           iframe.focus();
-          // Also try to focus the iframe's content window
           try { iframe.contentWindow?.focus(); } catch(_) {}
         }}
       />

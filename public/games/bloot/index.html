@@ -454,9 +454,7 @@
         .controls-hint { margin-top: 10px; font-size: 10px; color: #ccc; text-align: center; line-height: 1.6; }
         #save-status { position: absolute; bottom: 5px; right: 5px; font-size: 10px; color: #888; }
         
-        #debug-controls { display: flex; gap: 5px; margin-top: 15px; }
-        .debug-btn { background: #333; border: 1px solid #555; font-size: 8px; padding: 5px; color: #888; cursor: pointer; font-family: 'Press Start 2P', cursive; }
-        .debug-btn:active { background: #555; color: #fff; }
+        /* debug controls removed for production */
 
         #active-buffs {
             display: flex; gap: 10px; margin-top: 10px; font-size: 10px; color: #00E676;
@@ -569,12 +567,7 @@
             <p>Controls: Arrows/WASD to Move</p>
         </div>
 
-        <div id="debug-controls">
-            <button class="debug-btn" id="debug-wins-btn">DEBUG: +100 WINS</button>
-            <button class="debug-btn" id="debug-coins-btn">DEBUG: +500 COINS</button>
-            <button class="debug-btn" id="debug-diamonds-btn">DEBUG: +25 GEMS</button>
-            <button class="debug-btn" id="debug-reset-quests-btn">RESET QUESTS</button>
-        </div>
+        <!-- debug controls removed for production -->
     </div>
 
     <!-- QUEST SCREEN -->
@@ -692,10 +685,7 @@ const quitBtn = document.getElementById('quit-btn');
 const prevCharBtn = document.getElementById('prev-char-btn');
 const nextCharBtn = document.getElementById('next-char-btn');
 const randomCharBtn = document.getElementById('random-char-btn');
-const debugWinsBtn = document.getElementById('debug-wins-btn');
-const debugCoinsBtn = document.getElementById('debug-coins-btn');
-const debugDiamondsBtn = document.getElementById('debug-diamonds-btn');
-const debugResetQuestsBtn = document.getElementById('debug-reset-quests-btn');
+// debug buttons removed for production
 const questBtn = document.getElementById('quest-btn');
 const questBadge = document.getElementById('quest-badge'); 
 const closeQuestBtn = document.getElementById('close-quest-btn');
@@ -2053,10 +2043,7 @@ mapBtns.forEach(btn => {
 musicUploadBtn.addEventListener('click', () => musicFileInput.click());
 musicFileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { customMusicUrl = URL.createObjectURL(file); musicUploadBtn.textContent = "MUSIC READY!"; musicUploadBtn.classList.add('loaded'); } });
 
-debugWinsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerWins += 100; winsDisplay.innerText = "WINS: " + playerWins; saveGameData(); updateMapLock(); drawPreview(); alert("Added 100 Wins!"); });
-debugCoinsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerCoins += 500; updateHUD(); saveGameData(); renderShop(); alert("Added 500 Coins!"); });
-debugDiamondsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerDiamonds += 25; updateHUD(); saveGameData(); renderShop(); alert("Added 25 Gems!"); });
-document.getElementById('debug-reset-quests-btn').addEventListener('click', () => { if (!currentUser) return; console.log("Forcing Quest Reset..."); playerQuests = generateDailyQuests(); saveGameData(); if (!questScreen.classList.contains('hidden')) renderQuests(); alert("Quests Reset!"); });
+// debug event listeners removed for production
 
 playBtn.addEventListener('click', initGame);
 restartBtn.addEventListener('click', initGame);
