@@ -1624,7 +1624,7 @@ class Entity {
         this.ladderTimer = 0; 
         this.charData = CHARACTERS.find(c => c.id === charId) || CHARACTERS[0];
         this.aiTarget = null; this.aiDecisionTimer = 0; this.stuckTimer = 0; this.lastX = x; this.lastY = y;
-        this.lastTargetId = null;
+        this.lastTargetId = null; this.gapJumpCooldown = 0; this.gapJumpCount = 0; this.gapJumpX = 0;
         this.spawnX = x; 
         this.spawnY = y;
         this.runSpeed = 0.6;
@@ -1731,11 +1731,11 @@ class Entity {
             let isTargetingLadder = false;
             if (this.aiTarget && gameLevel.ladders.includes(this.aiTarget)) { isTargetingLadder = true; }
             
-            // A. Vertical Ambition
-            if (destY < this.y - 10) { 
+            // A. Vertical Ambition (only if gap cooldown allows)
+            if (destY < this.y - 10 && this.gapJumpCooldown <= 0) {
                  let jumpTolerance = 100;
                  if (currentMap === 'skyscraper') jumpTolerance = 150;
-                 if (currentMap === 'volcano' && this.y < 0) jumpTolerance = 250; // Increased aggression in clouds
+                 if (currentMap === 'volcano' && this.y < 0) jumpTolerance = 250;
 
                  if (Math.abs(destX - this.x) < jumpTolerance) shouldJump = true;
             }
@@ -1750,19 +1750,39 @@ class Entity {
             // C. Random Jump
             if (Math.random() < settings.jumpChance && !isTargetingLadder) shouldJump = true;
             
-            // D. Gap Detection
-            if (moveDir !== 0) {
-                let lookAhead = 40; 
-                if (currentDifficulty === 'HARD') lookAhead = 100; 
-                if (currentMap === 'skyscraper') lookAhead += 30; 
-                
-                // VOLCANO FIX: In clouds, reduce lookAhead to force "Late Jumps" at edge
-                if (currentMap === 'volcano' && this.y < 0) lookAhead = 10; 
+            // D. Gap Detection (with cooldown to prevent jump loops)
+            if (this.gapJumpCooldown > 0) this.gapJumpCooldown--;
+            if (moveDir !== 0 && this.gapJumpCooldown <= 0) {
+                let lookAhead = 40;
+                if (currentDifficulty === 'HARD') lookAhead = 100;
+                if (currentMap === 'skyscraper') lookAhead += 30;
 
-                const edgeThreshold = (this.width / 2) + lookAhead; const checkX = this.x + (this.width / 2) + (moveDir * edgeThreshold); const checkY = this.y + this.height + 5; 
+                // VOLCANO FIX: In clouds, reduce lookAhead to force "Late Jumps" at edge
+                if (currentMap === 'volcano' && this.y < 0) lookAhead = 10;
+
+                const edgeThreshold = (this.width / 2) + lookAhead; const checkX = this.x + (this.width / 2) + (moveDir * edgeThreshold); const checkY = this.y + this.height + 5;
                 let solidGroundAhead = false; if (checkY >= gameLevel.floorY) solidGroundAhead = true;
                 if (!solidGroundAhead) { for (let p of gameLevel.platforms) { if (checkX >= p.x && checkX <= p.x + p.width && checkY >= p.y && checkY <= p.y + p.height + 20) { solidGroundAhead = true; break; } } }
-                if (!solidGroundAhead) { shouldJump = true; this.ladderTimer = 0; }
+                if (!solidGroundAhead) {
+                    // Track repeated gap jumps from same spot
+                    if (Math.abs(this.x - this.gapJumpX) < 30) {
+                        this.gapJumpCount++;
+                    } else {
+                        this.gapJumpCount = 1;
+                        this.gapJumpX = this.x;
+                    }
+                    // If we've gap-jumped 3+ times from same spot, reverse direction instead
+                    if (this.gapJumpCount >= 3) {
+                        this.aiTarget = null;
+                        this.aiDecisionTimer = 0;
+                        this.gapJumpCount = 0;
+                        this.gapJumpCooldown = 60;
+                    } else {
+                        shouldJump = true;
+                        this.ladderTimer = 0;
+                        this.gapJumpCooldown = 20;
+                    }
+                }
             }
             
             // Volcano: Don't jump if waiting for vent
