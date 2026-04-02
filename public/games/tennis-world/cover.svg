@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" width="200" height="260">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a237e"/>
+      <stop offset="100%" stop-color="#0d47a1"/>
+    </linearGradient>
+    <linearGradient id="court" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2e7d32"/>
+      <stop offset="100%" stop-color="#1b5e20"/>
+    </linearGradient>
+    <radialGradient id="ball-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c6ff00"/>
+      <stop offset="100%" stop-color="#76ff03"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="200" height="260" rx="6" fill="url(#sky)"/>
+  <!-- Stars -->
+  <circle cx="30" cy="20" r="1" fill="white" opacity="0.6"/>
+  <circle cx="80" cy="35" r="1.5" fill="white" opacity="0.4"/>
+  <circle cx="150" cy="15" r="1" fill="white" opacity="0.7"/>
+  <circle cx="170" cy="45" r="1" fill="white" opacity="0.5"/>
+  <circle cx="45" cy="55" r="1.2" fill="white" opacity="0.3"/>
+  <!-- Court -->
+  <rect x="15" y="120" width="170" height="100" rx="4" fill="url(#court)"/>
+  <!-- Court lines -->
+  <line x1="100" y1="120" x2="100" y2="220" stroke="white" stroke-width="2" opacity="0.8"/>
+  <line x1="15" y1="170" x2="185" y2="170" stroke="white" stroke-width="2" opacity="0.8"/>
+  <rect x="40" y="140" width="120" height="60" rx="2" fill="none" stroke="white" stroke-width="1.5" opacity="0.6"/>
+  <!-- Net -->
+  <line x1="15" y1="170" x2="185" y2="170" stroke="white" stroke-width="3"/>
+  <line x1="15" y1="168" x2="185" y2="168" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="4 3"/>
+  <!-- Player silhouette -->
+  <g transform="translate(90, 185)">
+    <circle cx="0" cy="-20" r="6" fill="#ffcc80"/>
+    <rect x="-8" y="-14" width="16" height="20" rx="3" fill="#4fc3f7"/>
+    <rect x="-6" y="6" width="5" height="14" rx="2" fill="#1a237e"/>
+    <rect x="1" y="6" width="5" height="14" rx="2" fill="#1a237e"/>
+    <!-- Racket -->
+    <ellipse cx="16" cy="-12" rx="8" ry="10" fill="none" stroke="#ff5722" stroke-width="2"/>
+    <line x1="8" y1="-8" x2="16" y2="-12" stroke="#8d6e63" stroke-width="2"/>
+  </g>
+  <!-- Tennis ball with glow -->
+  <g filter="url(#glow)">
+    <circle cx="60" cy="100" r="10" fill="url(#ball-glow)"/>
+    <path d="M52 94 Q60 100 52 106" fill="none" stroke="white" stroke-width="1.5" opacity="0.7"/>
+    <path d="M68 94 Q60 100 68 106" fill="none" stroke="white" stroke-width="1.5" opacity="0.7"/>
+  </g>
+  <!-- Motion lines -->
+  <line x1="75" y1="98" x2="85" y2="95" stroke="#c6ff00" stroke-width="1" opacity="0.5"/>
+  <line x1="75" y1="102" x2="88" y2="100" stroke="#c6ff00" stroke-width="1" opacity="0.4"/>
+  <line x1="75" y1="106" x2="83" y2="105" stroke="#c6ff00" stroke-width="1" opacity="0.3"/>
+  <!-- Title -->
+  <text x="100" y="75" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="22" font-weight="900" fill="white" letter-spacing="1">
+    TENNIS
+  </text>
+  <text x="100" y="98" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="18" font-weight="900" fill="#4fc3f7" letter-spacing="2">
+    WORLD
+  </text>
+  <!-- Elemental icons -->
+  <circle cx="30" cy="240" r="8" fill="#f44336" opacity="0.7"/>
+  <text x="30" y="244" text-anchor="middle" font-size="10">🔥</text>
+  <circle cx="60" cy="240" r="8" fill="#2196f3" opacity="0.7"/>
+  <text x="60" y="244" text-anchor="middle" font-size="10">💧</text>
+  <circle cx="90" cy="240" r="8" fill="#00bcd4" opacity="0.7"/>
+  <text x="90" y="244" text-anchor="middle" font-size="10">❄️</text>
+  <circle cx="120" cy="240" r="8" fill="#4caf50" opacity="0.7"/>
+  <text x="120" y="244" text-anchor="middle" font-size="10">🌿</text>
+  <!-- imagineX badge -->
+  <text x="170" y="250" text-anchor="middle" font-family="Arial" font-size="7" fill="white" opacity="0.4" letter-spacing="1">imagineX</text>
+</svg>

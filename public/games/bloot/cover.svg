@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" width="200" height="260">
+  <defs>
+    <linearGradient id="mountain-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b71c1c"/>
+      <stop offset="60%" stop-color="#e65100"/>
+      <stop offset="100%" stop-color="#ff8f00"/>
+    </linearGradient>
+    <linearGradient id="snow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e0e0"/>
+    </linearGradient>
+    <linearGradient id="mountain1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#546e7a"/>
+      <stop offset="100%" stop-color="#37474f"/>
+    </linearGradient>
+    <linearGradient id="mountain2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#455a64"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+    <filter id="speed-blur">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1 0"/>
+    </filter>
+  </defs>
+  <!-- Background sunset -->
+  <rect width="200" height="260" rx="6" fill="url(#mountain-sky)"/>
+  <!-- Sun -->
+  <circle cx="100" cy="60" r="25" fill="#ffeb3b" opacity="0.8"/>
+  <circle cx="100" cy="60" r="30" fill="#ffeb3b" opacity="0.2"/>
+  <!-- Back mountain -->
+  <polygon points="0,180 40,100 80,130 120,85 160,120 200,95 200,260 0,260" fill="url(#mountain2)" opacity="0.7"/>
+  <!-- Front mountain -->
+  <polygon points="0,200 30,130 70,160 100,110 140,145 170,120 200,150 200,260 0,260" fill="url(#mountain1)"/>
+  <!-- Snow caps -->
+  <polygon points="100,110 90,125 110,125" fill="url(#snow)" opacity="0.9"/>
+  <polygon points="170,120 162,132 178,132" fill="url(#snow)" opacity="0.8"/>
+  <polygon points="30,130 22,142 38,142" fill="url(#snow)" opacity="0.8"/>
+  <!-- Racing character -->
+  <g transform="translate(95, 195) rotate(-15)">
+    <!-- Board -->
+    <rect x="-18" y="5" width="36" height="6" rx="3" fill="#ff5722"/>
+    <rect x="-16" y="6" width="32" height="4" rx="2" fill="#ff8a65"/>
+    <!-- Body -->
+    <circle cx="0" cy="-8" r="7" fill="#ffcc80"/>
+    <rect x="-9" y="-1" width="18" height="14" rx="3" fill="#d32f2f"/>
+    <!-- Goggles -->
+    <rect x="-8" y="-12" width="16" height="6" rx="3" fill="#212121"/>
+    <circle cx="-3" cy="-9" r="3" fill="#42a5f5" opacity="0.7"/>
+    <circle cx="5" cy="-9" r="3" fill="#42a5f5" opacity="0.7"/>
+    <!-- Speed lines -->
+    <line x1="22" y1="-5" x2="35" y2="-3" stroke="white" stroke-width="1.5" opacity="0.6"/>
+    <line x1="22" y1="0" x2="38" y2="2" stroke="white" stroke-width="1.5" opacity="0.5"/>
+    <line x1="22" y1="5" x2="33" y2="7" stroke="white" stroke-width="1.5" opacity="0.4"/>
+  </g>
+  <!-- Snow particles -->
+  <circle cx="25" cy="170" r="2" fill="white" opacity="0.6"/>
+  <circle cx="70" cy="185" r="1.5" fill="white" opacity="0.5"/>
+  <circle cx="140" cy="175" r="2" fill="white" opacity="0.4"/>
+  <circle cx="170" cy="195" r="1" fill="white" opacity="0.6"/>
+  <circle cx="50" cy="200" r="1.5" fill="white" opacity="0.3"/>
+  <circle cx="160" cy="210" r="2" fill="white" opacity="0.5"/>
+  <!-- Title -->
+  <text x="100" y="45" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="36" font-weight="900" fill="white" letter-spacing="3">
+    BLOOT
+  </text>
+  <text x="100" y="260" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="10" fill="white" opacity="0.6" letter-spacing="2">
+    MOUNTAIN RACE
+  </text>
+  <!-- imagineX badge -->
+  <text x="170" y="250" text-anchor="middle" font-family="Arial" font-size="7" fill="white" opacity="0.4" letter-spacing="1">imagineX</text>
+</svg>

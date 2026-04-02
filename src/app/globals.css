@@ -1,0 +1,391 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a12;
+  --foreground: #e8eaf6;
+  --accent: #4fc3f7;
+  --accent-glow: #29b6f6;
+  --card-bg: #141428;
+  --card-hover: #1a1a3e;
+  --sidebar-bg: #0d0d1a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden;
+}
+
+/* Blue glow accent matching the console design */
+.glow-line {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-glow), var(--accent), transparent);
+  box-shadow: 0 0 8px var(--accent), 0 0 20px rgba(79, 195, 247, 0.3);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px var(--accent), 0 0 20px rgba(79, 195, 247, 0.4);
+}
+
+.glow-border {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(79, 195, 247, 0.3), inset 0 0 8px rgba(79, 195, 247, 0.05);
+}
+
+/* Game card styling */
+.game-card {
+  background: var(--card-bg);
+  border: 1px solid rgba(79, 195, 247, 0.15);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.game-card:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(79, 195, 247, 0.2), 0 8px 32px rgba(0, 0, 0, 0.4);
+  transform: translateY(-4px) scale(1.02);
+}
+
+.game-card:hover .game-card-glow {
+  opacity: 1;
+}
+
+.game-card-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at center, rgba(79, 195, 247, 0.08), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+/* Sidebar nav */
+.nav-item {
+  padding: 10px 16px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #8890a8;
+  font-size: 14px;
+}
+
+.nav-item:hover {
+  background: rgba(79, 195, 247, 0.08);
+  color: var(--foreground);
+}
+
+.nav-item.active {
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+}
+
+/* Boot screen animation */
+@keyframes bootGlow {
+  0% { opacity: 0; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bootLine {
+  0% { width: 0%; }
+  100% { width: 60%; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.boot-logo {
+  animation: bootGlow 1.5s ease-out forwards;
+}
+
+.boot-line {
+  animation: bootLine 2s ease-out 0.8s forwards;
+  width: 0%;
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(79, 195, 247, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 195, 247, 0.5);
+}
+
+/* Profile avatar */
+.avatar-ring {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 12px rgba(79, 195, 247, 0.3);
+}
+
+/* Stats card */
+.stat-card {
+  background: linear-gradient(135deg, var(--card-bg), rgba(79, 195, 247, 0.05));
+  border: 1px solid rgba(79, 195, 247, 0.1);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+/* Cartridge styling */
+.cartridge {
+  width: 140px;
+  height: 190px;
+  border-radius: 8px 8px 4px 4px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.cartridge::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 6px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 3px;
+}
+
+.cartridge:hover {
+  transform: translateY(-8px) scale(1.05);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5), 0 0 20px var(--cart-glow, rgba(79,195,247,0.3));
+}
+
+.cartridge-label {
+  position: absolute;
+  top: 16px;
+  left: 8px;
+  right: 8px;
+  bottom: 34px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cartridge-label img {
+  object-position: top center;
+}
+
+.cartridge-label h3 {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.3;
+}
+
+.cartridge-label p {
+  font-size: 7px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.cartridge-pins {
+  position: absolute;
+  bottom: 4px;
+  left: 15%;
+  right: 15%;
+  height: 24px;
+  background: linear-gradient(180deg, #555 0%, #333 100%);
+  border-radius: 0 0 2px 2px;
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.cartridge-pin {
+  flex: 1;
+  background: linear-gradient(180deg, #888 0%, #666 50%, #888 100%);
+  border-radius: 1px;
+}
+
+/* === Cartridge insertion system === */
+
+/* Idle: gentle floating bob */
+@keyframes cartIdleBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.cart-phase-idle {
+  animation: cartIdleBob 2.5s ease-in-out infinite;
+}
+
+/* Lifting: cartridge rises up before dropping */
+@keyframes cartLift {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-30px) scale(1.05); }
+}
+
+.cart-phase-lifting {
+  animation: cartLift 0.4s ease-out forwards;
+}
+
+/* Dropping: cartridge plunges down into the slot */
+@keyframes cartDrop {
+  0% { transform: translateY(-30px) scale(1.05); }
+  60% { transform: translateY(95px) scale(0.95); }
+  80% { transform: translateY(88px) scale(0.97); }
+  100% { transform: translateY(92px) scale(0.96); }
+}
+
+.cart-phase-dropping {
+  animation: cartDrop 0.5s cubic-bezier(0.4, 0, 0.8, 1) forwards;
+}
+
+/* Seated: cartridge is in the slot, slight settle */
+@keyframes cartSettle {
+  0% { transform: translateY(92px) scale(0.96); }
+  40% { transform: translateY(95px) scale(0.95); }
+  100% { transform: translateY(93px) scale(0.96); }
+}
+
+.cart-phase-seated {
+  animation: cartSettle 0.2s ease-out forwards;
+}
+
+/* Glowing: cartridge stays seated, pulses with game color */
+.cart-phase-glowing {
+  transform: translateY(93px) scale(0.96);
+}
+
+/* Launching: cartridge fades as game boots */
+@keyframes cartLaunch {
+  0% { transform: translateY(93px) scale(0.96); opacity: 1; }
+  100% { transform: translateY(93px) scale(0.96); opacity: 0; }
+}
+
+.cart-phase-launching {
+  animation: cartLaunch 0.6s ease-out forwards;
+}
+
+/* Console bump when cartridge seats */
+@keyframes consoleBump {
+  0% { transform: translateY(0); }
+  30% { transform: translateY(3px); }
+  60% { transform: translateY(-1px); }
+  100% { transform: translateY(0); }
+}
+
+.console-bump {
+  animation: consoleBump 0.25s ease-out;
+}
+
+/* Console glow after insert */
+@keyframes consoleGlow {
+  0% { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  30% { filter: brightness(1.2) drop-shadow(0 0 25px rgba(79,195,247,0.5)); }
+  100% { filter: brightness(1.1) drop-shadow(0 0 15px rgba(79,195,247,0.3)); }
+}
+
+.console-activated {
+  animation: consoleGlow 0.8s ease-out forwards;
+}
+
+/* LED flash bar */
+@keyframes ledFlash {
+  0% { opacity: 0; box-shadow: none; }
+  20% { opacity: 1; box-shadow: 0 0 15px var(--accent), 0 0 30px rgba(79,195,247,0.5); }
+  50% { opacity: 0.6; }
+  70% { opacity: 1; box-shadow: 0 0 20px var(--accent), 0 0 40px rgba(79,195,247,0.6); }
+  100% { opacity: 0.9; box-shadow: 0 0 12px var(--accent), 0 0 25px rgba(79,195,247,0.4); }
+}
+
+.led-flash-bar {
+  background: var(--accent);
+  border-radius: 2px;
+  animation: ledFlash 0.6s ease-out forwards;
+}
+
+/* Screen glow on launch */
+@keyframes screenGlow {
+  0% { opacity: 0; }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; }
+}
+
+.screen-glow {
+  animation: screenGlow 0.8s ease-out forwards;
+  border-radius: 12px;
+}
+
+/* Pulsing slot indicator */
+@keyframes slotPulse {
+  0%, 100% { box-shadow: inset 0 0 10px rgba(79,195,247,0.1); }
+  50% { box-shadow: inset 0 0 20px rgba(79,195,247,0.3), 0 0 10px rgba(79,195,247,0.2); }
+}
+
+.slot-waiting {
+  animation: slotPulse 2s ease-in-out infinite;
+}
+
+/* Text pulse */
+@keyframes textPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.cart-text-pulse {
+  animation: textPulse 0.8s ease-in-out infinite;
+}
+
+/* Console slot */
+.console-slot {
+  width: 200px;
+  height: 20px;
+  background: linear-gradient(180deg, #0a0a15, #151530);
+  border: 1px solid rgba(79,195,247,0.2);
+  border-radius: 4px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.console-slot::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(180deg, #080818, #101025);
+  border-radius: 2px;
+}

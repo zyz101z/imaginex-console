@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tennis World - Elemental Quest</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        body {
+            background-color: #050505;
+            color: #fff;
+            font-family: 'Press Start 2P', cursive;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-wrapper {
+            position: relative;
+            border: 6px solid #222;
+            box-shadow: 0 0 60px rgba(0,0,0,0.9);
+            background: #000;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            display: block;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 800px;
+            height: 600px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* --- TITLE SCREEN --- */
+        #main-menu {
+            position: absolute;
+            inset: 0;
+            background: #1e1b4b;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 100;
+            pointer-events: all;
+            overflow: hidden;
+        }
+
+        .sky-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 60%;
+            background: linear-gradient(to bottom, #1e1b4b 0%, #701a75 50%, #fb923c 100%);
+        }
+
+        .retro-sun {
+            position: absolute;
+            top: 100px; left: 50%; transform: translateX(-50%);
+            width: 280px; height: 280px;
+            background: linear-gradient(to bottom, #fde047 0%, #f97316 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 40px #f97316;
+            mask-image: repeating-linear-gradient(to bottom, black 0px, black 15px, transparent 15px, transparent 20px);
+        }
+
+        .stadium-layer {
+            position: absolute;
+            bottom: 40%; width: 100%; height: 40px;
+            background: repeating-linear-gradient(to right, #4c1d95, #4c1d95 2px, #5b21b6 2px, #5b21b6 4px);
+            border-bottom: 4px solid #fff;
+            z-index: 5;
+        }
+
+        .court-floor {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 40%;
+            background: #15803d;
+            z-index: 4;
+            perspective: 400px;
+        }
+        
+        .court-lines {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(to right, white 4px, transparent 4px), linear-gradient(to bottom, white 4px, transparent 4px);
+            background-size: 100px 40px;
+            transform: rotateX(60deg) scale(2);
+            transform-origin: center top;
+            opacity: 0.3;
+        }
+
+        .logo-container { position: relative; margin-top: 50px; z-index: 20; text-align: center; }
+        .logo-text { font-weight: 900; filter: drop-shadow(6px 6px 0px #000); }
+        .logo-tennis { font-size: 70px; background: linear-gradient(to bottom, #fef08a 20%, #facc15 50%, #f97316 80%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -2px; }
+        .logo-world { font-size: 80px; background: linear-gradient(to bottom, #bae6fd 20%, #38bdf8 50%, #0284c7 80%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: -20px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+        .slot-panel { position: relative; z-index: 30; margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+        .slot-card { background: rgba(0, 0, 0, 0.85); border: 2px solid #334155; padding: 12px 20px; width: 480px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; }
+        .slot-card:hover { border-color: #cf0; transform: scale(1.02); background: rgba(207, 255, 0, 0.05); }
+
+        .scanlines { position: absolute; inset: 0; background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0.05) 1px, rgba(0,0,0,0) 2px); pointer-events: none; z-index: 150; }
+
+        .foreground-racket { position: absolute; bottom: -30px; right: 20px; width: 320px; z-index: 40; filter: drop-shadow(15px 15px 10px rgba(0,0,0,0.6)); transform: rotate(-10deg); }
+
+        /* --- HUD --- */
+        .stats-bar { background: rgba(0, 0, 0, 0.9); padding: 10px 15px; border-bottom: 3px solid #444; font-size: 10px; display: flex; justify-content: space-between; color: #0f0; pointer-events: all; }
+        .dialog-box, .shop-box, #admin-panel { pointer-events: all; background: rgba(10, 10, 30, 0.98); border: 4px solid #fff; padding: 20px; font-size: 10px; display: none; box-shadow: 0 10px 0 rgba(0,0,0,0.7); max-width: 85%; margin: 100px auto; }
+        #admin-panel { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); width: 320px; z-index: 110; border-color: #ef4444; margin: 0; }
+        .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 350px; overflow-y: auto; }
+        .shop-item { border: 2px solid #333; padding: 10px; cursor: pointer; text-align: center; background: #111; display: flex; flex-direction: column; align-items: center; transition: 0.1s; }
+        .shop-item:hover { border-color: #0f0; }
+        .shop-item.equipped { border-color: #fbbf24; background: #222; }
+        .item-preview-canvas { width: 60px; height: 60px; image-rendering: pixelated; margin-bottom: 10px; pointer-events: none; }
+        .btn { pointer-events: all; background: #fff; color: #000; padding: 10px 20px; cursor: pointer; border: 3px solid #777; font-family: 'Press Start 2P', cursive; margin-top: 10px; font-size: 10px; }
+        
+        #special-meter-container { width: 180px; height: 20px; background: #222; border: 3px solid #fff; position: absolute; bottom: 20px; right: 20px; display: none; pointer-events: all; }
+        #special-meter-fill { width: 0%; height: 100%; background: linear-gradient(to right, #f97316, #fbbf24); transition: width 0.1s; }
+        #special-meter-container.meter-ready { border-color: #fbbf24; animation: meterPulse 0.5s ease-in-out infinite alternate; }
+        #special-meter-container.meter-ready #special-meter-fill { background: linear-gradient(to right, #fbbf24, #fff); }
+        @keyframes meterPulse { from { box-shadow: 0 0 6px #fbbf24; } to { box-shadow: 0 0 16px #fbbf24, 0 0 30px rgba(251,191,36,0.4); } }
+
+        #achievement-popup { pointer-events:none; position:absolute; bottom:30px; left:50%; transform:translateX(-50%) translateY(100px); background:rgba(10,10,30,0.95); border:3px solid #fbbf24; padding:12px 20px; text-align:center; z-index:80; transition:transform 0.4s ease-out, opacity 0.4s; opacity:0; box-shadow:0 0 20px rgba(251,191,36,0.4); }
+        #achievement-popup.show { transform:translateX(-50%) translateY(0); opacity:1; }
+
+        /* SIDE SCOREBOARD */
+        #match-score { 
+            pointer-events: none; position: absolute; 
+            left: 15px; top: 50%; transform: translateY(-50%); 
+            display: none; flex-direction: column; align-items: center; gap: 15px; 
+            background: rgba(0, 0, 0, 0.95); padding: 20px 10px; border: 3px solid #fff; width: 90px; 
+            z-index: 50; 
+        }
+        .score-slot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .score-label { font-size: 6px; color: #888; }
+        .score-val { font-size: 18px; font-weight: bold; }
+        #save-status { position: absolute; top: 60px; right: 20px; font-size: 8px; color: #0f0; display: none; pointer-events: none; }
+        #debug-toggle { position: absolute; bottom: 10px; left: 10px; width: 10px; height: 10px; pointer-events: all; cursor: default; }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui-overlay">
+            <!-- MAIN MENU -->
+            <div id="main-menu">
+                <div class="scanlines"></div>
+                <div class="sky-bg"></div>
+                <div class="retro-sun"></div>
+                <div class="stadium-layer"></div>
+                <div class="court-floor"><div class="court-lines"></div></div>
+                <div class="logo-container">
+                    <div class="logo-text logo-tennis">TENNIS</div>
+                    <div class="logo-text logo-world">W<div class="inline-block relative top-2"><svg width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="#cf0"/><path d="M15 50 Q 50 10 85 50" stroke="#fff" fill="none" stroke-width="8" stroke-linecap="round"/><path d="M15 50 Q 50 90 85 50" stroke="#fff" fill="none" stroke-width="8" stroke-linecap="round"/></svg></div>RLD</div>
+                </div>
+                <div id="slot-container" class="slot-panel">
+                    <p class="text-[8px] text-white opacity-60 text-center mb-2 animate-pulse">CONNECTING TO CLOUD...</p>
+                </div>
+            </div>
+
+            <!-- HUD -->
+            <div id="top-bar" class="stats-bar hidden"><span>REP: <span id="rep-val">0</span> <span id="medal-icon" class="hidden">🥇</span> <span id="ach-count" style="color:#fbbf24;">0/22</span></span><span id="zone-display" class="text-white">Town Center</span></div>
+            <div id="objective-hint" style="pointer-events:none; position:absolute; top:32px; left:50%; transform:translateX(-50%); font-family:'Press Start 2P',cursive; font-size:6px; color:#facc15; background:rgba(0,0,0,0.6); padding:4px 10px; border-radius:4px; display:none; white-space:nowrap;"></div>
+            <div id="save-status">SAVING...</div>
+            
+            <!-- MATCH SIDEBOARD -->
+            <div id="match-score">
+                <div class="score-slot"><span class="score-label">YOU</span><span id="p1-score" class="score-val text-blue-400">0</span></div>
+                <div class="h-px w-full bg-white/20"></div>
+                <div class="score-slot"><span id="cpu-name-label" class="score-label">CPU</span><span id="cpu-score" class="score-val text-red-400">0</span></div>
+                <div id="match-goal-text" class="mt-2 text-[6px] text-gray-500">GOAL: 7</div>
+            </div>
+
+            <div id="special-meter-container"><div id="special-meter-fill"></div><div class="absolute inset-0 flex items-center justify-center text-[6px] text-white pointer-events-none shadow-sm">SPECIAL [AUTO]</div></div>
+            <div id="achievement-popup"><div style="font-size:6px; color:#fbbf24; margin-bottom:4px;">ACHIEVEMENT UNLOCKED</div><div id="ach-popup-title" style="font-size:10px; color:#fff;"></div><div style="font-size:6px; color:#4ade80; margin-top:4px;">+1% HIT POWER</div></div>
+            <div id="dialog" class="dialog-box"><div id="dialog-text">...</div><div id="dialog-actions"><button id="dialog-confirm-btn" class="btn">Confirm</button><button id="dialog-rematch-btn" class="btn" style="display:none; margin-left:8px; border-color:#fbbf24; color:#fbbf24;">Rematch?</button></div></div>
+            <div id="shop" class="shop-box"><div class="mb-2 text-blue-400">PRO SHOP</div><div class="shop-grid" id="shop-grid"></div><button id="shop-exit-btn" class="btn w-full mt-4">Exit Shop</button></div>
+
+            <div id="admin-panel">
+                <div class="flex justify-between items-center mb-2"><span class="text-red-500">ADMIN</span><button id="admin-close-btn">X</button></div>
+                <div class="space-y-3">
+                    <button id="admin-add-rep-btn" class="btn btn-sm w-full">+500 REP</button>
+                    <button id="admin-medal-btn" class="btn btn-sm w-full">GIVE MEDAL</button>
+                    <div class="border-t border-gray-700 pt-2"><p class="mb-1 text-gray-400">MARK GYMS BEAT:</p>
+                        <div class="grid grid-cols-2 gap-1">
+                            <label class="flex items-center gap-1"><input type="checkbox" id="check-plant"> PLANT</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="check-ice"> ICE</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="check-water"> WATER</label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="check-fire"> FIRE</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm w-full border-red-500 text-red-500 mt-2" onclick="window.location.reload()">HARD RELOAD</button>
+                </div>
+            </div>
+            <div id="pause-menu" style="pointer-events:all; display:none; position:absolute; inset:0; background:rgba(0,0,0,0.85); z-index:90; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
+                <div style="font-size:20px; color:#fff; margin-bottom:10px;">PAUSED</div>
+                <button id="pause-resume-btn" class="btn" style="width:200px;">RESUME</button>
+                <button id="pause-forfeit-btn" class="btn" style="width:200px; border-color:#ef4444; color:#ef4444; display:none;">FORFEIT MATCH</button>
+            </div>
+            <button id="ach-btn" style="display:none; position:absolute; top:4px; right:140px; pointer-events:all; font-family:'Press Start 2P',cursive; font-size:7px; color:#fbbf24; background:rgba(0,0,0,0.7); border:2px solid #fbbf24; padding:4px 10px; cursor:pointer; z-index:15;" onclick="document.getElementById('ach-panel').style.display='flex'">ACHIEVEMENTS</button>
+            <div id="ach-panel" style="pointer-events:all; display:none; position:absolute; inset:0; background:rgba(0,0,0,0.92); z-index:95; flex-direction:column; align-items:center; padding:20px; overflow-y:auto;">
+                <div style="font-size:16px; color:#fbbf24; font-family:'Press Start 2P',cursive; margin-bottom:4px;">ACHIEVEMENTS</div>
+                <div id="ach-panel-count" style="font-size:8px; color:#4ade80; font-family:'Press Start 2P',cursive; margin-bottom:12px;">0/22 | POWER BONUS: +0%</div>
+                <div id="ach-panel-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; width:100%; max-width:750px;"></div>
+                <button id="ach-close-btn" class="btn" style="margin-top:16px; width:200px; border-color:#fbbf24; color:#fbbf24;">CLOSE</button>
+            </div>
+            <div id="bottom-bar" class="control-guide hidden">WASD: Move | SPACE: Interact/Serve | ESC: Pause</div>
+            <div id="debug-toggle"></div>
+        </div>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // --- 1. GLOBALS & CONSTANTS ---
+    const WORLD_W = 2400, WORLD_H = 3200, TILE_SIZE = 40;
+    const LAND_OFFSET = 1400, OCEAN_LIMIT = 1400;
+    const VOLCANO_CENTER = {x: 450, y: 400};
+    const VOLCANO_ISLAND_RADIUS = 200;
+    const VOLCANO_PATH = [
+        {x: 450, y: 590},   // 0: beach entrance (south)
+        {x: 355, y: 545},   // 1: curve west
+        {x: 310, y: 475},   // 2: heading north
+        {x: 365, y: 415},   // 3: Magma Mike
+        {x: 460, y: 440},   // 4: curve east
+        {x: 520, y: 375},   // 5: Ember Eve
+        {x: 475, y: 310},   // 6: curve back west
+        {x: 430, y: 260},   // 7: Ash the Fierce
+        {x: 450, y: 220}    // 8: summit (Bully Chad)
+    ];
+    const VOLCANO_PATH_WIDTH = 35;
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const worldBg = document.createElement('canvas');
+    worldBg.width = WORLD_W; worldBg.height = WORLD_H;
+    const wctx = worldBg.getContext('2d');
+    
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'pixel-tennis-elemental-v55-stable';
+    let app_init = null, auth_init = null, db_init = null, firebaseOk = false;
+    try {
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : 'null');
+        if (firebaseConfig) {
+            app_init = initializeApp(firebaseConfig);
+            auth_init = getAuth(app_init);
+            db_init = getFirestore(app_init);
+            firebaseOk = true;
+        }
+    } catch(e) { console.log('Firebase unavailable, using localStorage'); }
+
+    // --- GAME STATE ---
+    const keys = {};
+    let audioCtx = null, musicPlaying = false, noteIdx = 0;
+    let gameState = 'MENU';
+    let user = null, currentSlot = 1;
+    let rep = 0, tutorialDone = false, inventory = ['suit_white', 'hair_yellow'], equipped = { suit: 'suit_white', hair: 'hair_yellow', racket: 'none' };
+    let defeatedGyms = [], hasGoldMedal = false, hasPirateMedal = false;
+    let chestStates = [false, false, false, false, false, false];
+    let defeatedVolcano = [];
+    let activeNPC = null, tournamentRound = 0, shakeIntensity = 0, animTimer = 0;
+    let achievements = [];
+    let matchStats = { totalWins: 0, currentStreak: 0, bestStreak: 0, currentRally: 0, bestRally: 0, specialsUsed: 0, itemsBought: 0 };
+    let visitedZones = new Set();
+    let achievementQueue = [], achievementNotifTimer = 0;
+    const ACHIEVEMENTS = [
+        { id: 'first_win', name: 'First Rally', desc: 'Win 1 match' },
+        { id: 'win_5', name: 'Getting Warmed Up', desc: 'Win 5 matches' },
+        { id: 'win_20', name: 'Veteran Player', desc: 'Win 20 matches' },
+        { id: 'streak_3', name: 'On Fire', desc: '3-win streak' },
+        { id: 'streak_7', name: 'Unstoppable', desc: '7-win streak' },
+        { id: 'shutout', name: 'Flawless Set', desc: 'Win without losing a point' },
+        { id: 'shutout_gym', name: 'Perfect Gym Battle', desc: 'Shut out a Gym Leader 7-0' },
+        { id: 'shutout_boss', name: 'Untouchable', desc: 'Shut out a boss 11-0' },
+        { id: 'gym_1', name: 'First Badge', desc: 'Beat first gym' },
+        { id: 'gym_all', name: 'Gym Champion', desc: 'Beat all 4 gyms' },
+        { id: 'olympics', name: 'Olympic Gold', desc: 'Win Olympics' },
+        { id: 'pirate', name: 'Pirate Slayer', desc: 'Beat Captain Peg' },
+        { id: 'darklord', name: 'Temple Conqueror', desc: 'Beat Darklord' },
+        { id: 'volcano', name: 'Volcano Victor', desc: 'Beat Bully Chad' },
+        { id: 'chest_all', name: 'Treasure Hunter', desc: 'Open all 6 chests' },
+        { id: 'buy_boat', name: 'Seafarer', desc: 'Buy the boat' },
+        { id: 'visit_all', name: 'World Traveler', desc: 'Visit all 6 zones' },
+        { id: 'shop_3', name: 'Shopaholic', desc: 'Buy 3 shop items' },
+        { id: 'rally_20', name: 'Rally Master', desc: '20-hit rally in one point' },
+        { id: 'special_10', name: 'Elemental Fury', desc: 'Use 10 special shots' },
+        { id: 'all_achievements', name: 'True Champion', desc: 'Unlock all others' },
+        { id: 'power_max', name: 'Maximum Power', desc: 'Unlock all others' }
+    ];
+
+    const player = { x: 1200, y: 900 + LAND_OFFSET, ovX: 1200, ovY: 900 + LAND_OFFSET, speed: 4.5, stats: { moveSpeed: 1.0, racketPower: 1.0, racketSize: 1.0 }, animFrame: 0, dir: 'down', matchVX: 0, suit: '#fff', hair: '#fbbf24', racket: '#eee' };
+    const camera = { x: 0, y: 0 };
+    const match = { 
+        ball: { x: 400, y: 300, vx: 0, vy: 0, trail: [], special: false }, 
+        p1: { x: 400, score: 0, swing: 0, specialMeter: 0 }, 
+        cpu: { x: 400, score: 0, swing: 0 }, 
+        active: false, serving: 'p1',
+        bossObstacle: { x: 400, y: 300, vx: 3, w: 80 },
+        volcanoTimer: 0, volcanoTimerMax: 5400, volcanoErupting: false
+    };
+
+    const GYM_SEQUENCE = ['plant_gym', 'ice_gym', 'water_gym', 'fire_gym'];
+    const NPCs = [
+        { x: 200, y: 200 + LAND_OFFSET, name: "Frost Queen", level: 4.0, color: '#0ea5e9', hair: '#fff', zone: 'Ice', type: 'gym', gymId: 'ice_gym', dialog: "My serve is cold as ice!" },
+        { x: 2200, y: 200 + LAND_OFFSET, name: "Cinder King", level: 8.5, color: '#ef4444', hair: '#000', zone: 'Fire', type: 'gym', gymId: 'fire_gym', dialog: "Fear the heat of the fire!" },
+        { x: 2200, y: 1600 + LAND_OFFSET, name: "Tide Caller", level: 6.5, color: '#3b82f6', hair: '#60a5fa', zone: 'Water', type: 'gym', gymId: 'water_gym', dialog: "Surge like a tsunami!" },
+        { x: 200, y: 1600 + LAND_OFFSET, name: "Nature Sage", level: 0.4, color: '#10b981', hair: '#064e3b', zone: 'Plant', type: 'gym', gymId: 'plant_gym', dialog: "Let's test your roots." },
+        { x: 1200, y: 600, name: "Darklord", level: 15.0, color: '#4c1d95', hair: '#7f1d1d', zone: 'Ocean', type: 'boss', dialog: "Mortals dare enter my Temple?" }, 
+        { x: 2000, y: 600, name: "Captain Peg", level: 7.5, color: '#991b1b', hair: '#000', zone: 'Ocean', type: 'pirate', dialog: "Yarr! Beat me for treasure!" },
+        { x: 1400, y: 750 + LAND_OFFSET, name: "Shopkeeper", color: '#6366f1', hair: '#111', zone: 'Town', type: 'shop' },
+        { x: 1000, y: 750 + LAND_OFFSET, name: "Registrar", color: '#94a3b8', hair: '#475569', zone: 'Town', type: 'olympics' },
+        { x: 950, y: 1100 + LAND_OFFSET, name: "Home", type: 'house' }, 
+        { x: 1200, y: 700 + LAND_OFFSET, name: "Coach Mo", color: '#fb923c', hair: '#444', zone: 'Town', type: 'tip', dialog: "Stand exactly where the ball is landing!" },
+        { x: 1450, y: 900 + LAND_OFFSET, name: "Expert Eli", color: '#a855f7', hair: '#000', zone: 'Town', type: 'tip', dialog: "Fill your meter and your next hit becomes an ELEMENTAL SMASH!" },
+        { x: 950, y: 900 + LAND_OFFSET, name: "Racket Roy", color: '#10b981', hair: '#78350f', zone: 'Town', type: 'tip', dialog: "Bigger rackets increase hit radius. Visit the shop!" },
+        { x: 400, y: 400 + LAND_OFFSET, name: "Sno", level: 2.0, color: '#7dd3fc', hair: '#fff', zone: 'Ice', type: 'quick', dialog: "Practice set?" },
+        { x: 1900, y: 350 + LAND_OFFSET, name: "Burny", level: 3.5, color: '#f87171', hair: '#000', zone: 'Fire', type: 'quick', dialog: "Feeling the heat?" },
+        { x: 1900, y: 1400 + LAND_OFFSET, name: "Bubbles", level: 2.8, color: '#60a5fa', hair: '#fff', zone: 'Water', type: 'quick', dialog: "Splash!" },
+        { x: 500, y: 1400 + LAND_OFFSET, name: "Leafy", level: 0.2, color: '#34d399', hair: '#064e3b', zone: 'Plant', type: 'quick', dialog: "Let's play." },
+        { x: 365, y: 415, name: "Magma Mike", level: 6, color: '#ef4444', hair: '#fbbf24', zone: 'Volcano', type: 'volcano_guard', volcanoId: 'vg1', dialog: "This mountain is MINE!" },
+        { x: 520, y: 375, name: "Ember Eve", level: 8, color: '#f97316', hair: '#dc2626', zone: 'Volcano', type: 'volcano_guard', volcanoId: 'vg2', dialog: "Turn back or burn!" },
+        { x: 430, y: 260, name: "Ash the Fierce", level: 10, color: '#991b1b', hair: '#fbbf24', zone: 'Volcano', type: 'volcano_guard', volcanoId: 'vg3', dialog: "None shall reach the summit!" },
+        { x: 450, y: 220, name: "Bully Chad", level: 12, color: '#dc2626', hair: '#111', zone: 'Volcano', type: 'volcano_boss', volcanoId: 'vboss', dialog: "I told you I'd conquer this volcano first, nerd!" }
+    ];
+
+    const chests = [ 
+        { x: 100, y: 100 + LAND_OFFSET, rep: 25, zone: 'Ice' }, 
+        { x: 2300, y: 100 + LAND_OFFSET, rep: 30, zone: 'Fire' }, 
+        { x: 100, y: 1700 + LAND_OFFSET, rep: 25, zone: 'Plant' }, 
+        { x: 2300, y: 1700 + LAND_OFFSET, rep: 30, zone: 'Water' }, 
+        { x: 1200, y: 400 + LAND_OFFSET, rep: 20, zone: 'Town' }, 
+        { x: 2000, y: 550, rep: 100, zone: 'Ocean', type: 'pirate' } 
+    ];
+
+    const shopItems = [
+        { id: 'boat', name: 'Row Boat', cost: 500, type: 'boat', val: '#78350f', desc: 'Cross deep lakes!' },
+        { id: 'suit_white', name: 'Starter Suit', cost: 0, type: 'suit', val: '#fff', desc: 'Standard agility.' },
+        { id: 'suit_black', name: 'Ninja Suit', cost: 50, type: 'suit', val: '#111', desc: '+25% Speed!', speedMod: 1.25 },
+        { id: 'suit_purple', name: 'Royal Suit', cost: 100, type: 'suit', val: '#7e22ce', desc: '+40% Speed!', speedMod: 1.4 },
+        { id: 'hair_yellow', name: 'Classic Hair', cost: 0, type: 'hair', val: '#fbbf24', desc: 'Stylish.' },
+        { id: 'hair_pink', name: 'Punk Hair', cost: 30, type: 'hair', val: '#ec4899', desc: 'Look fierce.' },
+        { id: 'hair_blue', name: 'Icy Hair', cost: 30, type: 'hair', val: '#0ea5e9', desc: 'Stay cool.' },
+        { id: 'racket_basic', name: 'Wood Racket', cost: 0, type: 'racket', val: '#eee', desc: 'Reliable.' },
+        { id: 'racket_gold', name: 'Gold Racket', cost: 150, type: 'racket', val: '#fbbf24', desc: '+30% Pwr!', powerMod: 1.3, sizeMod: 1.0 },
+        { id: 'racket_neon', name: 'Neon Racket', cost: 75, type: 'racket', val: '#4ade80', desc: '+40% Size!', powerMod: 1.0, sizeMod: 1.4 },
+        { id: 'racket_temple', name: 'Temple Racket', cost: 0, type: 'racket', val: '#f43f5e', desc: 'God-like!', powerMod: 1.5, sizeMod: 1.5 },
+        { id: 'racket_magma', name: 'Magma Racket', cost: 0, type: 'racket', val: '#ef4444', desc: 'Volcanic fury!', powerMod: 1.4, sizeMod: 1.2 }
+    ];
+
+    const melodies = {
+        Menu: { notes: [392, 523, 659, 783, 659, 523, 440, 493], type: 'sawtooth', tempo: 350 },
+        Town: { notes: [261, 329, 392, 523, 493, 392, 329, 293], type: 'triangle', tempo: 450 },
+        Plant: { notes: [261, 293, 329, 349, 329, 293, 261, 196], type: 'sine', tempo: 500 },
+        Ice: { notes: [523, 659, 783, 987, 1046, 987, 783, 659], type: 'sine', tempo: 600 },
+        Fire: { notes: [130, 146, 138, 155, 130, 146, 138, 155], type: 'sawtooth', tempo: 350 },
+        Water: { notes: [196, 261, 329, 440, 392, 329, 261, 196], type: 'sine', tempo: 550 },
+        Ocean: { notes: [196, 261, 196, 261, 329], type: 'square', tempo: 600 },
+        Volcano: { notes: [130, 164, 146, 174, 130, 146, 164, 130], type: 'sawtooth', tempo: 400 },
+        Battle_Town: { notes: [329, 392, 523, 659, 523, 659, 783, 523], type: 'square', tempo: 250 },
+        Battle_Plant: { notes: [329, 392, 349, 440, 392, 349, 329, 261], type: 'square', tempo: 280 },
+        Battle_Ice: { notes: [659, 783, 987, 1046, 987, 1174, 1046, 783], type: 'square', tempo: 250 },
+        Battle_Fire: { notes: [164, 196, 220, 261, 196, 220, 164, 130], type: 'sawtooth', tempo: 200 },
+        Battle_Water: { notes: [261, 329, 440, 523, 440, 392, 329, 261], type: 'square', tempo: 270 },
+        Battle_Ocean: { notes: [261, 329, 261, 392, 523, 392, 329, 261], type: 'square', tempo: 280 },
+        Battle_Volcano: { notes: [164, 196, 130, 220, 164, 261, 196, 130], type: 'sawtooth', tempo: 200 },
+        Battle_Boss: { notes: [130, 164, 196, 261, 329, 261, 196, 130], type: 'sawtooth', tempo: 180 }
+    };
+
+    // --- 2. CORE UTILITIES (HOISTED) ---
+
+    function playSfx(f, t, d, v = 0.05) {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        o.type = t; o.frequency.setValueAtTime(f, audioCtx.currentTime);
+        g.gain.setValueAtTime(v, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+        o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
+    }
+
+    function musicLoop() {
+        if (!musicPlaying) {
+            setTimeout(musicLoop, 1000);
+            return;
+        }
+        let cz = "Town";
+        const effectiveState = (gameState === 'PAUSED') ? prePauseState : gameState;
+        if (effectiveState === 'MENU') cz = "Menu";
+        else if (effectiveState && effectiveState.includes('MATCH')) {
+            // Battle music based on opponent zone/type
+            if (gameState === 'TUTORIAL_MATCH') cz = "Battle_Town";
+            else if (activeNPC) {
+                if (activeNPC.type === 'boss' || activeNPC.type === 'king') cz = "Battle_Boss";
+                else if (activeNPC.type === 'volcano_boss') cz = "Battle_Volcano";
+                else cz = "Battle_" + (activeNPC.zone || "Town");
+            } else cz = "Battle_Town";
+        }
+        else {
+            if (isOnVolcanoIsland(player.x, player.y)) { cz = "Volcano"; }
+            else if (player.y < OCEAN_LIMIT) { cz = "Ocean"; }
+            else {
+                const txStart = WORLD_W/2 - 450, txEnd = WORLD_W/2 + 450;
+                const tyStart = LAND_OFFSET + 450, tyEnd = LAND_OFFSET + 1350;
+                const relY = player.y - LAND_OFFSET;
+                if (player.x > txStart && player.x < txEnd && player.y > tyStart && player.y < tyEnd) { cz = "Town"; }
+                else if (relY >= 0) {
+                    if (player.x < WORLD_W/2 && relY < 900) cz = "Ice";
+                    else if (player.x >= WORLD_W/2 && relY < 900) cz = "Fire";
+                    else if (player.x >= WORLD_W/2 && player.y >= WORLD_H/2) cz = "Water";
+                    else cz = "Plant";
+                }
+            }
+        }
+        if (audioCtx) {
+            const m = melodies[cz] || melodies["Town"];
+            if (m) {
+                const isMatch = cz.startsWith('Battle_');
+                playSfx(m.notes[noteIdx], m.type, 0.4, isMatch ? 0.008 : 0.02);
+                noteIdx = (noteIdx + 1) % m.notes.length;
+                setTimeout(musicLoop, m.tempo);
+            } else { setTimeout(musicLoop, 1000); }
+        } else { setTimeout(musicLoop, 1000); }
+    }
+
+    function resetMatch() { match.active = false; match.ball.x = 400; match.ball.y = match.serving === 'p1'?500:100; match.ball.vx = 0; match.ball.vy = 0; match.ball.trail = []; match.ball.special = false; player.matchVX = 0; match.bossObstacle.x = 400; match.volcanoErupting = false; }
+
+    function updatePlayerStats() {
+        const s = shopItems.find(i => i.id === equipped.suit); player.stats.moveSpeed = s ? (s.speedMod || 1.0) : 1.0;
+        const r = shopItems.find(i => i.id === equipped.racket); player.stats.racketPower = r ? (r.powerMod || 1.0) : 1.0; player.stats.racketSize = r ? (r.sizeMod || 1.0) : 1.0;
+        if (hasPirateMedal) player.stats.racketPower *= 1.1;
+        if (achievements.length > 0) player.stats.racketPower *= (1 + achievements.length * 0.01);
+    }
+
+    function unlockAchievement(id) {
+        if (achievements.includes(id)) return;
+        achievements.push(id);
+        achievementQueue.push(id);
+        const el = document.getElementById('ach-count');
+        if (el) el.innerText = achievements.length + '/22';
+        updatePlayerStats();
+        saveGameData();
+        playSfx(1046, 'sine', 0.5, 0.08);
+        setTimeout(() => playSfx(1318, 'sine', 0.3, 0.06), 150);
+    }
+
+    function checkAchievements() {
+        if (matchStats.totalWins >= 1) unlockAchievement('first_win');
+        if (matchStats.totalWins >= 5) unlockAchievement('win_5');
+        if (matchStats.totalWins >= 20) unlockAchievement('win_20');
+        if (matchStats.currentStreak >= 3 || matchStats.bestStreak >= 3) unlockAchievement('streak_3');
+        if (matchStats.currentStreak >= 7 || matchStats.bestStreak >= 7) unlockAchievement('streak_7');
+        if (defeatedGyms.length >= 1) unlockAchievement('gym_1');
+        if (defeatedGyms.length >= 4) unlockAchievement('gym_all');
+        if (hasGoldMedal) unlockAchievement('olympics');
+        if (hasPirateMedal) unlockAchievement('pirate');
+        if (inventory.includes('racket_temple')) unlockAchievement('darklord');
+        if (defeatedVolcano.includes('vboss')) unlockAchievement('volcano');
+        if (chestStates.every(c => c)) unlockAchievement('chest_all');
+        if (inventory.includes('boat')) unlockAchievement('buy_boat');
+        if (['Town Center','Ice Zone','Fire Zone','Water Zone','Plant Zone','The Ocean'].every(z => visitedZones.has(z))) unlockAchievement('visit_all');
+        if (matchStats.itemsBought >= 3) unlockAchievement('shop_3');
+        if (matchStats.bestRally >= 20) unlockAchievement('rally_20');
+        if (matchStats.specialsUsed >= 10) unlockAchievement('special_10');
+        const metaIds = ['all_achievements', 'power_max'];
+        const nonMeta = ACHIEVEMENTS.filter(a => !metaIds.includes(a.id));
+        if (nonMeta.every(a => achievements.includes(a.id))) { unlockAchievement('all_achievements'); unlockAchievement('power_max'); }
+    }
+
+    function updateAchievementPopup() {
+        const popup = document.getElementById('achievement-popup');
+        if (!popup) return;
+        if (achievementNotifTimer > 0) {
+            achievementNotifTimer--;
+            if (achievementNotifTimer <= 0) popup.classList.remove('show');
+        } else if (achievementQueue.length > 0) {
+            const id = achievementQueue.shift();
+            const ach = ACHIEVEMENTS.find(a => a.id === id);
+            if (ach) {
+                document.getElementById('ach-popup-title').innerText = ach.name;
+                popup.classList.add('show');
+                achievementNotifTimer = 180;
+            }
+        }
+    }
+
+    function openAchPanel() {
+        const grid = document.getElementById('ach-panel-grid');
+        const countEl = document.getElementById('ach-panel-count');
+        grid.innerHTML = '';
+        countEl.innerText = achievements.length + '/22 | POWER BONUS: +' + achievements.length + '%';
+        ACHIEVEMENTS.forEach(ach => {
+            const unlocked = achievements.includes(ach.id);
+            const card = document.createElement('div');
+            card.style.cssText = 'background:' + (unlocked ? 'rgba(30,50,30,0.9)' : 'rgba(20,20,40,0.9)') + '; border:2px solid ' + (unlocked ? '#fbbf24' : '#333') + '; padding:10px; text-align:center; font-family:"Press Start 2P",cursive;';
+            card.innerHTML = '<div style="font-size:20px; margin-bottom:6px;">' + (unlocked ? '\u2605' : '?') + '</div>' +
+                '<div style="font-size:8px; color:' + (unlocked ? '#fbbf24' : '#666') + '; margin-bottom:4px;">' + ach.name + '</div>' +
+                '<div style="font-size:6px; color:' + (unlocked ? '#4ade80' : '#555') + ';">' + ach.desc + '</div>';
+            grid.appendChild(card);
+        });
+        document.getElementById('ach-panel').style.display = 'flex';
+    }
+    document.getElementById('ach-btn').addEventListener('click', openAchPanel);
+    document.getElementById('ach-close-btn').addEventListener('click', function() { document.getElementById('ach-panel').style.display = 'none'; });
+
+    function getTipDialog(npcName) {
+        const gyms = defeatedGyms.length;
+        if (npcName === 'Coach Mo') {
+            if (gyms === 0) return "Position yourself where the ball will land. Start with the Plant Gym to the south!";
+            if (gyms < 4) return "You're getting better! Try angling your shots by hitting the ball off-center.";
+            if (!hasGoldMedal) return "You've beaten all the gyms! Talk to the Registrar to enter the Olympics!";
+            if (!inventory.includes('boat')) return "Champion! Buy a Boat from the shop to explore the ocean.";
+            return "You've come so far. Only the Darklord remains... prepare well.";
+        }
+        if (npcName === 'Expert Eli') {
+            if (gyms === 0) return "Fill your special meter by hitting the ball. When it's full, your next hit unleashes an ELEMENTAL SMASH!";
+            if (gyms < 3) return "The Special meter fills with each hit. Save it for clutch moments!";
+            if (!hasGoldMedal) return "In the Olympics, matches go to 11. Pace yourself and use specials wisely.";
+            if (hasPirateMedal) return "The Darklord's court has a barrier that bounces your shots back. Time your shots carefully!";
+            return "The ocean holds dangerous foes. Make sure your gear is upgraded!";
+        }
+        if (npcName === 'Racket Roy') {
+            if (!inventory.includes('racket_gold') && !inventory.includes('racket_neon')) return "Visit the shop! Bigger rackets = bigger hit zone. Power rackets = faster returns.";
+            if (gyms < 4) return "Nice gear! The Neon Racket has great reach. Gold Racket hits hard. Pick your style!";
+            if (!inventory.includes('racket_temple')) return "I've heard rumors of a legendary Temple Racket beyond the sea...";
+            return "The Temple Racket! That's the finest racket ever made. You're unstoppable!";
+        }
+        return "Keep practicing!";
+    }
+
+    function updateObjectiveHint() {
+        const el = document.getElementById('objective-hint');
+        if (!el || !tutorialDone) { if(el) el.style.display = 'none'; return; }
+        let hint = '';
+        const gymNames = { plant_gym: 'Plant', ice_gym: 'Ice', water_gym: 'Water', fire_gym: 'Fire' };
+        const nextGym = GYM_SEQUENCE.find(g => !defeatedGyms.includes(g));
+        if (nextGym) hint = `OBJECTIVE: Defeat the ${gymNames[nextGym]} Gym`;
+        else if (!hasGoldMedal) hint = 'OBJECTIVE: Enter the Elemental Olympics';
+        else if (!inventory.includes('boat')) hint = 'OBJECTIVE: Buy a Boat from the Shop';
+        else if (!hasPirateMedal) hint = 'OBJECTIVE: Defeat Captain Peg on the Ocean';
+        else hint = 'OBJECTIVE: Challenge the Darklord';
+        el.innerText = hint; el.style.display = 'block';
+    }
+
+    function openShop() {
+        gameState = 'SHOP';
+        const shopEl = document.getElementById('shop');
+        const grid = document.getElementById('shop-grid');
+        shopEl.style.display = 'block';
+        grid.innerHTML = '';
+
+        shopItems.forEach(item => {
+            const owned = inventory.includes(item.id);
+            const isEquipped = item.type !== 'boat' && equipped[item.type] === item.id;
+
+            const div = document.createElement('div');
+            div.className = 'shop-item' + (isEquipped ? ' equipped' : '');
+
+            // Preview canvas
+            const previewCanvas = document.createElement('canvas');
+            previewCanvas.width = 60;
+            previewCanvas.height = 60;
+            previewCanvas.className = 'item-preview-canvas';
+            const ictx = previewCanvas.getContext('2d');
+            drawPreviewIcon(ictx, item);
+            div.appendChild(previewCanvas);
+
+            // Item name
+            const nameDiv = document.createElement('div');
+            nameDiv.style.cssText = 'font-size:8px; color:#fff; margin-top:5px;';
+            nameDiv.textContent = item.name;
+            div.appendChild(nameDiv);
+
+            // Description
+            const descDiv = document.createElement('div');
+            descDiv.style.cssText = 'font-size:6px; color:#888; margin-top:3px;';
+            descDiv.textContent = item.desc;
+            div.appendChild(descDiv);
+
+            // Action label
+            const actionDiv = document.createElement('div');
+            actionDiv.style.cssText = 'font-size:8px; margin-top:5px;';
+            if (isEquipped) {
+                actionDiv.textContent = 'EQUIPPED';
+                actionDiv.style.color = '#fbbf24';
+            } else if (owned) {
+                actionDiv.textContent = item.type === 'boat' ? 'OWNED' : 'EQUIP';
+                actionDiv.style.color = '#4ade80';
+            } else {
+                actionDiv.textContent = item.cost + ' REP';
+                actionDiv.style.color = rep >= item.cost ? '#60a5fa' : '#ef4444';
+            }
+            div.appendChild(actionDiv);
+
+            div.onclick = () => {
+                if (isEquipped) return;
+                if (owned) {
+                    if (item.type === 'boat') return;
+                    equipped[item.type] = item.id;
+                    if (item.type === 'suit') player.suit = item.val;
+                    else if (item.type === 'hair') player.hair = item.val;
+                    else if (item.type === 'racket') player.racket = item.val;
+                    updatePlayerStats();
+                    playSfx(600, 'sine', 0.2);
+                    saveGameData();
+                    openShop();
+                } else if (rep >= item.cost) {
+                    rep -= item.cost;
+                    inventory.push(item.id);
+                    matchStats.itemsBought++; checkAchievements();
+                    document.getElementById('rep-val').innerText = rep;
+                    playSfx(800, 'square', 0.3);
+                    saveGameData();
+                    openShop();
+                } else {
+                    playSfx(100, 'sawtooth', 0.3);
+                }
+            };
+
+            grid.appendChild(div);
+        });
+    }
+
+    async function saveGameData() {
+        const saveObj = { rep, tutorialDone, inventory, equipped, defeatedGyms, hasGoldMedal, hasPirateMedal, chestStates, defeatedVolcano, achievements, matchStats, visitedZones: Array.from(visitedZones), timestamp: Date.now() };
+        const si = document.getElementById('save-status'); if (si) si.style.display = 'block';
+        if (firebaseOk && user) {
+            await setDoc(doc(db_init, 'artifacts', appId, 'users', user.uid, 'saves', 'slot' + currentSlot), saveObj);
+        } else {
+            localStorage.setItem('tw_slot' + currentSlot, JSON.stringify(saveObj));
+        }
+        setTimeout(() => { if (si) si.style.display = 'none'; }, 2000);
+    }
+
+    function startGame() {
+        if (!tutorialDone) {
+            gameState = 'TUTORIAL'; document.getElementById('main-menu').style.display = 'none';
+            activeNPC = { name: "Bully Chad", type: 'bully', color: '#dc2626', hair: '#111', level: 0.1 };
+            document.getElementById('dialog').style.display = 'block';
+            document.getElementById('dialog-text').innerText = "Bully Chad: 'Hey nerd! You think you can walk onto MY court without a racket? Let's see you try to play with your hands!'";
+        } else {
+            gameState = 'OVERWORLD'; document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('top-bar').classList.remove('hidden'); document.getElementById('bottom-bar').classList.remove('hidden');
+            document.getElementById('ach-btn').style.display = 'block';
+            document.getElementById('rep-val').innerText = rep;
+            if (hasGoldMedal) document.getElementById('medal-icon').classList.remove('hidden');
+            { const achEl = document.getElementById('ach-count'); if (achEl) achEl.innerText = achievements.length + '/22'; }
+            updateObjectiveHint();
+        }
+    }
+
+    async function loadSlotData(slotNum) {
+        currentSlot = slotNum;
+        let d = null;
+        if (firebaseOk && user) {
+            const docRef = doc(db_init, 'artifacts', appId, 'users', user.uid, 'saves', 'slot' + slotNum);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) d = snap.data();
+        } else {
+            const raw = localStorage.getItem('tw_slot' + slotNum);
+            if (raw) d = JSON.parse(raw);
+        }
+        if (d) {
+            rep = d.rep || 0; tutorialDone = d.tutorialDone || false; inventory = d.inventory || inventory; equipped = d.equipped || equipped;
+            defeatedGyms = d.defeatedGyms || []; hasGoldMedal = d.hasGoldMedal || false; hasPirateMedal = d.hasPirateMedal || false; chestStates = d.chestStates || new Array(chests.length).fill(false); defeatedVolcano = d.defeatedVolcano || [];
+            achievements = d.achievements || []; matchStats = d.matchStats || { totalWins: 0, currentStreak: 0, bestStreak: 0, currentRally: 0, bestRally: 0, specialsUsed: 0, itemsBought: 0 }; visitedZones = new Set(d.visitedZones || []);
+            player.suit = shopItems.find(i => i.id === equipped.suit)?.val || '#fff'; player.hair = shopItems.find(i => i.id === equipped.hair)?.val || '#fbbf24'; player.racket = shopItems.find(i => i.id === equipped.racket)?.val || '#eee';
+            if (player.y < OCEAN_LIMIT && !inventory.includes('boat')) { player.x = 1200; player.y = 2300; }
+        } else {
+            rep = 0; tutorialDone = false; defeatedGyms = []; hasGoldMedal = false; hasPirateMedal = false; chestStates = new Array(chests.length).fill(false); defeatedVolcano = [];
+            achievements = []; matchStats = { totalWins: 0, currentStreak: 0, bestStreak: 0, currentRally: 0, bestRally: 0, specialsUsed: 0, itemsBought: 0 }; visitedZones = new Set();
+            inventory = ['suit_white', 'hair_yellow']; equipped = { suit: 'suit_white', hair: 'hair_yellow', racket: 'none' };
+            player.suit = '#fff'; player.hair = '#fbbf24'; player.racket = '#eee';
+            await saveGameData();
+        }
+        updatePlayerStats(); startGame(); checkAchievements();
+    }
+
+    async function deleteSlot(slotNum) {
+        if (firebaseOk && user) {
+            const docRef = doc(db_init, 'artifacts', appId, 'users', user.uid, 'saves', 'slot' + slotNum);
+            await deleteDoc(docRef);
+        } else {
+            localStorage.removeItem('tw_slot' + slotNum);
+        }
+        scanSlots();
+    }
+
+    async function scanSlots() {
+        const container = document.getElementById('slot-container'); container.innerHTML = '';
+        for(let i=1; i<=3; i++) {
+            let data = null;
+            if (firebaseOk && user) {
+                const docRef = doc(db_init, 'artifacts', appId, 'users', user.uid, 'saves', 'slot' + i);
+                const snap = await getDoc(docRef);
+                data = snap.exists() ? snap.data() : null;
+            } else {
+                const raw = localStorage.getItem('tw_slot' + i);
+                if (raw) data = JSON.parse(raw);
+            }
+            const card = document.createElement('div'); card.className = 'slot-card';
+            const info = `<div><div class="text-[#facc15] text-[10px] mb-1">PROFILE 0${i}</div><div class="text-[6px] text-white opacity-70">${data ? 'REP: ' + data.rep + ' | GYMS: ' + (data.defeatedGyms ? data.defeatedGyms.length : 0) : 'NEW DATA'}</div></div>`;
+            const actions = data
+                ? `<div style="display:flex; gap:8px; align-items:center;"><div class="text-blue-400 text-[8px] border border-blue-400/40 px-3 py-2">LOAD</div><div class="slot-delete-btn" style="color:#ef4444; font-size:8px; border:1px solid rgba(239,68,68,0.4); padding:4px 8px; cursor:pointer; font-family:'Press Start 2P',cursive;">DEL</div></div>`
+                : `<div class="text-blue-400 text-[8px] border border-blue-400/40 px-3 py-2">CREATE</div>`;
+            card.innerHTML = info + actions;
+            card.onclick = (e) => { if (e.target.closest('.slot-delete-btn')) return; if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); musicPlaying = true; loadSlotData(i); };
+            if (data) {
+                const delBtn = card.querySelector('.slot-delete-btn');
+                const slotNum = i;
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (delBtn.dataset.confirm) { deleteSlot(slotNum); return; }
+                    delBtn.dataset.confirm = '1'; delBtn.innerText = 'SURE?'; delBtn.style.borderColor = '#ef4444'; delBtn.style.color = '#fff'; delBtn.style.background = '#991b1b';
+                    setTimeout(() => { delBtn.removeAttribute('data-confirm'); delBtn.innerText = 'DEL'; delBtn.style.borderColor = 'rgba(239,68,68,0.4)'; delBtn.style.color = '#ef4444'; delBtn.style.background = ''; }, 2000);
+                };
+            }
+            container.appendChild(card);
+        }
+    }
+
+    function startStandardMatch() {
+        gameState = 'MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        if(activeNPC) document.getElementById('cpu-name-label').innerText = activeNPC.name.toUpperCase();
+        document.getElementById('p1-score').innerText = 0; document.getElementById('cpu-score').innerText = 0;
+        let goal = 3;
+        if (activeNPC.type === 'gym' || activeNPC.type === 'volcano_guard') goal = 7;
+        if (activeNPC.type === 'pirate' || activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss') goal = 11;
+        document.getElementById('match-goal-text').innerText = "GOAL: " + goal;
+        document.getElementById('top-bar').style.display = 'none'; document.getElementById('ach-btn').style.display = 'none'; document.getElementById('match-score').style.display = 'flex';
+        document.getElementById('special-meter-container').style.display = 'block'; document.getElementById('dialog').style.display = 'none';
+        resetMatch();
+        if (activeNPC && activeNPC.type === 'volcano_boss') { match.volcanoTimer = match.volcanoTimerMax; }
+    }
+
+    function startTournamentMatch() {
+        match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        document.getElementById('top-bar').style.display = 'none'; document.getElementById('ach-btn').style.display = 'none'; document.getElementById('match-score').style.display = 'flex';
+        document.getElementById('special-meter-container').style.display = 'block';
+        if (tournamentRound === 1) activeNPC = { name: "Rival Chad", level: 4.5, zone: 'Town', type: 'tourney', action: 'MATCH', color: '#dc2626', hair: '#111' };
+        else if (tournamentRound === 2) activeNPC = { name: "Champion Ace", level: 6.5, zone: 'Fire', type: 'tourney', action: 'MATCH', color: '#ef4444', hair: '#000' };
+        else if (tournamentRound === 3) activeNPC = { name: "King Smash", level: 9.0, zone: 'Town', type: 'king', action: 'MATCH', color: '#fbbf24', hair: '#444' };
+        if(activeNPC) document.getElementById('cpu-name-label').innerText = activeNPC.name.toUpperCase();
+        document.getElementById('match-goal-text').innerText = "GOAL: 11";
+        document.getElementById('dialog').style.display = 'none'; gameState = 'MATCH'; resetMatch();
+    }
+    
+    function startTutorialMatch() {
+        gameState = 'TUTORIAL_MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        document.getElementById('cpu-name-label').innerText = "CHAD";
+        document.getElementById('p1-score').innerText = 0; document.getElementById('cpu-score').innerText = 0;
+        document.getElementById('match-goal-text').innerText = "GOAL: 5";
+        document.getElementById('top-bar').style.display = 'none'; document.getElementById('ach-btn').style.display = 'none'; document.getElementById('match-score').style.display = 'flex';
+        document.getElementById('special-meter-container').style.display = 'block'; document.getElementById('dialog').style.display = 'none';
+        resetMatch();
+    }
+
+    function handleDialogAction() {
+        if(activeNPC) {
+            if (activeNPC.type === 'bully') { startTutorialMatch(); return; }
+            if (activeNPC.type === 'bully_done') { tutorialDone = true; if(!inventory.includes('racket_basic')) inventory.push('racket_basic'); equipped.racket = 'racket_basic'; player.racket = '#eee'; updatePlayerStats(); saveGameData(); gameState = 'OVERWORLD'; document.getElementById('top-bar').classList.remove('hidden'); document.getElementById('bottom-bar').classList.remove('hidden'); document.getElementById('ach-btn').style.display = 'block'; document.getElementById('dialog').style.display = 'none'; updateObjectiveHint(); return; }
+            if (activeNPC.action === 'TOURNAMENT_START') { if (tournamentRound === 0) tournamentRound = 1; startTournamentMatch(); return; }
+            if (activeNPC.action === 'MATCH') { startStandardMatch(); return; }
+        }
+        gameState = 'OVERWORLD'; document.getElementById('dialog').style.display = 'none';
+    }
+
+    function handleSpace() {
+        if(gameState === 'DIALOG') { document.getElementById('dialog-rematch-btn').style.display = 'none'; handleDialogAction(); }
+        else if(gameState === 'HOUSE') { player.x = player.ovX; player.y = player.ovY + 60; gameState = 'OVERWORLD'; }
+        else if(gameState === 'OVERWORLD') {
+            document.getElementById('dialog-rematch-btn').style.display = 'none';
+            const n = NPCs.find(npc => Math.hypot(npc.x - player.x, npc.y - player.y) < 60);
+            if(n) {
+                if (n.type === 'house') { player.ovX = player.x; player.ovY = player.y; player.x = 400; player.y = 500; gameState = 'HOUSE'; return; }
+                activeNPC = n; if(n.type === 'shop') { openShop(); return; }
+                gameState = 'DIALOG'; document.getElementById('dialog').style.display = 'block';
+                if (n.name === "Darklord" && !inventory.includes('boat')) { document.getElementById('dialog-text').innerText = `Darklord: "No boat? Begone!"`; if(activeNPC) activeNPC.action = 'EXIT'; return; }
+                if(n.type === 'olympics') {
+                    if (defeatedGyms.length < 4) { document.getElementById('dialog-text').innerText = `${n.name}: "Defeat all 4 Gyms first!"`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                    else if (hasGoldMedal) { document.getElementById('dialog-text').innerText = `${n.name}: "Greetings, Champ!"`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                    else { document.getElementById('dialog-text').innerText = `${n.name}: "Start Olympic gauntlet?"`; if(activeNPC) activeNPC.action = 'TOURNAMENT_START'; }
+                } else if(n.type === 'gym') {
+                    const idx = GYM_SEQUENCE.indexOf(n.gymId);
+                    if (idx > 0 && !defeatedGyms.includes(GYM_SEQUENCE[idx-1])) { document.getElementById('dialog-text').innerText = `${n.name}: "Defeat previous gyms first!"`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                    else { if(activeNPC) activeNPC.action = 'MATCH'; document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}" (Goal: 7)`; }
+                } else if(n.type === 'boss') { if(activeNPC) activeNPC.action = 'MATCH'; document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}" (Goal: 11)`; }
+                else if(n.type === 'tip') { document.getElementById('dialog-text').innerText = `${n.name}: "${getTipDialog(n.name)}"`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                else if(n.type === 'quick') { document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}"`; if(activeNPC) activeNPC.action = 'MATCH'; }
+                else if(n.type === 'pirate') { document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}"`; activeNPC.action = 'MATCH'; }
+                else if(n.type === 'volcano_guard') {
+                    if (defeatedVolcano.includes(n.volcanoId)) { document.getElementById('dialog-text').innerText = `${n.name}: "Pass freely."`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                    else { if(activeNPC) activeNPC.action = 'MATCH'; document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}" (Goal: 7)`; }
+                }
+                else if(n.type === 'volcano_boss') {
+                    if (defeatedVolcano.includes(n.volcanoId)) { document.getElementById('dialog-text').innerText = `${n.name}: "You beat me fair and square..."`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                    else { if(activeNPC) activeNPC.action = 'MATCH'; document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}" (Goal: 11 — Win before the volcano erupts!)`; }
+                }
+                else { if(activeNPC) activeNPC.action = 'MATCH'; document.getElementById('dialog-text').innerText = `${n.name}: "${n.dialog}" (Goal: 3)`; }
+            }
+            chests.forEach((c, i) => { if (!chestStates[i] && Math.hypot(c.x - player.x, c.y - player.y) < 50) {
+                if (c.type === 'pirate' && !hasPirateMedal) {
+                    const pirate = NPCs.find(n => n.type === 'pirate');
+                    if (pirate) { activeNPC = pirate; activeNPC.action = 'MATCH'; gameState = 'DIALOG'; document.getElementById('dialog').style.display = 'block'; document.getElementById('dialog-text').innerText = `${pirate.name}: "That's MY treasure! Beat me first, landlubber!"`; }
+                    return;
+                }
+                chestStates[i] = true; rep += c.rep; document.getElementById('rep-val').innerText = rep; playSfx(800, 'square', 0.5); saveGameData(); checkAchievements(); gameState = 'DIALOG'; document.getElementById('dialog').style.display = 'block'; document.getElementById('dialog-text').innerText = `Chest Found! Received ${c.rep} REP.`; activeNPC = null;
+            } });
+        } else if((gameState === 'MATCH' || gameState === 'TUTORIAL_MATCH') && !match.active) { match.active = true; match.ball.vy = match.serving === 'p1' ? -6 : 6; match.ball.vx = (Math.random() - 0.5) * 4; }
+    }
+
+    function handleSpecial() { if (gameState.includes('MATCH') && match.p1.specialMeter >= 100) { match.p1.specialMeter = 0; match.ball.special = true; playSfx(1200, 'sawtooth', 0.3, 0.1); shakeIntensity = 15; match.ball.vy *= 2; } }
+
+    function score(w) {
+        matchStats.currentRally = 0;
+        match[w].score++; document.getElementById('p1-score').innerText = match.p1.score; document.getElementById('cpu-score').innerText = match.cpu.score;
+        playSfx(w==='p1'?800:150, 'square', 0.3);
+        let goal = 3;
+        if (gameState === 'TUTORIAL_MATCH') goal = 5;
+        else if (activeNPC) {
+            if (activeNPC.type === 'gym' || activeNPC.type === 'volcano_guard') goal = 7;
+            else if (['tourney', 'king', 'boss', 'pirate', 'volcano_boss'].includes(activeNPC.type)) goal = 11;
+        }
+
+        if(match[w].score >= goal) {
+            gameState = 'DIALOG'; document.getElementById('match-score').style.display = 'none'; document.getElementById('top-bar').style.display = 'flex'; document.getElementById('ach-btn').style.display = 'block'; document.getElementById('special-meter-container').style.display = 'none'; document.getElementById('dialog').style.display = 'block';
+            if (activeNPC && activeNPC.type === 'bully') { 
+                const win = (w === 'p1'); 
+                document.getElementById('dialog-text').innerText = win ? "Chad: 'Lucky nerd! Take this racket. I'm going to beat every Gym Leader and win Gold before you!'" : "Chad: 'Hah! Loser! But take this old racket anyway. I'm going to win the Elemental Olympics. See ya!'"; activeNPC.type = 'bully_done'; return; 
+            }
+            if(w==='p1') {
+                if (gameState !== 'TUTORIAL_MATCH') { matchStats.totalWins++; matchStats.currentStreak++; if (matchStats.currentStreak > matchStats.bestStreak) matchStats.bestStreak = matchStats.currentStreak; if (match.cpu.score === 0) { unlockAchievement('shutout'); if (activeNPC && activeNPC.type === 'gym') unlockAchievement('shutout_gym'); if (activeNPC && ['boss','pirate','volcano_boss'].includes(activeNPC.type)) unlockAchievement('shutout_boss'); } }
+                if (activeNPC && activeNPC.type === 'gym' && !defeatedGyms.includes(activeNPC.gymId)) defeatedGyms.push(activeNPC.gymId);
+                if (activeNPC && activeNPC.type === 'boss') { if(!inventory.includes('racket_temple')) inventory.push('racket_temple'); document.getElementById('dialog-text').innerText = "DARKLORD: 'Impossible... take the Temple Racket!'"; }
+                else if (activeNPC && activeNPC.type === 'pirate') { hasPirateMedal = true; updatePlayerStats(); document.getElementById('dialog-text').innerText = "CAPTAIN: 'Yarr! Ye got skills! Take this Pirate Hat (+10% Power)!'"; activeNPC.action = 'EXIT'; }
+                else if (activeNPC && activeNPC.type === 'gym') {
+                    const gymRewards = { plant_gym: 75, ice_gym: 100, water_gym: 125, fire_gym: 150 };
+                    const gymRep = gymRewards[activeNPC.gymId] || 75;
+                    rep += gymRep; document.getElementById('rep-val').innerText = rep;
+                    document.getElementById('dialog-text').innerText = `${activeNPC.name} defeated! +${gymRep} REP!`;
+                    activeNPC.action = 'EXIT';
+                }
+                else if (activeNPC && activeNPC.type === 'volcano_guard') { if (!defeatedVolcano.includes(activeNPC.volcanoId)) defeatedVolcano.push(activeNPC.volcanoId); rep += 75; document.getElementById('rep-val').innerText = rep; document.getElementById('dialog-text').innerText = `${activeNPC.name}: "You've proven yourself. Pass freely."`; activeNPC.action = 'EXIT'; }
+                else if (activeNPC && activeNPC.type === 'volcano_boss') { if (!defeatedVolcano.includes(activeNPC.volcanoId)) defeatedVolcano.push(activeNPC.volcanoId); if(!inventory.includes('racket_magma')) inventory.push('racket_magma'); document.getElementById('dialog-text').innerText = "CHAD: 'Impossible! Fine, take this Magma Racket I forged up here... nerd!'"; activeNPC.action = 'EXIT'; }
+                else if (tournamentRound > 0) {
+                    if (tournamentRound === 1) { document.getElementById('dialog-text').innerText = "Winner! advanced to Finals!"; tournamentRound = 2; activeNPC.action = 'TOURNAMENT_START'; }
+                    else if (tournamentRound === 2) { document.getElementById('dialog-text').innerText = "CHAMPION! King awaits!"; tournamentRound = 3; activeNPC.action = 'TOURNAMENT_START'; }
+                    else if (tournamentRound === 3) { document.getElementById('dialog-text').innerText = "DEFEATED KING! GOLD MEDAL!"; hasGoldMedal = true; document.getElementById('medal-icon').classList.remove('hidden'); tournamentRound = 0; activeNPC.action = 'EXIT'; }
+                } else { const reward = (activeNPC && activeNPC.name === 'Leafy') ? 25 : 50; rep += reward; document.getElementById('rep-val').innerText = rep; document.getElementById('dialog-text').innerText = `Win! +${reward} Rep.`; if(activeNPC) activeNPC.action = 'EXIT'; }
+            } else { if (gameState !== 'TUTORIAL_MATCH') matchStats.currentStreak = 0; document.getElementById('dialog-text').innerText = "Defeat!"; tournamentRound = 0; if(activeNPC) activeNPC.action = 'EXIT'; }
+            saveGameData(); updateObjectiveHint(); checkAchievements();
+            // Show rematch button for non-tournament, non-tutorial matches
+            const rematchBtn = document.getElementById('dialog-rematch-btn');
+            if (activeNPC && !tournamentRound && !['bully','bully_done'].includes(activeNPC.type)) { rematchBtn.style.display = 'inline-block'; } else { rematchBtn.style.display = 'none'; }
+        } else { match.serving = w==='p1' ? 'cpu' : 'p1'; resetMatch(); }
+    }
+
+    function drawPixelPerson(x, y, color, hair, racketColor, swing, isP1) {
+        ctx.save(); ctx.translate(x, y);
+        let bob = (gameState.includes('MATCH')) ? Math.sin(Date.now()/200)*2 : 0; ctx.translate(0, bob);
+        ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(-15, 12, 30, 8);
+        ctx.fillStyle = color || '#fff'; 
+        ctx.fillRect(-8, (gameState === 'OVERWORLD' && player.animFrame === 1) ? 8 : 5, 6, 8); 
+        ctx.fillRect(2, (gameState === 'OVERWORLD' && player.animFrame === 1) ? 2 : 5, 6, 8); 
+        ctx.fillRect(-12, -10, 24, 18); ctx.fillStyle = '#ffdbac'; ctx.fillRect(-9, -26, 18, 18);
+        ctx.fillStyle = '#000'; ctx.fillRect(-5, -20, 2, 2); ctx.fillRect(3, -20, 2, 2);
+        ctx.fillStyle = hair || '#000'; ctx.fillRect(-10, -30, 20, 8);
+        
+        // Pirate Hat Rendering
+        if (isP1 && hasPirateMedal) {
+            ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(-15, -28); ctx.lineTo(15, -28); ctx.lineTo(10, -38); ctx.lineTo(-10, -38); ctx.fill(); // Hat base
+            ctx.fillStyle = '#facc15'; ctx.fillRect(-4, -34, 8, 4); // Skull badge
+        }
+
+        const hasRacket = isP1 ? equipped.racket !== 'none' : true;
+        if(hasRacket && (gameState.includes('MATCH') || (isP1 && (gameState === 'OVERWORLD' || gameState === 'HOUSE')))) { 
+            ctx.save(); ctx.translate(isP1 ? 16 : -16, 0); if(swing > 0) ctx.rotate(isP1 ? -Math.PI/2 : Math.PI/2); 
+            const ss = (isP1) ? player.stats.racketSize : 1.0; 
+            ctx.scale(1, ss); 
+            
+            ctx.fillStyle = racketColor || '#eee'; ctx.fillRect(-2, -5, 4, 15);
+            // Netting
+            if (equipped.racket !== 'racket_basic') {
+                ctx.globalAlpha = 0.4; ctx.fillStyle = racketColor || '#eee'; ctx.fillRect(-10, -25, 20, 20); ctx.globalAlpha = 1.0;
+            }
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(-10, -25, 20, 20); 
+            ctx.restore(); 
+        }
+        ctx.restore();
+    }
+
+    function drawPreviewIcon(ictx, item) {
+        ictx.clearRect(0,0,60,60); ictx.save(); ictx.translate(30, 35); ictx.scale(2, 2);
+        if (item.type === 'boat') { 
+            ictx.fillStyle = '#78350f'; ictx.beginPath(); ictx.moveTo(-15, 0); ictx.lineTo(15, 0); ictx.lineTo(10, 10); ictx.lineTo(-10, 10); ictx.fill(); 
+        } else {
+            let s = (item.type === 'suit') ? item.val : player.suit; 
+            let h = (item.type === 'hair') ? item.val : player.hair;
+            ictx.fillStyle = s; ictx.fillRect(-6, -10, 12, 10); 
+            ictx.fillStyle = '#ffdbac'; ictx.fillRect(-4, -18, 8, 8); 
+            ictx.fillStyle = h; ictx.fillRect(-5, -20, 10, 4);
+            ictx.save(); ictx.translate(8, -5); 
+            let r = (item.type === 'racket') ? item.val : '#eee';
+            ictx.fillStyle = r; ictx.fillRect(-1, -2, 2, 8); 
+            if (item.type === 'racket' && item.id !== 'racket_basic') {
+                ictx.globalAlpha = 0.4; ictx.fillStyle = item.val; ictx.fillRect(-10, -25, 20, 20); ictx.globalAlpha = 1.0;
+            }
+            ictx.strokeStyle = '#fff'; ictx.lineWidth = 1; ictx.strokeRect(-4, -8, 8, 8);
+            ictx.restore();
+        }
+        ictx.restore();
+    }
+
+    function renderWorld() {
+        wctx.clearRect(0,0,WORLD_W, WORLD_H);
+        wctx.fillStyle = '#0ea5e9'; wctx.fillRect(0, 0, WORLD_W, 1400); // Ocean
+        
+        // Skull Island — dark temple
+        // Rocky shore
+        wctx.fillStyle = '#4a4a4a'; wctx.beginPath(); wctx.ellipse(1200, 620, 170, 110, 0, 0, Math.PI*2); wctx.fill();
+        // Sandy beach ring
+        wctx.fillStyle = '#b8960c'; wctx.beginPath(); wctx.ellipse(1200, 610, 155, 100, 0, 0, Math.PI*2); wctx.fill();
+        // Dark ground
+        wctx.fillStyle = '#2d2d3d'; wctx.beginPath(); wctx.ellipse(1200, 600, 130, 85, 0, 0, Math.PI*2); wctx.fill();
+        // Cracked lava veins
+        wctx.strokeStyle = '#7f1d1d'; wctx.lineWidth = 2;
+        wctx.beginPath(); wctx.moveTo(1160, 560); wctx.lineTo(1180, 600); wctx.lineTo(1150, 640); wctx.stroke();
+        wctx.beginPath(); wctx.moveTo(1240, 550); wctx.lineTo(1220, 590); wctx.lineTo(1250, 630); wctx.stroke();
+        wctx.beginPath(); wctx.moveTo(1190, 580); wctx.lineTo(1210, 620); wctx.stroke();
+        // Temple pillars
+        wctx.fillStyle = '#555'; wctx.fillRect(1155, 540, 12, 50); wctx.fillRect(1233, 540, 12, 50);
+        wctx.fillStyle = '#666'; wctx.fillRect(1153, 535, 16, 8); wctx.fillRect(1231, 535, 16, 8);
+        // Temple roof
+        wctx.fillStyle = '#3d1f5c'; wctx.beginPath(); wctx.moveTo(1140, 540); wctx.lineTo(1200, 500); wctx.lineTo(1260, 540); wctx.fill();
+        // Skull emblem on ground
+        wctx.fillStyle = '#888'; wctx.beginPath(); wctx.arc(1200, 610, 18, 0, Math.PI * 2); wctx.fill();
+        wctx.fillStyle = '#2d2d3d'; wctx.beginPath(); wctx.arc(1193, 606, 4, 0, Math.PI * 2); wctx.fill(); // left eye
+        wctx.beginPath(); wctx.arc(1207, 606, 4, 0, Math.PI * 2); wctx.fill(); // right eye
+        wctx.beginPath(); wctx.moveTo(1196, 618); wctx.lineTo(1200, 622); wctx.lineTo(1204, 618); wctx.fill(); // nose
+        // Glowing aura
+        wctx.strokeStyle = 'rgba(127, 29, 29, 0.4)'; wctx.lineWidth = 3;
+        wctx.beginPath(); wctx.arc(1200, 590, 90, 0, Math.PI * 2); wctx.stroke();
+        wctx.strokeStyle = 'rgba(127, 29, 29, 0.2)'; wctx.lineWidth = 2;
+        wctx.beginPath(); wctx.arc(1200, 590, 110, 0, Math.PI * 2); wctx.stroke();
+        // Label
+        wctx.font = '8px "Press Start 2P"'; wctx.textAlign = 'center'; wctx.fillStyle = '#7f1d1d'; wctx.fillText("DARK TEMPLE", 1200, 490);
+        // Pirate Ship
+        wctx.fillStyle = '#78350f'; wctx.beginPath(); wctx.ellipse(2000, 600, 120, 60, 0, 0, Math.PI*2); wctx.fill();
+        wctx.fillStyle = '#fff'; wctx.fillRect(1980, 550, 40, 60);
+
+        // --- VOLCANO ISLAND ---
+        const vc = VOLCANO_CENTER;
+        // Gray rocky shores
+        wctx.fillStyle = '#4a4a4a'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y + 20, VOLCANO_ISLAND_RADIUS + 15, VOLCANO_ISLAND_RADIUS - 20, 0, 0, Math.PI*2); wctx.fill();
+        // Sandy beach ring
+        wctx.fillStyle = '#b8960c'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y + 10, VOLCANO_ISLAND_RADIUS, VOLCANO_ISLAND_RADIUS - 30, 0, 0, Math.PI*2); wctx.fill();
+        // Dark volcanic rock base
+        wctx.fillStyle = '#2d1b0e'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y, VOLCANO_ISLAND_RADIUS - 25, VOLCANO_ISLAND_RADIUS - 50, 0, 0, Math.PI*2); wctx.fill();
+        // Winding dirt path (border then fill)
+        wctx.strokeStyle = '#3d2b1f'; wctx.lineWidth = VOLCANO_PATH_WIDTH * 2 + 6; wctx.lineCap = 'round'; wctx.lineJoin = 'round';
+        wctx.beginPath(); wctx.moveTo(VOLCANO_PATH[0].x, VOLCANO_PATH[0].y);
+        for (let i = 1; i < VOLCANO_PATH.length; i++) wctx.lineTo(VOLCANO_PATH[i].x, VOLCANO_PATH[i].y);
+        wctx.stroke();
+        wctx.strokeStyle = '#8B6914'; wctx.lineWidth = VOLCANO_PATH_WIDTH * 2;
+        wctx.beginPath(); wctx.moveTo(VOLCANO_PATH[0].x, VOLCANO_PATH[0].y);
+        for (let i = 1; i < VOLCANO_PATH.length; i++) wctx.lineTo(VOLCANO_PATH[i].x, VOLCANO_PATH[i].y);
+        wctx.stroke();
+        // Volcano mountain cone
+        wctx.fillStyle = '#4a3728'; wctx.beginPath();
+        wctx.moveTo(vc.x - 100, vc.y + 40); wctx.lineTo(vc.x - 30, vc.y - 100); wctx.lineTo(vc.x + 30, vc.y - 100); wctx.lineTo(vc.x + 100, vc.y + 40);
+        wctx.closePath(); wctx.fill();
+        // Darker mountain shading
+        wctx.fillStyle = '#3a2a1e'; wctx.beginPath();
+        wctx.moveTo(vc.x, vc.y - 80); wctx.lineTo(vc.x + 30, vc.y - 100); wctx.lineTo(vc.x + 100, vc.y + 40); wctx.lineTo(vc.x, vc.y + 20);
+        wctx.closePath(); wctx.fill();
+        // Crater
+        wctx.fillStyle = '#1a0a00'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y - 95, 28, 12, 0, 0, Math.PI*2); wctx.fill();
+        // Lava glow inside crater
+        wctx.fillStyle = '#ef4444'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y - 93, 20, 8, 0, 0, Math.PI*2); wctx.fill();
+        wctx.fillStyle = '#fbbf24'; wctx.beginPath(); wctx.ellipse(vc.x, vc.y - 93, 10, 4, 0, 0, Math.PI*2); wctx.fill();
+        // Lava flows down mountain
+        wctx.strokeStyle = '#ef4444'; wctx.lineWidth = 3; wctx.lineCap = 'round';
+        wctx.beginPath(); wctx.moveTo(vc.x - 10, vc.y - 85); wctx.quadraticCurveTo(vc.x - 30, vc.y - 40, vc.x - 50, vc.y + 10); wctx.stroke();
+        wctx.beginPath(); wctx.moveTo(vc.x + 8, vc.y - 85); wctx.quadraticCurveTo(vc.x + 25, vc.y - 30, vc.x + 60, vc.y + 20); wctx.stroke();
+        wctx.strokeStyle = '#fbbf24'; wctx.lineWidth = 1.5;
+        wctx.beginPath(); wctx.moveTo(vc.x - 10, vc.y - 85); wctx.quadraticCurveTo(vc.x - 30, vc.y - 40, vc.x - 50, vc.y + 10); wctx.stroke();
+        wctx.beginPath(); wctx.moveTo(vc.x + 8, vc.y - 85); wctx.quadraticCurveTo(vc.x + 25, vc.y - 30, vc.x + 60, vc.y + 20); wctx.stroke();
+        // Smoke particles above crater
+        wctx.fillStyle = 'rgba(100,100,100,0.3)';
+        for (let i = 0; i < 6; i++) {
+            const sx = vc.x - 15 + (i * 97) % 30, sy = vc.y - 110 - (i * 53) % 40;
+            wctx.beginPath(); wctx.arc(sx, sy, 6 + (i % 3) * 3, 0, Math.PI*2); wctx.fill();
+        }
+        // Label
+        wctx.font = '8px "Press Start 2P"'; wctx.textAlign = 'center'; wctx.fillStyle = '#ef4444'; wctx.fillText("VOLCANO ISLAND", vc.x, vc.y + VOLCANO_ISLAND_RADIUS + 10);
+
+        const LO = 1400;
+        wctx.fillStyle = '#bae6fd'; wctx.fillRect(0, LO, WORLD_W/2, 900); // Ice
+        wctx.fillStyle = '#450a0a'; wctx.fillRect(WORLD_W/2, LO, WORLD_W/2, 900); // Fire
+        wctx.fillStyle = '#1e3a8a'; wctx.fillRect(WORLD_W/2, LO+900, WORLD_W/2, 900); // Water
+        wctx.fillStyle = '#064e3b'; wctx.fillRect(0, LO+900, WORLD_W/2, 900); // Plant
+        
+        // CITY CENTER Overhaul
+        const townX = WORLD_W/2-450, townY = LO + 900 - 450;
+        wctx.fillStyle = '#3f3f46'; wctx.fillRect(townX-20, townY-20, 940, 940);
+        wctx.fillStyle = '#525252'; wctx.fillRect(townX, townY, 900, 900);
+        
+        wctx.strokeStyle = '#71717a'; wctx.lineWidth = 2;
+        for(let x=townX; x<townX+900; x+=150) {
+            for(let y=townY; y<townY+900; y+=150) {
+                if(Math.abs(x-WORLD_W/2)<100 || Math.abs(y-(LO+900))<100) continue;
+                wctx.fillRect(x+10, y+10, 130, 130); wctx.strokeRect(x+10, y+10, 130, 130);
+            }
+        }
+
+        // Park Area
+        wctx.fillStyle = '#166534'; wctx.fillRect(WORLD_W/2-150, LO+900-150, 300, 300);
+        wctx.fillStyle = '#94a3b8'; wctx.fillRect(WORLD_W/2-40, LO+900-40, 80, 80);
+        wctx.fillStyle = '#3b82f6'; wctx.fillRect(WORLD_W/2-30, LO+900-30, 60, 60);
+
+        // Buildings (Home in new location)
+        const hx = 950, hy = LO + 1100;
+        wctx.fillStyle = '#fff'; wctx.fillRect(hx-30, hy-30, 60, 50); 
+        wctx.fillStyle = '#ea580c'; wctx.beginPath(); wctx.moveTo(hx-40, hy-30); wctx.lineTo(hx, hy-60); wctx.lineTo(hx+40, hy-30); wctx.fill(); 
+        wctx.fillStyle = '#111'; wctx.fillRect(hx-10, hy, 20, 20); 
+        wctx.fillStyle = '#166534'; wctx.fillRect(hx-40, hy+20, 80, 20); 
+        wctx.font = '8px "Press Start 2P"'; wctx.textAlign = 'center'; wctx.fillStyle = '#fff'; wctx.fillText("HOME", hx, hy-70);
+
+        // Shops
+        wctx.fillStyle = '#1e293b'; wctx.fillRect(1320 + 80, 770 + LO, 80, 60); 
+        wctx.fillStyle = '#334155'; wctx.fillRect(1000, 770 + LO, 80, 60); 
+
+        // GYMS Landmarks with "GYM" text
+        wctx.font = '10px "Press Start 2P"'; wctx.textAlign = 'center'; wctx.fillStyle = '#fff';
+        
+        // Ice
+        wctx.fillStyle = '#e0f2fe'; wctx.fillRect(160, 150+LO, 80, 80); wctx.fillStyle = '#0ea5e9'; wctx.beginPath(); wctx.moveTo(160,150+LO); wctx.lineTo(200, 80+LO); wctx.lineTo(240, 150+LO); wctx.fill(); wctx.fillText("GYM", 200, 200+LO);
+        // Fire
+        wctx.fillStyle = '#171717'; wctx.fillRect(2160, 150+LO, 80, 80); wctx.fillStyle = '#ef4444'; wctx.fillRect(2180, 170+LO, 40, 5); wctx.fillText("GYM", 2200, 210+LO);
+        // Water
+        wctx.fillStyle = '#3b82f6'; wctx.beginPath(); wctx.arc(2200, 1600+LO, 50, Math.PI, 0); wctx.fill(); wctx.fillStyle = '#fff'; wctx.fillText("GYM", 2200, 1585+LO);
+        // Plant
+        wctx.fillStyle = '#451a03'; wctx.fillRect(170, 1580+LO, 60, 60); wctx.fillStyle = '#15803d'; wctx.beginPath(); wctx.ellipse(200, 1580+LO, 50, 20, 0, 0, Math.PI*2); wctx.fill(); wctx.fillStyle = '#fff'; wctx.fillText("GYM", 200, 1620+LO);
+
+        // PERSISTENT DECORATIONS — varied per zone (seeded pseudo-random placement)
+        let seed = 91827;
+        function prand() { seed = (seed * 16807 + 12345) & 0x7fffffff; return (seed & 0xffff) / 0xffff; }
+        for(let i=0; i<100; i++) {
+            let rx = prand() * (WORLD_W-200) + 100, ry = LO + prand() * 1600 + 100;
+            if (Math.hypot(rx - WORLD_W/2, ry - (LO+900)) < 580) continue;
+            const variant = Math.floor(prand() * 5);
+            const sz = 10 + prand() * 16;
+
+            if (rx < WORLD_W/2 && ry < LO+900) {
+                // ICE ZONE: icicles, snow mounds, frozen puddles, ice crystals, snowmen
+                if (variant === 0) {
+                    // Icicle cluster
+                    wctx.fillStyle = '#e0f2fe'; wctx.beginPath(); wctx.moveTo(rx, ry); wctx.lineTo(rx+8, ry-sz*1.5); wctx.lineTo(rx+16, ry); wctx.fill();
+                    wctx.fillStyle = '#bae6fd'; wctx.beginPath(); wctx.moveTo(rx+12, ry); wctx.lineTo(rx+18, ry-sz); wctx.lineTo(rx+24, ry); wctx.fill();
+                } else if (variant === 1) {
+                    // Snow mound with sparkle
+                    wctx.fillStyle = '#f0f9ff'; wctx.beginPath(); wctx.ellipse(rx, ry, sz, sz*0.4, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#fff'; wctx.fillRect(rx-2, ry-sz*0.4-3, 4, 4);
+                } else if (variant === 2) {
+                    // Frozen puddle
+                    wctx.fillStyle = 'rgba(147,197,253,0.5)'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.8, sz*0.3, (i%3)*0.3, 0, Math.PI*2); wctx.fill();
+                    wctx.strokeStyle = '#e0f2fe'; wctx.lineWidth = 1; wctx.beginPath(); wctx.moveTo(rx-sz*0.5, ry); wctx.lineTo(rx+sz*0.3, ry-3); wctx.stroke();
+                } else if (variant === 3) {
+                    // Pine tree with snow
+                    wctx.fillStyle = '#1e3a5f'; wctx.beginPath(); wctx.moveTo(rx, ry-sz*1.2); wctx.lineTo(rx-sz*0.6, ry); wctx.lineTo(rx+sz*0.6, ry); wctx.fill();
+                    wctx.fillStyle = '#fff'; wctx.beginPath(); wctx.moveTo(rx, ry-sz*1.2); wctx.lineTo(rx-sz*0.3, ry-sz*0.5); wctx.lineTo(rx+sz*0.3, ry-sz*0.5); wctx.fill();
+                    wctx.fillStyle = '#4a3728'; wctx.fillRect(rx-3, ry, 6, 8);
+                } else {
+                    // Snowman
+                    wctx.fillStyle = '#f0f9ff'; wctx.beginPath(); wctx.arc(rx, ry, 10, 0, Math.PI*2); wctx.fill();
+                    wctx.beginPath(); wctx.arc(rx, ry-14, 7, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#f97316'; wctx.fillRect(rx+2, ry-15, 8, 3); // carrot nose
+                    wctx.fillStyle = '#000'; wctx.fillRect(rx-3, ry-17, 2, 2); wctx.fillRect(rx+2, ry-17, 2, 2); // eyes
+                }
+            }
+            else if (rx >= WORLD_W/2 && ry < LO+900) {
+                // FIRE ZONE: lava cracks, charred rocks, embers, fire pillars, ash piles
+                if (variant === 0) {
+                    // Lava crack
+                    wctx.strokeStyle = '#ef4444'; wctx.lineWidth = 2; wctx.beginPath();
+                    wctx.moveTo(rx, ry); wctx.lineTo(rx+sz*0.4, ry-sz*0.6); wctx.lineTo(rx-sz*0.2, ry-sz); wctx.stroke();
+                    wctx.strokeStyle = '#fbbf24'; wctx.lineWidth = 1; wctx.beginPath();
+                    wctx.moveTo(rx+1, ry); wctx.lineTo(rx+sz*0.4+1, ry-sz*0.6); wctx.stroke();
+                } else if (variant === 1) {
+                    // Charred boulder
+                    wctx.fillStyle = '#292524'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.6, sz*0.4, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#1c1917'; wctx.beginPath(); wctx.ellipse(rx+2, ry+1, sz*0.4, sz*0.25, 0, 0, Math.PI*2); wctx.fill();
+                } else if (variant === 2) {
+                    // Ember cluster (glowing dots)
+                    const colors = ['#ef4444','#f97316','#fbbf24'];
+                    for (let e=0; e<4; e++) {
+                        wctx.fillStyle = colors[e%3]; wctx.beginPath();
+                        wctx.arc(rx + (e*7)%15 - 5, ry + (e*11)%12 - 4, 2+e%2, 0, Math.PI*2); wctx.fill();
+                    }
+                } else if (variant === 3) {
+                    // Obsidian spike
+                    wctx.fillStyle = '#18181b'; wctx.beginPath();
+                    wctx.moveTo(rx, ry); wctx.lineTo(rx+6, ry-sz*1.2); wctx.lineTo(rx+12, ry); wctx.fill();
+                    wctx.fillStyle = '#ef4444'; wctx.beginPath();
+                    wctx.moveTo(rx+4, ry-sz*0.3); wctx.lineTo(rx+6, ry-sz*0.8); wctx.lineTo(rx+8, ry-sz*0.3); wctx.fill();
+                } else {
+                    // Ash pile with smoke wisps
+                    wctx.fillStyle = '#44403c'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.7, sz*0.25, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = 'rgba(120,113,108,0.4)'; wctx.beginPath(); wctx.arc(rx, ry-sz*0.4, 5, 0, Math.PI*2); wctx.fill();
+                    wctx.beginPath(); wctx.arc(rx+4, ry-sz*0.7, 3, 0, Math.PI*2); wctx.fill();
+                }
+            }
+            else if (rx < WORLD_W/2 && ry >= LO+900) {
+                // PLANT ZONE: varied trees, bushes, flowers, mushrooms, vines
+                if (variant === 0) {
+                    // Tall tree
+                    wctx.fillStyle = '#451a03'; wctx.fillRect(rx-3, ry-5, 6, sz*0.7);
+                    wctx.fillStyle = '#15803d'; wctx.beginPath(); wctx.arc(rx, ry-5-sz*0.5, sz*0.5, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#166534'; wctx.beginPath(); wctx.arc(rx-4, ry-5-sz*0.3, sz*0.35, 0, Math.PI*2); wctx.fill();
+                } else if (variant === 1) {
+                    // Flower patch
+                    const petals = ['#f472b6','#fb923c','#a78bfa','#fbbf24'];
+                    for (let f=0; f<3; f++) {
+                        const fx = rx + (f*11)%18 - 6, fy = ry + (f*7)%10 - 3;
+                        wctx.fillStyle = '#166534'; wctx.fillRect(fx, fy, 2, 10);
+                        wctx.fillStyle = petals[(i+f)%4]; wctx.beginPath(); wctx.arc(fx+1, fy-2, 4, 0, Math.PI*2); wctx.fill();
+                        wctx.fillStyle = '#fbbf24'; wctx.beginPath(); wctx.arc(fx+1, fy-2, 1.5, 0, Math.PI*2); wctx.fill();
+                    }
+                } else if (variant === 2) {
+                    // Mushroom cluster
+                    wctx.fillStyle = '#d4d4d8'; wctx.fillRect(rx-2, ry-2, 4, 10);
+                    wctx.fillStyle = '#ef4444'; wctx.beginPath(); wctx.ellipse(rx, ry-4, 8, 5, 0, Math.PI, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#fff'; wctx.fillRect(rx-4, ry-6, 2, 2); wctx.fillRect(rx+2, ry-7, 2, 2);
+                    // Small mushroom
+                    wctx.fillStyle = '#d4d4d8'; wctx.fillRect(rx+10, ry+2, 3, 7);
+                    wctx.fillStyle = '#f97316'; wctx.beginPath(); wctx.ellipse(rx+11, ry+1, 6, 4, 0, Math.PI, Math.PI*2); wctx.fill();
+                } else if (variant === 3) {
+                    // Bush
+                    wctx.fillStyle = '#14532d'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.6, sz*0.4, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#15803d'; wctx.beginPath(); wctx.ellipse(rx-4, ry-3, sz*0.45, sz*0.3, 0, 0, Math.PI*2); wctx.fill();
+                    // Berries
+                    wctx.fillStyle = '#dc2626'; for(let b=0;b<3;b++) { wctx.beginPath(); wctx.arc(rx-5+(b*6), ry-1, 2, 0, Math.PI*2); wctx.fill(); }
+                } else {
+                    // Mossy log
+                    wctx.fillStyle = '#78350f'; wctx.fillRect(rx-sz*0.6, ry, sz*1.2, 8);
+                    wctx.fillStyle = '#451a03'; wctx.beginPath(); wctx.ellipse(rx+sz*0.6, ry+4, 5, 5, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#166534'; wctx.fillRect(rx-sz*0.3, ry-2, sz*0.5, 4);
+                }
+            }
+            else {
+                // WATER ZONE: coral, seaweed, tide pools, lily pads, rocks
+                if (variant === 0) {
+                    // Coral formation
+                    wctx.fillStyle = '#f472b6'; wctx.beginPath();
+                    wctx.moveTo(rx, ry); wctx.lineTo(rx-5, ry-sz*0.8); wctx.lineTo(rx, ry-sz*0.5); wctx.lineTo(rx+5, ry-sz); wctx.lineTo(rx+8, ry-sz*0.4); wctx.lineTo(rx+10, ry); wctx.fill();
+                    wctx.fillStyle = '#fb7185'; wctx.beginPath();
+                    wctx.moveTo(rx+12, ry); wctx.lineTo(rx+10, ry-sz*0.6); wctx.lineTo(rx+16, ry); wctx.fill();
+                } else if (variant === 1) {
+                    // Seaweed strands
+                    wctx.strokeStyle = '#22c55e'; wctx.lineWidth = 2; wctx.lineCap = 'round';
+                    for (let s=0; s<3; s++) {
+                        wctx.beginPath(); wctx.moveTo(rx+s*6, ry);
+                        wctx.quadraticCurveTo(rx+s*6 + ((s%2)?4:-4), ry-sz*0.5, rx+s*6+((s%2)?-2:2), ry-sz);
+                        wctx.stroke();
+                    }
+                } else if (variant === 2) {
+                    // Tide pool
+                    wctx.fillStyle = '#1e40af'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.7, sz*0.4, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = 'rgba(96,165,250,0.5)'; wctx.beginPath(); wctx.ellipse(rx-3, ry-2, sz*0.3, sz*0.15, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#64748b'; // pebbles
+                    for(let p=0;p<4;p++) { wctx.beginPath(); wctx.arc(rx-sz*0.5+(p*sz*0.3), ry+sz*0.35, 3, 0, Math.PI*2); wctx.fill(); }
+                } else if (variant === 3) {
+                    // Lily pads
+                    for (let l=0; l<2; l++) {
+                        const lx = rx + l*14 - 5, ly = ry + l*6 - 3;
+                        wctx.fillStyle = '#15803d'; wctx.beginPath(); wctx.ellipse(lx, ly, 10, 7, l*0.3, 0, Math.PI*2); wctx.fill();
+                        wctx.strokeStyle = '#064e3b'; wctx.lineWidth = 1; wctx.beginPath(); wctx.moveTo(lx, ly); wctx.lineTo(lx+10, ly-3); wctx.stroke();
+                    }
+                    wctx.fillStyle = '#f472b6'; wctx.beginPath(); wctx.arc(rx+2, ry-4, 3, 0, Math.PI*2); wctx.fill(); // lotus flower
+                } else {
+                    // Wet rocks with water sheen
+                    wctx.fillStyle = '#475569'; wctx.beginPath(); wctx.ellipse(rx, ry, sz*0.5, sz*0.35, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = '#334155'; wctx.beginPath(); wctx.ellipse(rx+sz*0.3, ry+2, sz*0.3, sz*0.2, 0, 0, Math.PI*2); wctx.fill();
+                    wctx.fillStyle = 'rgba(147,197,253,0.3)'; wctx.beginPath(); wctx.ellipse(rx-2, ry-sz*0.15, sz*0.25, sz*0.1, -0.3, 0, Math.PI*2); wctx.fill();
+                }
+            }
+        }
+
+        // Ocean Waves
+        for(let i=0; i<200; i++) {
+            let rx = (i * 97) % WORLD_W; let ry = (i * 61) % 1400;
+            wctx.fillStyle = 'rgba(255,255,255,0.1)'; wctx.fillRect(rx, ry, 20, 2);
+        }
+
+        wctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        for(let x=0; x<WORLD_W; x+=TILE_SIZE) { wctx.beginPath(); wctx.moveTo(x,0); wctx.lineTo(x, WORLD_H); wctx.stroke(); }
+        for(let y=0; y<WORLD_H; y+=TILE_SIZE) { wctx.beginPath(); wctx.moveTo(0,y); wctx.lineTo(WORLD_W, y); wctx.stroke(); }
+    }
+
+    function toggleAdmin() { const p = document.getElementById('admin-panel'); p.style.display = (p.style.display === 'block') ? 'none' : 'block'; }
+    function adminUpdateGyms() {
+        defeatedGyms = []; if(document.getElementById('check-plant').checked) defeatedGyms.push('plant_gym');
+        if(document.getElementById('check-ice').checked) defeatedGyms.push('ice_gym'); if(document.getElementById('check-water').checked) defeatedGyms.push('water_gym');
+        if(document.getElementById('check-fire').checked) defeatedGyms.push('fire_gym'); saveGameData();
+    }
+
+    function distToSegment(px, py, ax, ay, bx, by) {
+        const dx = bx - ax, dy = by - ay;
+        const len2 = dx*dx + dy*dy;
+        if (len2 === 0) return Math.hypot(px - ax, py - ay);
+        let t = ((px - ax)*dx + (py - ay)*dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
+    }
+
+    function isOnVolcanoPath(x, y) {
+        for (let i = 0; i < VOLCANO_PATH.length - 1; i++) {
+            const a = VOLCANO_PATH[i], b = VOLCANO_PATH[i+1];
+            if (distToSegment(x, y, a.x, a.y, b.x, b.y) < VOLCANO_PATH_WIDTH) return true;
+        }
+        return false;
+    }
+
+    function isOnVolcanoIsland(x, y) {
+        return Math.hypot(x - VOLCANO_CENTER.x, y - VOLCANO_CENTER.y) < VOLCANO_ISLAND_RADIUS;
+    }
+
+    let prePauseState = null;
+
+    function togglePause() {
+        if (gameState === 'MENU' || gameState === 'SHOP') return;
+        const pauseEl = document.getElementById('pause-menu');
+        const forfeitBtn = document.getElementById('pause-forfeit-btn');
+        if (gameState === 'PAUSED') {
+            gameState = prePauseState || 'OVERWORLD';
+            pauseEl.style.display = 'none';
+        } else {
+            prePauseState = gameState;
+            gameState = 'PAUSED';
+            pauseEl.style.display = 'flex';
+            forfeitBtn.style.display = prePauseState.includes('MATCH') ? 'block' : 'none';
+        }
+    }
+
+    function forfeitMatch() {
+        gameState = 'DIALOG';
+        document.getElementById('pause-menu').style.display = 'none';
+        document.getElementById('match-score').style.display = 'none';
+        document.getElementById('top-bar').style.display = 'flex';
+        document.getElementById('special-meter-container').style.display = 'none';
+        document.getElementById('dialog').style.display = 'block';
+        document.getElementById('dialog-text').innerText = "You forfeited the match.";
+        matchStats.currentStreak = 0; tournamentRound = 0;
+        if(activeNPC) activeNPC.action = 'EXIT';
+        const rematchBtn = document.getElementById('dialog-rematch-btn');
+        if (activeNPC && !['bully','bully_done'].includes(activeNPC.type)) { rematchBtn.style.display = 'inline-block'; } else { rematchBtn.style.display = 'none'; }
+    }
+
+    function update() {
+        updateAchievementPopup();
+        if (gameState === 'MENU' || gameState === 'PAUSED') return;
+        if(['OVERWORLD', 'ADMIN', 'DIALOG', 'TUTORIAL', 'HOUSE'].includes(gameState)) {
+            let dx = 0, dy = 0;
+            const oldX = player.x, oldY = player.y;
+            const spd = player.speed * player.stats.moveSpeed;
+            if(keys['KeyW'] || keys['ArrowUp']) { dy = -spd; player.dir = 'up'; }
+            if(keys['KeyS'] || keys['ArrowDown']) { dy = spd; player.dir = 'down'; }
+            if(keys['KeyA'] || keys['ArrowLeft']) { dx = -spd; player.dir = 'left'; }
+            if(keys['KeyD'] || keys['ArrowRight']) { dx = spd; player.dir = 'right'; }
+            if (dx||dy) { player.x += dx; player.y += dy; animTimer++; if(animTimer > 10) { player.animFrame = 1-player.animFrame; animTimer=0; }}
+
+            if (gameState === 'HOUSE') { player.x = Math.max(50, Math.min(750, player.x)); player.y = Math.max(320, Math.min(550, player.y)); }
+            else {
+                if (player.y < OCEAN_LIMIT && !inventory.includes('boat')) player.y = OCEAN_LIMIT;
+                player.x = Math.max(20, Math.min(WORLD_W-20, player.x));
+                player.y = Math.max(20, Math.min(WORLD_H-20, player.y));
+
+                // Volcano path restriction
+                if (isOnVolcanoIsland(player.x, player.y) && !isOnVolcanoPath(player.x, player.y)) {
+                    if (isOnVolcanoPath(player.x, oldY)) { player.y = oldY; }
+                    else if (isOnVolcanoPath(oldX, player.y)) { player.x = oldX; }
+                    else { player.x = oldX; player.y = oldY; }
+                }
+                // Volcano NPC guard blocking
+                for (const n of NPCs) {
+                    if ((n.type === 'volcano_guard' || n.type === 'volcano_boss') && !defeatedVolcano.includes(n.volcanoId)) {
+                        if (Math.hypot(player.x - n.x, player.y - n.y) < 40) {
+                            player.x = oldX; player.y = oldY; break;
+                        }
+                    }
+                }
+
+                camera.x = Math.max(0, Math.min(WORLD_W-800, player.x-400));
+                camera.y = Math.max(0, Math.min(WORLD_H-600, player.y-300));
+
+                // Update zone display
+                const zd = document.getElementById('zone-display');
+                if (zd) {
+                    let zoneName = "Town Center";
+                    if (isOnVolcanoIsland(player.x, player.y)) zoneName = "Volcano Island";
+                    else if (player.y < OCEAN_LIMIT) zoneName = "The Ocean";
+                    else {
+                        const txS = WORLD_W/2 - 450, txE = WORLD_W/2 + 450;
+                        const tyS = LAND_OFFSET + 450, tyE = LAND_OFFSET + 1350;
+                        const relY = player.y - LAND_OFFSET;
+                        if (player.x > txS && player.x < txE && player.y > tyS && player.y < tyE) zoneName = "Town Center";
+                        else if (relY >= 0) {
+                            if (player.x < WORLD_W/2 && relY < 900) zoneName = "Ice Zone";
+                            else if (player.x >= WORLD_W/2 && relY < 900) zoneName = "Fire Zone";
+                            else if (player.x >= WORLD_W/2 && player.y >= WORLD_H/2) zoneName = "Water Zone";
+                            else zoneName = "Plant Zone";
+                        }
+                    }
+                    if (!visitedZones.has(zoneName)) { visitedZones.add(zoneName); checkAchievements(); }
+                    zd.innerText = zoneName;
+                }
+            }
+        } else if(gameState.includes('MATCH')) {
+            let friction = (activeNPC && activeNPC.zone === 'Ice') ? 0.92 : 0.85; 
+            if(keys['ArrowLeft'] || keys['KeyA']) player.matchVX -= 0.9; if(keys['ArrowRight'] || keys['KeyD']) player.matchVX += 0.9;
+            player.matchVX *= friction; match.p1.x += player.matchVX * player.stats.moveSpeed; match.p1.x = Math.max(40, Math.min(760, match.p1.x));
+            const cpuSpeed = Math.min(8.5, 2.4 + (activeNPC ? activeNPC.level * 0.7 : 0.5)); if(match.ball.x < match.cpu.x - 10) match.cpu.x -= cpuSpeed; if(match.ball.x > match.cpu.x + 10) match.cpu.x += cpuSpeed;
+            if (activeNPC && (activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss')) {
+                match.bossObstacle.x += match.bossObstacle.vx; if (match.bossObstacle.x < 150 || match.bossObstacle.x > 650) match.bossObstacle.vx *= -1;
+                if (match.active && Math.abs(match.ball.y - match.bossObstacle.y) < 15 && Math.abs(match.ball.x - match.bossObstacle.x) < match.bossObstacle.w/2) { if (match.ball.vy < 0) { match.ball.vy = Math.abs(match.ball.vy); playSfx(100, 'sawtooth', 0.2); shakeIntensity = 8; } }
+            }
+            // Volcano boss eruption timer
+            if (activeNPC && activeNPC.type === 'volcano_boss' && match.volcanoTimer > 0) {
+                match.volcanoTimer--;
+                if (match.volcanoTimer <= 0) {
+                    match.volcanoErupting = true; shakeIntensity = 30;
+                    playSfx(80, 'sawtooth', 1.0, 0.15);
+                    // Force loss — set cpu score to goal
+                    match.cpu.score = 11; match.p1.score = Math.min(match.p1.score, 10);
+                    document.getElementById('cpu-score').innerText = match.cpu.score;
+                    gameState = 'DIALOG'; document.getElementById('match-score').style.display = 'none'; document.getElementById('top-bar').style.display = 'flex'; document.getElementById('ach-btn').style.display = 'block'; document.getElementById('special-meter-container').style.display = 'none'; document.getElementById('dialog').style.display = 'block';
+                    document.getElementById('dialog-text').innerText = "THE VOLCANO ERUPTS! The ground shakes violently... You flee the summit! Chad wins by default!";
+                    activeNPC.action = 'EXIT'; tournamentRound = 0; matchStats.currentStreak = 0;
+                    saveGameData(); updateObjectiveHint();
+                    const rematchBtn = document.getElementById('dialog-rematch-btn');
+                    rematchBtn.style.display = 'inline-block';
+                }
+            }
+            if(match.active) {
+                if (activeNPC && activeNPC.zone === 'Water') { 
+                    match.ball.vx *= 0.998; 
+                    match.ball.vy *= 0.998;
+                    if (Math.abs(match.ball.vy) < 2.5 && match.ball.vy !== 0) match.ball.vy = match.ball.vy > 0 ? 2.5 : -2.5;
+                }
+                match.ball.x += match.ball.vx; match.ball.y += match.ball.vy;
+                match.ball.trail.push({x: match.ball.x, y: match.ball.y}); if(match.ball.trail.length > 8) match.ball.trail.shift();
+                if(match.ball.x < 100 || match.ball.x > 700) { match.ball.vx *= -1; playSfx(200, 'sine', 0.1); }
+                const hr = 45 * player.stats.racketSize;
+                
+                // FIRE BALL LOGIC
+                const isFire = (activeNPC && activeNPC.zone === 'Fire');
+                // Ball speed cap
+                const MAX_BALL_SPEED = 16;
+                if (Math.abs(match.ball.vy) > MAX_BALL_SPEED) match.ball.vy = Math.sign(match.ball.vy) * MAX_BALL_SPEED;
+                if (Math.abs(match.ball.vx) > MAX_BALL_SPEED * 0.6) match.ball.vx = Math.sign(match.ball.vx) * MAX_BALL_SPEED * 0.6;
+
+                // Player hit — sweep test to prevent tunneling
+                const ballPrevY = match.ball.y - match.ball.vy;
+                const p1HitTop = 530, p1HitBot = 550;
+                const ballPassedP1 = (ballPrevY <= p1HitBot && match.ball.y >= p1HitTop) || (match.ball.y >= p1HitTop && match.ball.y <= p1HitBot);
+                if(ballPassedP1 && match.ball.vy > 0 && Math.abs(match.ball.x - match.p1.x) < hr) {
+                    let pwr = 1.05 * player.stats.racketPower;
+                    if (isFire) pwr *= 1.25;
+                    match.ball.vy = -Math.abs(match.ball.vy) * pwr; match.ball.vx = (match.ball.x - match.p1.x) * 0.25;
+                    match.ball.y = p1HitTop;
+                    match.p1.swing = 10; playSfx(600, 'square', 0.1); shakeIntensity = 4; match.p1.specialMeter = Math.min(100, match.p1.specialMeter + 10); match.ball.special = false;
+                    matchStats.currentRally++; if (matchStats.currentRally > matchStats.bestRally) matchStats.bestRally = matchStats.currentRally;
+                    if (match.p1.specialMeter >= 100) { match.p1.specialMeter = 0; match.ball.special = true; playSfx(1200, 'sawtooth', 0.3, 0.1); shakeIntensity = 15; match.ball.vy *= 2; if (gameState !== 'TUTORIAL_MATCH') { matchStats.specialsUsed++; checkAchievements(); } }
+                }
+                // CPU hit — sweep test
+                const cpuHitTop = 50, cpuHitBot = 70;
+                const ballPassedCpu = (ballPrevY >= cpuHitTop && match.ball.y <= cpuHitBot) || (match.ball.y >= cpuHitTop && match.ball.y <= cpuHitBot);
+                if(ballPassedCpu && match.ball.vy < 0 && Math.abs(match.ball.x - match.cpu.x) < 45) { match.ball.vy = Math.abs(match.ball.vy) * 1.05; match.ball.vx = (match.ball.x - match.cpu.x) * 0.25; match.ball.y = cpuHitBot; match.cpu.swing = 10; playSfx(600, 'square', 0.1); match.ball.special = false; matchStats.currentRally++; if (matchStats.currentRally > matchStats.bestRally) matchStats.bestRally = matchStats.currentRally; }
+                if(match.ball.y < 0) score('p1'); else if(match.ball.y > 600) score('cpu');
+            }
+            document.getElementById('special-meter-fill').style.width = match.p1.specialMeter + '%';
+            const meterEl = document.getElementById('special-meter-container');
+            if (match.p1.specialMeter >= 100) meterEl.classList.add('meter-ready'); else meterEl.classList.remove('meter-ready');
+            if(match.p1.swing > 0) match.p1.swing--; if(match.cpu.swing > 0) match.cpu.swing--;
+        }
+        if(shakeIntensity > 0) shakeIntensity *= 0.9;
+    }
+
+    function draw() {
+        if (gameState === 'MENU' || gameState === 'PAUSED') return;
+        ctx.clearRect(0,0,800,600); ctx.save();
+        if(shakeIntensity > 1) ctx.translate((Math.random()-0.5)*shakeIntensity, (Math.random()-0.5)*shakeIntensity);
+        
+        if (gameState === 'HOUSE') {
+            // Wall
+            ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, 800, 300);
+            // Wallpaper trim line
+            ctx.fillStyle = '#334155'; ctx.fillRect(0, 40, 800, 3);
+            // Floor
+            ctx.fillStyle = '#451a03'; ctx.fillRect(0, 300, 800, 300);
+            ctx.strokeStyle = '#3b1602'; ctx.lineWidth = 1; for(let i=300; i<600; i+=40) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(800, i); ctx.stroke(); }
+            // Rug
+            ctx.fillStyle = '#991b1b'; ctx.beginPath(); ctx.ellipse(400, 480, 220, 100, 0, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(400, 480, 220, 100, 0, 0, Math.PI*2); ctx.stroke();
+            ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(400, 480, 190, 80, 0, 0, Math.PI*2); ctx.stroke();
+
+            // === TROPHY SHELF (top shelf - gym badges) ===
+            const shelf1Y = 150;
+            // Shelf board
+            ctx.fillStyle = '#78350f'; ctx.fillRect(60, shelf1Y, 680, 12);
+            ctx.fillStyle = '#92400e'; ctx.fillRect(60, shelf1Y, 680, 4);
+            // Shelf brackets
+            ctx.fillStyle = '#5c2d0e'; ctx.fillRect(120, shelf1Y + 12, 8, 20); ctx.fillRect(672, shelf1Y + 12, 8, 20);
+            // Shelf label (above trophies)
+            ctx.fillStyle = '#94a3b8'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'center';
+            ctx.fillText('GYM BADGES', 400, shelf1Y - 58);
+
+            const gymColors = { plant_gym: { bg: '#10b981', name: 'PLANT' }, ice_gym: { bg: '#0ea5e9', name: 'ICE' }, water_gym: { bg: '#3b82f6', name: 'WATER' }, fire_gym: { bg: '#ef4444', name: 'FIRE' } };
+            const gymSlots = ['plant_gym', 'ice_gym', 'water_gym', 'fire_gym'];
+            gymSlots.forEach((gym, i) => {
+                const tx = 200 + i * 120;
+                const ty = shelf1Y - 4;
+                const beaten = defeatedGyms.includes(gym);
+                const info = gymColors[gym];
+                // Trophy base
+                ctx.fillStyle = beaten ? '#facc15' : '#333'; ctx.fillRect(tx - 20, ty - 8, 40, 8);
+                // Trophy pillar
+                ctx.fillStyle = beaten ? '#eab308' : '#222'; ctx.fillRect(tx - 4, ty - 30, 8, 22);
+                // Trophy top (diamond shape)
+                ctx.fillStyle = beaten ? info.bg : '#222';
+                ctx.beginPath(); ctx.moveTo(tx, ty - 50); ctx.lineTo(tx + 16, ty - 35); ctx.lineTo(tx, ty - 20); ctx.lineTo(tx - 16, ty - 35); ctx.closePath(); ctx.fill();
+                if (beaten) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); }
+                // Label
+                ctx.fillStyle = beaten ? '#fff' : '#555'; ctx.font = '7px "Press Start 2P"'; ctx.textAlign = 'center';
+                ctx.fillText(info.name, tx, shelf1Y + 28);
+            });
+
+            // === MEDAL SHELF (bottom shelf - special awards) ===
+            const shelf2Y = 250;
+            // Shelf board
+            ctx.fillStyle = '#78350f'; ctx.fillRect(60, shelf2Y, 680, 12);
+            ctx.fillStyle = '#92400e'; ctx.fillRect(60, shelf2Y, 680, 4);
+            // Shelf brackets
+            ctx.fillStyle = '#5c2d0e'; ctx.fillRect(120, shelf2Y + 12, 8, 20); ctx.fillRect(672, shelf2Y + 12, 8, 20);
+            // Shelf label (above medals)
+            ctx.fillStyle = '#94a3b8'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'center';
+            ctx.fillText('SPECIAL AWARDS', 400, shelf2Y - 55);
+
+            // Gold Medal
+            const gx = 200, gy = shelf2Y - 4;
+            if (hasGoldMedal) {
+                // Medal ribbon
+                ctx.fillStyle = '#1d4ed8'; ctx.fillRect(gx - 8, gy - 45, 6, 20); ctx.fillRect(gx + 2, gy - 45, 6, 20);
+                // Medal circle
+                ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(gx, gy - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#d97706'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(gx, gy - 20, 16, 0, Math.PI*2); ctx.stroke();
+                // Star on medal
+                ctx.fillStyle = '#000'; ctx.font = '14px serif'; ctx.textAlign = 'center'; ctx.fillText('\u2605', gx, gy - 15);
+                ctx.fillStyle = '#fff'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('OLYMPIC', gx, shelf2Y + 22);
+                ctx.fillText('GOLD', gx, shelf2Y + 34);
+            } else {
+                ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(gx, gy - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#555'; ctx.font = '7px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('OLYMPICS', gx, shelf2Y + 28);
+            }
+
+            // Pirate Medal
+            const px = 400, py = shelf2Y - 4;
+            if (hasPirateMedal) {
+                // Skull & crossbones medal
+                ctx.fillStyle = '#991b1b'; ctx.beginPath(); ctx.arc(px, py - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py - 20, 16, 0, Math.PI*2); ctx.stroke();
+                // Skull face
+                ctx.fillStyle = '#fff'; ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.fillText('\u2620', px, py - 14);
+                ctx.fillStyle = '#fff'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('PIRATE', px, shelf2Y + 22);
+                ctx.fillText('SLAYER', px, shelf2Y + 34);
+            } else {
+                ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(px, py - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#555'; ctx.font = '7px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('PIRATE', px, shelf2Y + 28);
+            }
+
+            // Volcano Medal
+            const vx = 600, vy = shelf2Y - 4;
+            if (defeatedVolcano.includes('vboss')) {
+                // Lava medal
+                ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.arc(vx, vy - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(vx, vy - 20, 16, 0, Math.PI*2); ctx.stroke();
+                // Flame icon
+                ctx.fillStyle = '#fbbf24'; ctx.font = '16px serif'; ctx.textAlign = 'center'; ctx.fillText('\uD83D\uDD25', vx, vy - 13);
+                ctx.fillStyle = '#fff'; ctx.font = '7px "Press Start 2P"'; ctx.fillText('VOLCANO', vx, shelf2Y + 22);
+                ctx.fillText('VICTOR', vx, shelf2Y + 34);
+            } else {
+                ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(vx, vy - 20, 16, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#555'; ctx.font = '7px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText('VOLCANO', vx, shelf2Y + 28);
+            }
+
+            // Title
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '10px "Press Start 2P"'; ctx.fillText("PLAYER'S HOUSE", 400, 25);
+            ctx.fillStyle = '#94a3b8'; ctx.font = '7px "Press Start 2P"'; ctx.fillText("PRESS SPACE TO EXIT", 400, 38);
+            drawPixelPerson(player.x, player.y, player.suit, player.hair, player.racket, 0, true);
+        } else if(['OVERWORLD', 'DIALOG', 'SHOP', 'ADMIN', 'TUTORIAL'].includes(gameState)) {
+            ctx.translate(-camera.x, -camera.y); ctx.drawImage(worldBg, 0, 0);
+            NPCs.forEach((n, ni) => { if (n.type === 'house') return;
+                // NPC idle animation: bob + sway
+                const idleBob = Math.sin(Date.now() / 400 + ni * 2.3) * 3;
+                const idleLean = Math.sin(Date.now() / 1200 + ni * 1.7) * 2;
+                ctx.save(); ctx.translate(idleLean, 0);
+                drawPixelPerson(n.x, n.y + idleBob, n.color, n.hair, '#eee', 0, false);
+                ctx.restore();
+                ctx.fillStyle = '#fff'; ctx.font = '8px "Press Start 2P"'; ctx.textAlign = 'center'; ctx.fillText(n.name, n.x, n.y - 45);
+                if (gameState === 'OVERWORLD' && Math.hypot(n.x - player.x, n.y - player.y) < 70) {
+                    const bob = Math.sin(Date.now() / 200) * 3;
+                    ctx.fillStyle = '#facc15'; ctx.font = '12px "Press Start 2P"'; ctx.fillText('!', n.x, n.y - 55 + bob);
+                }
+            });
+            chests.forEach((c, i) => { if (!chestStates[i]) {
+                const cx = c.x, cy = c.y;
+                // chest body
+                ctx.fillStyle = '#92400e'; ctx.fillRect(cx-12, cy-4, 24, 14);
+                ctx.fillStyle = '#78350f'; ctx.fillRect(cx-11, cy-3, 22, 12);
+                // wood grain lines
+                ctx.strokeStyle = '#6b2f0a'; ctx.lineWidth = 0.5;
+                ctx.beginPath(); ctx.moveTo(cx-10, cy+2); ctx.lineTo(cx+10, cy+2); ctx.moveTo(cx-10, cy+6); ctx.lineTo(cx+10, cy+6); ctx.stroke();
+                // lid (rounded top)
+                ctx.fillStyle = '#b45309';
+                ctx.beginPath(); ctx.moveTo(cx-12, cy-4); ctx.lineTo(cx+12, cy-4); ctx.lineTo(cx+12, cy-8); ctx.quadraticCurveTo(cx+12, cy-14, cx, cy-15); ctx.quadraticCurveTo(cx-12, cy-14, cx-12, cy-8); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#92400e';
+                ctx.beginPath(); ctx.moveTo(cx-11, cy-5); ctx.lineTo(cx+11, cy-5); ctx.lineTo(cx+11, cy-8); ctx.quadraticCurveTo(cx+11, cy-13, cx, cy-14); ctx.quadraticCurveTo(cx-11, cy-13, cx-11, cy-8); ctx.closePath(); ctx.fill();
+                // metal bands
+                ctx.fillStyle = '#d4a017'; ctx.fillRect(cx-12, cy-5, 24, 2);
+                ctx.fillStyle = '#fbbf24'; ctx.fillRect(cx-12, cy-4.5, 24, 1);
+                // metal corners
+                ctx.fillStyle = '#d4a017';
+                ctx.fillRect(cx-13, cy-6, 3, 4); ctx.fillRect(cx+10, cy-6, 3, 4);
+                ctx.fillRect(cx-13, cy+7, 3, 4); ctx.fillRect(cx+10, cy+7, 3, 4);
+                // lock/clasp
+                ctx.fillStyle = '#fbbf24'; ctx.fillRect(cx-3, cy-7, 6, 5);
+                ctx.fillStyle = '#d4a017'; ctx.fillRect(cx-2, cy-6, 4, 3);
+                // keyhole
+                ctx.fillStyle = '#78350f';
+                ctx.beginPath(); ctx.arc(cx, cy-5, 1.2, 0, Math.PI*2); ctx.fill();
+                ctx.fillRect(cx-0.5, cy-4.5, 1, 2);
+                // shimmer/sparkle
+                const sparkle = Math.sin(Date.now() / 300 + c.x) * 0.5 + 0.5;
+                ctx.fillStyle = `rgba(253,224,71,${sparkle * 0.7})`;
+                ctx.beginPath(); ctx.arc(cx+8, cy-12, 2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(cx+8, cy-15); ctx.lineTo(cx+8, cy-9); ctx.moveTo(cx+5, cy-12); ctx.lineTo(cx+11, cy-12); ctx.strokeStyle = `rgba(253,224,71,${sparkle * 0.5})`; ctx.lineWidth = 0.8; ctx.stroke();
+            } });
+            if(inventory.includes('boat') && (Math.hypot(player.x - WORLD_W/2, player.y - WORLD_H/2) > 550) && player.y < 1400) {
+                ctx.fillStyle = '#78350f'; ctx.beginPath(); ctx.moveTo(player.x-30, player.y+15); ctx.lineTo(player.x+30, player.y+15); ctx.lineTo(player.x+20, player.y+30); ctx.lineTo(player.x-20, player.y+30); ctx.closePath(); ctx.fill();
+            }
+            drawPixelPerson(player.x, player.y, player.suit, player.hair, player.racket, 0, true);
+        } else {
+            const colors = { Ice: '#bae6fd', Fire: '#450a0a', Water: '#1e3a8a', Plant: '#064e3b', Town: '#737373', Tutorial: '#475569', Ocean: '#0ea5e9', Volcano: '#7f1d1d' };
+            ctx.fillStyle = (gameState === 'TUTORIAL_MATCH') ? colors.Tutorial : (colors[activeNPC.zone] || '#2d5a27'); ctx.fillRect(0,0,800,600);
+            ctx.strokeStyle = (activeNPC && (activeNPC.type === 'king' || activeNPC.type === 'tourney' || activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss')) ? '#fbbf24' : '#fff'; ctx.lineWidth = 4; ctx.strokeRect(100, 50, 600, 500); ctx.beginPath(); ctx.moveTo(100, 300); ctx.lineTo(700, 300); ctx.stroke();
+            
+            // BOSS OBSTACLE
+            if (activeNPC && (activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss')) {
+                const obs = match.bossObstacle;
+                ctx.save();
+                ctx.shadowBlur = 12; ctx.shadowColor = '#a855f7';
+                ctx.fillStyle = '#7c3aed'; ctx.fillRect(obs.x - obs.w/2, obs.y - 6, obs.w, 12);
+                ctx.fillStyle = '#a855f7'; ctx.fillRect(obs.x - obs.w/2 + 4, obs.y - 3, obs.w - 8, 6);
+                ctx.fillStyle = '#c084fc'; ctx.fillRect(obs.x - 4, obs.y - 4, 8, 8);
+                ctx.restore();
+            }
+
+            // FIREBALL LOGIC
+            const isFire = (activeNPC && activeNPC.zone === 'Fire');
+            match.ball.trail.forEach((t, i) => { 
+                if (isFire) ctx.fillStyle = `rgba(239, 68, 68, ${i*0.15})`; 
+                else ctx.fillStyle = match.ball.special ? `rgba(255,255,255,${i*0.1})` : `rgba(204,255,0,${i*0.1})`; 
+                ctx.beginPath(); ctx.arc(t.x, t.y, isFire ? 5 : 4, 0, Math.PI*2); ctx.fill(); 
+            });
+
+            if (isFire) {
+                ctx.shadowBlur = 15; ctx.shadowColor = '#ea580c';
+                ctx.fillStyle = match.ball.special ? '#fff' : '#fbbf24'; 
+            } else {
+                ctx.fillStyle = match.ball.special ? '#fff' : '#cf0'; 
+                if(match.ball.special) { ctx.shadowBlur = 20; ctx.shadowColor = '#fff'; }
+            }
+
+            ctx.beginPath(); ctx.arc(match.ball.x, match.ball.y, 7, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+            drawPixelPerson(match.p1.x, 550, player.suit, player.hair, player.racket, match.p1.swing, true); 
+            if(activeNPC) drawPixelPerson(match.cpu.x, 50, activeNPC.color, activeNPC.hair, '#eee', match.cpu.swing, false);
+            if(!match.active) { ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font='8px "Press Start 2P"'; ctx.fillText("SPACE TO SERVE", 400, 290); if (gameState === 'TUTORIAL_MATCH') ctx.fillText("MOVE WITH WASD", 400, 320); }
+
+            // Volcano boss eruption timer bar
+            if (activeNPC && activeNPC.type === 'volcano_boss' && match.volcanoTimer > 0) {
+                const pct = match.volcanoTimer / match.volcanoTimerMax;
+                const barW = 200, barH = 14, barX = 400 - barW/2, barY = 575;
+                ctx.fillStyle = '#111'; ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+                const timerColor = pct > 0.4 ? '#ef4444' : (pct > 0.15 ? '#f97316' : '#fbbf24');
+                ctx.fillStyle = timerColor; ctx.fillRect(barX, barY, barW * pct, barH);
+                if (pct <= 0.15) { ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 80) * 0.3; ctx.fillStyle = '#fff'; ctx.fillRect(barX, barY, barW * pct, barH); ctx.globalAlpha = 1; }
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(barX, barY, barW, barH);
+                const secs = Math.ceil(match.volcanoTimer / 60);
+                ctx.fillStyle = '#fff'; ctx.font = '6px "Press Start 2P"'; ctx.textAlign = 'center';
+                ctx.fillText('ERUPTION: ' + secs + 's', 400, barY - 4);
+                // Screen-edge lava glow that intensifies as time runs low
+                if (pct < 0.5) {
+                    const glowAlpha = (1 - pct * 2) * 0.3;
+                    ctx.fillStyle = `rgba(239, 68, 68, ${glowAlpha})`; ctx.fillRect(0, 0, 20, 600); ctx.fillRect(780, 0, 20, 600);
+                    ctx.fillStyle = `rgba(239, 68, 68, ${glowAlpha * 0.5})`; ctx.fillRect(0, 0, 800, 15); ctx.fillRect(0, 585, 800, 15);
+                }
+            }
+            // Eruption flash
+            if (match.volcanoErupting) { ctx.fillStyle = 'rgba(239,68,68,0.5)'; ctx.fillRect(0,0,800,600); match.volcanoErupting = false; }
+        }
+        ctx.restore();
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // --- 5. INITIALIZATION ---
+
+    async function init() {
+        renderWorld();
+        
+        const bindUI = (id, fn) => {
+            const el = document.getElementById(id);
+            if (el) el.onclick = fn;
+        };
+
+        bindUI('dialog-confirm-btn', () => { document.getElementById('dialog-rematch-btn').style.display = 'none'; handleDialogAction(); });
+        bindUI('dialog-rematch-btn', () => { document.getElementById('dialog-rematch-btn').style.display = 'none'; document.getElementById('dialog').style.display = 'none'; if(activeNPC) { activeNPC.action = 'MATCH'; startStandardMatch(); } });
+        bindUI('shop-exit-btn', () => { gameState = 'OVERWORLD'; document.getElementById('shop').style.display = 'none'; });
+        bindUI('admin-close-btn', () => { document.getElementById('admin-panel').style.display = 'none'; });
+        bindUI('debug-toggle', () => { 
+            const p = document.getElementById('admin-panel');
+            if(p) p.style.display = (p.style.display === 'block') ? 'none' : 'block';
+        });
+        bindUI('admin-add-rep-btn', () => { rep += 500; if(document.getElementById('rep-val')) document.getElementById('rep-val').innerText = rep; saveGameData(); });
+        bindUI('admin-medal-btn', () => { hasGoldMedal = true; if(document.getElementById('medal-icon')) document.getElementById('medal-icon').classList.remove('hidden'); saveGameData(); });
+        
+        const bindCheck = (id) => {
+            const el = document.getElementById(id);
+            if(el) el.onchange = adminUpdateGyms;
+        }
+        ['check-plant', 'check-ice', 'check-water', 'check-fire'].forEach(bindCheck);
+
+        bindUI('pause-resume-btn', () => togglePause());
+        bindUI('pause-forfeit-btn', () => forfeitMatch());
+
+        window.addEventListener('keydown', e => {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            keys[e.code] = true;
+            if(e.code === 'Escape') togglePause();
+            if(e.code === 'Space' && gameState !== 'PAUSED') handleSpace();
+            // Special now auto-triggers on ball hit when meter is full
+        });
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        if (firebaseOk) {
+            await signInAnonymously(auth_init);
+            onAuthStateChanged(auth_init, (u) => { user = u; if (u) scanSlots(); });
+        } else {
+            user = { uid: 'local' };
+            scanSlots();
+        }
+
+        musicLoop();
+        loop();
+    }
+
+    init();
+</script>
+</body>
+</html>

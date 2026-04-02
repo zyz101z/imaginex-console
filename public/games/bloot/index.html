@@ -1,0 +1,2065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLOOT - Mountain Race</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #202028;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            border: 4px solid #4a4a4a;
+            width: 800px;
+            height: 600px;
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+            background-color: #87CEEB; /* Sky Blue */
+            image-rendering: pixelated; /* Essential for pixel art look */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .hud-text {
+            text-shadow: 2px 2px 0 #000;
+            font-size: 16px;
+            color: #FFF;
+        }
+        
+        .currency-hud {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .coin-text { color: #FFD700; }
+        .diamond-text { color: #00E5FF; }
+
+        /* LOADING SCREEN STYLES */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #87CEEB;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .loading-mountain {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 400px solid transparent;
+            border-right: 400px solid transparent;
+            border-bottom: 400px solid #795548;
+            z-index: 1;
+        }
+        
+        .loading-snow {
+            position: absolute;
+            bottom: 250px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 110px solid transparent;
+            border-right: 110px solid transparent;
+            border-bottom: 150px solid white;
+            z-index: 2;
+        }
+
+        .loading-title {
+            font-size: 100px;
+            color: #FFD700;
+            text-shadow: 8px 8px 0 #8B4513;
+            z-index: 10;
+            opacity: 0;
+            animation: flyIn 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes flyIn {
+            0% { transform: translateY(-600px) scale(0.1); opacity: 0; }
+            60% { transform: translateY(30px) scale(1.1); opacity: 1; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        #start-screen, #game-over-screen, #quest-screen, #shop-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        
+        /* Sound Hint */
+        #sound-hint {
+            position: absolute;
+            bottom: 100px;
+            color: #4DB6AC;
+            font-size: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Quest Screen */
+        #quest-screen, #shop-screen {
+            justify-content: flex-start;
+            padding-top: 20px;
+        }
+
+        #quest-timer {
+            font-size: 10px; color: #AAA; margin-bottom: 10px;
+            font-family: 'Press Start 2P', cursive; text-shadow: 2px 2px 0 #000;
+        }
+
+        .scroll-list {
+            width: 80%;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            max-height: 400px;
+            padding-right: 5px;
+        }
+        
+        /* Scrollbar styling */
+        .scroll-list::-webkit-scrollbar { width: 8px; }
+        .scroll-list::-webkit-scrollbar-track { background: #222; }
+        .scroll-list::-webkit-scrollbar-thumb { background: #555; }
+
+        .quest-item, .shop-item {
+            background: #3E2723;
+            border: 4px solid #5D4037;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #FFECB3;
+            font-size: 12px;
+            box-shadow: 0 4px 0 #271c19;
+            gap: 10px;
+        }
+        
+        .quest-empty-msg {
+            text-align: center;
+            color: #aaa;
+            font-size: 10px;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .shop-icon-canvas {
+            background: #87CEEB;
+            border: 2px solid #fff;
+            image-rendering: pixelated;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+        }
+
+        .quest-info, .shop-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex-grow: 1;
+        }
+
+        .quest-progress, .shop-desc {
+            color: #aaa;
+            font-size: 10px;
+        }
+
+        .claim-btn, .buy-btn {
+            background: #FFD700;
+            color: #3E2723;
+            border: 2px solid #FFA000;
+            padding: 8px 12px;
+            font-size: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #B8860B;
+            font-family: 'Press Start 2P', cursive;
+            min-width: 80px;
+            text-align: center;
+        }
+        .claim-btn:active, .buy-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #B8860B; }
+        .claim-btn:disabled, .buy-btn:disabled { background: #555; border-color: #333; color: #888; box-shadow: none; cursor: default; transform: none; }
+        
+        .claim-btn.done:disabled { background: #4CAF50; border-color: #2E7D32; color: #E8F5E9; opacity: 0.8; }
+        .buy-btn.owned:disabled { background: #4CAF50; border-color: #2E7D32; color: #E8F5E9; opacity: 1.0; cursor: default; }
+
+        .close-btn {
+            margin-top: 20px;
+            background: #D32F2F;
+            border: 4px solid #B71C1C;
+            color: white;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            box-shadow: 0 4px 0 #7F0000;
+        }
+        .close-btn:active { transform: translateY(4px); box-shadow: none; }
+
+        /* Icons */
+        .icon-btn {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: #F5F5F5;
+            border: 2px solid #ccc;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s;
+            padding: 5px;
+        }
+        .icon-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #999; }
+
+        #quest-btn { top: 100px; right: 20px; }
+        #shop-btn { top: 180px; right: 20px; background: #8D6E63; border-color: #5D4037; } /* Wooden House color */
+        
+        /* Notification Badge Style */
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 18px;
+            height: 18px;
+            background-color: #FFD700; /* Yellow */
+            color: #B71C1C; /* Dark Red */
+            border: 2px solid #FFF;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: bold;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            animation: bounce 1s infinite;
+        }
+        .notification-badge.visible {
+            display: flex;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        /* Music Upload Button */
+        #music-upload-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+        }
+        #upload-music-btn {
+            background: #FF9800;
+            border: 2px solid #E65100;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 8px;
+            padding: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #BF360C;
+            text-align: center;
+            width: 100px;
+            display: none; /* Hidden as requested */
+        }
+        #upload-music-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #BF360C; }
+        #upload-music-btn.loaded { background: #4CAF50; border-color: #1B5E20; box-shadow: 0 4px 0 #1B5E20; }
+
+
+        .paper-lines {
+            width: 30px; height: 35px;
+            background: linear-gradient(to bottom, transparent 10%, #333 10%, #333 15%, transparent 15%, transparent 35%, #333 35%, #333 40%, transparent 40%, transparent 60%, #333 60%, #333 65%, transparent 65%, transparent 85%, #333 85%, #333 90%, transparent 90%);
+        }
+        
+        .house-icon {
+            width: 0; height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 15px solid #3E2723; /* Roof */
+            margin-bottom: -1px;
+        }
+        .house-body {
+            width: 24px; height: 20px;
+            background: #5D4037;
+            border: 2px solid #3E2723;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .house-sign {
+            background: #FFD700; color: #000; font-size: 6px; padding: 2px; margin-top: 2px;
+        }
+
+        .icon-label { margin-top: 5px; font-size: 8px; color: #333; text-align: center; font-weight: bold; }
+        #shop-btn .icon-label { color: #FFF; text-shadow: 1px 1px 0 #000; }
+
+        h1 {
+            font-size: 60px;
+            color: #FFD700;
+            text-shadow: 4px 4px 0 #8B4513;
+            margin-bottom: 20px;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        button.main-btn {
+            font-family: 'Press Start 2P', cursive;
+            background: #4CAF50;
+            border: 4px solid #2E7D32;
+            color: white;
+            padding: 15px 30px;
+            font-size: 16px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 6px 0 #1B5E20;
+            transition: transform 0.1s, box-shadow 0.1s;
+            margin: 10px 0;
+        }
+        button.main-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #1B5E20; }
+
+        #quit-btn { background: #D32F2F; border-color: #B71C1C; box-shadow: 0 6px 0 #7F0000; }
+        
+        #player-name-input {
+            font-family: 'Press Start 2P', cursive; background: #fff; border: 4px solid #4a4a4a;
+            padding: 15px; font-size: 16px; text-align: center; margin-bottom: 20px; text-transform: uppercase; width: 200px;
+        }
+
+        #difficulty-selector, #map-selector { display: flex; gap: 15px; margin-bottom: 15px; justify-content: center; align-items: center;}
+
+        .diff-btn, .map-btn {
+            font-family: 'Press Start 2P', cursive; background: #555; border: 4px solid #333; color: #aaa;
+            padding: 10px 10px; font-size: 12px; cursor: pointer; text-transform: uppercase;
+            box-shadow: 0 4px 0 #222; transition: all 0.1s; min-width: 80px;
+        }
+        .diff-btn.selected, .map-btn.selected {
+            background: #FFD700; border-color: #B8860B; color: #3e2723; opacity: 1; transform: scale(1.1); box-shadow: 0 6px 0 #8B4513;
+        }
+        
+        .map-btn.locked {
+            background: #333; border-color: #222; color: #555; cursor: not-allowed;
+        }
+        
+        /* --- Tooltip Styles --- */
+        .map-btn {
+            position: relative;
+        }
+        .map-btn[data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #FFD700;
+            padding: 6px 10px;
+            border: 2px solid #5D4037;
+            font-size: 10px;
+            white-space: nowrap;
+            z-index: 100;
+            pointer-events: none;
+            font-family: 'Press Start 2P', cursive;
+            text-shadow: none;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.5);
+        }
+        .map-btn[data-tooltip]:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #5D4037 transparent transparent transparent;
+            z-index: 100;
+        }
+
+        #char-select-container {
+            display: flex; flex-direction: column; align-items: center; margin-bottom: 15px;
+            background: rgba(0,0,0,0.5); padding: 10px; border: 2px solid #4a4a4a; border-radius: 8px;
+        }
+        #char-controls { display: flex; align-items: center; gap: 10px; }
+        .arrow-btn {
+            background: #2196F3; border: 2px solid #1976D2; box-shadow: 0 4px 0 #0D47A1;
+            padding: 10px 15px; margin: 0; font-size: 20px; color: white; cursor: pointer;
+        }
+        .small-btn {
+            background: #9C27B0; border: 2px solid #7B1FA2; box-shadow: 0 4px 0 #4A148C;
+            padding: 10px 15px; margin-left: 5px; font-size: 20px; color: white; cursor: pointer; font-family: 'Press Start 2P', cursive;
+        }
+        .small-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #4A148C; }
+
+        #char-preview-canvas { background: #87CEEB; border: 2px solid #fff; image-rendering: pixelated; }
+        #char-name-display { margin-top: 10px; font-size: 14px; color: #FFD700; }
+
+        .hidden { display: none !important; }
+        .controls-hint { margin-top: 10px; font-size: 10px; color: #ccc; text-align: center; line-height: 1.6; }
+        #save-status { position: absolute; bottom: 5px; right: 5px; font-size: 10px; color: #888; }
+        
+        #debug-controls { display: flex; gap: 5px; margin-top: 15px; }
+        .debug-btn { background: #333; border: 1px solid #555; font-size: 8px; padding: 5px; color: #888; cursor: pointer; font-family: 'Press Start 2P', cursive; }
+        .debug-btn:active { background: #555; color: #fff; }
+
+        #active-buffs {
+            display: flex; gap: 10px; margin-top: 10px; font-size: 10px; color: #00E676;
+        }
+        
+        #map-label {
+            color: #FFD700; font-size: 12px; text-shadow: 2px 2px 0 #000; margin-bottom: 5px; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <!-- LOADING SCREEN -->
+    <div id="loading-screen">
+        <div class="loading-mountain"></div>
+        <div class="loading-snow"></div>
+        <h1 class="loading-title">BLOOT</h1>
+    </div>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div class="hud-text" id="timer-display">TIME: 1:30</div>
+            <div class="currency-hud">
+                <div class="hud-text coin-text" id="coin-display">COINS: 0</div>
+                <div class="hud-text diamond-text" id="diamond-display">DIAMONDS: 0</div>
+            </div>
+        </div>
+        <div class="hud-text" id="wins-display">WINS: ...</div>
+    </div>
+
+    <div id="save-status">Connecting...</div>
+
+    <!-- MAIN MENU (Hidden by default until loaded) -->
+    <div id="start-screen" class="hidden">
+        <h1>BLOOT</h1>
+        
+        <!-- Quest Button -->
+        <div id="quest-btn" class="icon-btn" title="Daily Quests">
+            <div id="quest-badge" class="notification-badge">!</div>
+            <div class="paper-lines"></div>
+            <div class="icon-label">QUEST LOG</div>
+        </div>
+
+        <!-- Shop Button -->
+        <div id="shop-btn" class="icon-btn" title="Item Shop">
+            <div class="house-icon"></div>
+            <div class="house-body">
+                <div class="house-sign">$</div>
+            </div>
+            <div class="icon-label">SHOP</div>
+        </div>
+        
+        <!-- Sound Hint -->
+        <div id="sound-hint">CLICK ANYWHERE TO ENABLE SOUND</div>
+
+        <!-- Music Upload (Hidden) -->
+        <div id="music-upload-container">
+            <button id="upload-music-btn">LOAD MP3</button>
+            <input type="file" id="music-file-input" accept="audio/*" style="display: none;">
+        </div>
+
+        <input type="text" id="player-name-input" placeholder="ENTER NAME" maxlength="8">
+        
+        <div id="char-select-container">
+            <div id="char-controls">
+                <button class="arrow-btn" id="prev-char-btn">&lt;</button>
+                <canvas id="char-preview-canvas" width="80" height="80"></canvas>
+                <button class="arrow-btn" id="next-char-btn">&gt;</button>
+                <button class="small-btn" id="random-char-btn" title="Random Character">?</button>
+            </div>
+            <div id="char-name-display">STEVE</div>
+        </div>
+        
+        <div id="map-label">SELECT MAP</div>
+        <div id="map-selector">
+            <button class="map-btn selected" data-map="mountain">MOUNTAIN</button>
+            <!-- No 'locked' class by default, logic handles it -->
+            <button class="map-btn" id="map-skyscraper-btn" data-map="skyscraper">SKYSCRAPER &#128274;</button>
+            <button class="map-btn" id="map-volcano-btn" data-map="volcano">VOLCANO &#128274;</button>
+        </div>
+
+        <div id="difficulty-selector">
+            <button class="diff-btn selected" data-diff="EASY">EASY</button>
+            <button class="diff-btn" data-diff="MEDIUM">MEDIUM</button>
+            <button class="diff-btn" data-diff="HARD">HARD</button>
+        </div>
+
+        <div id="active-buffs"></div>
+
+        <button id="play-btn" class="main-btn">PLAY</button>
+        
+        <div class="controls-hint">
+            <p>Controls: Arrows/WASD to Move</p>
+        </div>
+
+        <div id="debug-controls">
+            <button class="debug-btn" id="debug-wins-btn">DEBUG: +100 WINS</button>
+            <button class="debug-btn" id="debug-coins-btn">DEBUG: +500 COINS</button>
+            <button class="debug-btn" id="debug-diamonds-btn">DEBUG: +25 GEMS</button>
+            <button class="debug-btn" id="debug-reset-quests-btn">RESET QUESTS</button>
+        </div>
+    </div>
+
+    <!-- QUEST SCREEN -->
+    <div id="quest-screen" class="hidden">
+        <h1>DAILY QUESTS</h1>
+        <div id="quest-timer">Resets in: --:--:--</div>
+        <div class="quest-list scroll-list" id="quest-list-container"></div>
+        <button class="close-btn" id="close-quest-btn">CLOSE</button>
+    </div>
+
+    <!-- SHOP SCREEN -->
+    <div id="shop-screen" class="hidden">
+        <h1>ITEM SHOP</h1>
+        <div class="currency-hud" style="margin-bottom:10px;">
+            <div class="hud-text coin-text" id="shop-coin-display">COINS: 0</div>
+            <div class="hud-text diamond-text" id="shop-diamond-display">GEMS: 0</div>
+        </div>
+        <div class="quest-list scroll-list" id="shop-list-container"></div>
+        <button class="close-btn" id="close-shop-btn">CLOSE</button>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1 id="winner-text">PLAYER WINS!</h1>
+        <div id="loot-report" class="hud-text" style="margin-bottom:15px; font-size:12px; color:#ddd;"></div>
+        <button id="restart-btn" class="main-btn">PLAY AGAIN</button>
+        <button id="quit-btn" class="main-btn">QUIT</button>
+    </div>
+</div>
+
+<script type="module">
+// --- Local Storage Fallback (no Firebase) ---
+const BLOOT_SAVE_KEY = "imaginex_bloot_save";
+
+// --- Configuration (HOST YOUR MP3 HERE) ---
+const SKYSCRAPER_MUSIC_URL = ""; 
+
+// --- Global Variables ---
+let currentUser = null;
+let statsUnsubscribe = null;
+let playerName = "PLAYER"; 
+let playerWins = 0; 
+let playerCoins = 0;
+let playerDiamonds = 0;
+let playerQuests = { date: "", list: [] }; 
+let playerInventory = { speed: 0, jump: 0, luck: 0 };
+let unlockedSkins = ['steve', 'racer', 'builder', 'punk', 'ninja']; 
+let gameState = 'MENU';
+let sessionCoins = 0; let sessionDiamonds = 0;
+let frameCount = 0; let timeLeft = 90; let lastTime = 0;
+let currentDifficulty = 'EASY'; let selectedCharIndex = 0;
+let questTimerInterval = null;
+let currentMap = 'mountain'; 
+let customMusicUrl = null; 
+
+let countdownValue = 3;
+let countdownStartTime = 0;
+
+let player; 
+let cpu; 
+let gameLevel; 
+let particles = [];
+let cameraY = 0;
+
+// --- Constants ---
+const SHOP_ITEMS = [
+    { id: 'cyborg', type: 'skin', name: 'Cyborg Skin', desc: 'Beep Boop.', cost: 500, currency: 'coins' },
+    { id: 'wizard', type: 'skin', name: 'Wizard Skin', desc: 'Magic!', cost: 25, currency: 'diamonds' },
+    { id: 'speed', type: 'potion', name: 'Speed Potion', desc: '+10% Speed (1 Game)', cost: 250, currency: 'coins', color: '#2196F3' },
+    { id: 'jump', type: 'potion', name: 'Jump Potion', desc: '+20% Jump (1 Game)', cost: 250, currency: 'coins', color: '#F44336' },
+    { id: 'luck', type: 'potion', name: 'Luck Potion', desc: 'Guarantees Diamond (1 Game)', cost: 300, currency: 'coins', color: '#4CAF50' }
+];
+
+const QUEST_TEMPLATES = [
+    { type: 'win_total', desc: "Win {x} Games", targets: [1, 3, 5], rewards: [{c:15}, {c:40}, {d:2}] },
+    { type: 'win_easy', desc: "Win {x} on Easy", targets: [2, 4], rewards: [{c:10}, {c:25}] },
+    { type: 'win_medium', desc: "Win {x} on Medium", targets: [1, 3], rewards: [{c:30}, {d:1}] },
+    { type: 'win_hard', desc: "Win {x} on Hard", targets: [1, 2], rewards: [{c:60}, {d:3}] },
+    { type: 'collect_coins', desc: "Collect {x} Coins", targets: [5, 10, 20], rewards: [{c:10}, {c:35}, {c:70}] },
+    { type: 'collect_diamonds', desc: "Collect {x} Gems", targets: [1, 3], rewards: [{c:75}, {d:3}] }
+];
+
+const CHARACTERS = [
+    { id: 'steve', name: 'Steve', skin: '#FFFFFF', shirt: null, pants: null, props: [] },
+    { id: 'racer', name: 'Racer', skin: '#FFFFFF', shirt: '#F44336', pants: '#333', props: ['headband'] },
+    { id: 'builder', name: 'Builder', skin: '#FFFFFF', shirt: '#2196F3', pants: '#FFC107', props: ['hardhat'] },
+    { id: 'punk', name: 'Punk', skin: '#FFFFFF', shirt: '#212121', pants: '#4CAF50', props: ['mohawk'] },
+    { id: 'ninja', name: 'Ninja', skin: '#333333', shirt: '#333333', pants: '#333333', props: ['ninja_eyes'] },
+    { id: 'gold', name: 'Gold Guy', skin: '#FFD700', shirt: '#FFD700', pants: '#DAA520', props: ['crown'], unlockWins: 100 },
+    { id: 'cyborg', name: 'Cyborg', skin: '#B0BEC5', shirt: '#607D8B', pants: '#455A64', props: ['cyborg_eye'] },
+    { id: 'wizard', name: 'Wizard', skin: '#FFE0B2', shirt: '#673AB7', pants: '#512DA8', props: ['wizard_hat'] }
+];
+
+const DIFFICULTY_SETTINGS = {
+    'EASY': { speedMult: 0.7, jumpChance: 0.015, reactionTime: 45 },   
+    'MEDIUM': { speedMult: 1.0, jumpChance: 0.03, reactionTime: 20 },
+    'HARD': { speedMult: 1.3, jumpChance: 0.06, reactionTime: 15 } 
+};
+
+const COLORS = {
+    sky: '#87CEEB', mountain: '#795548', grass: '#4CAF50', ladder: '#FFB74D', tnt: '#D32F2F', cannon: '#212121',
+    portalInner: '#9C27B0', portalOuter: '#E1BEE7', star: '#FFD700', coin: '#FFD700', diamond: '#00E5FF'
+};
+
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false };
+
+// --- DOM Elements ---
+const saveStatus = document.getElementById('save-status');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const previewCanvas = document.getElementById('char-preview-canvas');
+const previewCtx = previewCanvas.getContext('2d');
+const playBtn = document.getElementById('play-btn');
+const restartBtn = document.getElementById('restart-btn');
+const quitBtn = document.getElementById('quit-btn');
+const prevCharBtn = document.getElementById('prev-char-btn');
+const nextCharBtn = document.getElementById('next-char-btn');
+const randomCharBtn = document.getElementById('random-char-btn');
+const debugWinsBtn = document.getElementById('debug-wins-btn');
+const debugCoinsBtn = document.getElementById('debug-coins-btn');
+const debugDiamondsBtn = document.getElementById('debug-diamonds-btn');
+const debugResetQuestsBtn = document.getElementById('debug-reset-quests-btn');
+const questBtn = document.getElementById('quest-btn');
+const questBadge = document.getElementById('quest-badge'); 
+const closeQuestBtn = document.getElementById('close-quest-btn');
+const shopBtn = document.getElementById('shop-btn');
+const closeShopBtn = document.getElementById('close-shop-btn');
+const activeBuffsDiv = document.getElementById('active-buffs');
+const nameInput = document.getElementById('player-name-input');
+const winnerText = document.getElementById('winner-text');
+const lootReport = document.getElementById('loot-report');
+const timerDisplay = document.getElementById('timer-display');
+const winsDisplay = document.getElementById('wins-display');
+const coinDisplay = document.getElementById('coin-display');
+const diamondDisplay = document.getElementById('diamond-display');
+const shopCoinDisplay = document.getElementById('shop-coin-display');
+const shopDiamondDisplay = document.getElementById('shop-diamond-display');
+const diffButtons = document.querySelectorAll('.diff-btn');
+const charNameDisplay = document.getElementById('char-name-display');
+const questTimerDisplay = document.getElementById('quest-timer');
+const startScreen = document.getElementById('start-screen');
+const loadingScreen = document.getElementById('loading-screen'); // New Loading Screen
+const questScreen = document.getElementById('quest-screen');
+const shopScreen = document.getElementById('shop-screen');
+const questListContainer = document.getElementById('quest-list-container');
+const shopListContainer = document.getElementById('shop-list-container');
+const gameOverScreen = document.getElementById('game-over-screen');
+const mapBtns = document.querySelectorAll('.map-btn');
+const skyscraperBtn = document.getElementById('map-skyscraper-btn');
+const volcanoBtn = document.getElementById('map-volcano-btn');
+const musicUploadBtn = document.getElementById('upload-music-btn');
+const musicFileInput = document.getElementById('music-file-input');
+const soundHint = document.getElementById('sound-hint'); // New Element
+
+// --- Loading Sequence Logic ---
+function bootToMenu() {
+    setTimeout(() => {
+        loadingScreen.classList.add('hidden');
+        startScreen.classList.remove('hidden');
+        gameState = 'MENU';
+        if(AudioSys.ctx && AudioSys.ctx.state === 'running') {
+            AudioSys.startTitleMusic();
+        }
+    }, 2500);
+}
+// Module scripts are deferred, so document may already be loaded
+if (document.readyState === 'complete') {
+    bootToMenu();
+} else {
+    window.addEventListener('load', bootToMenu);
+}
+
+// --- Audio System ---
+const AudioSys = {
+    ctx: null, isPlaying: false, noiseBuffer: null,
+    skyscraperAudio: null,
+    init: function() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === 'suspended') this.ctx.resume(); },
+    createNoiseBuffer: function() {
+        if (!this.ctx) return null; const b = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+        const d = b.getChannelData(0); for (let i=0; i<this.ctx.sampleRate; i++) d[i] = Math.random()*2-1; return b;
+    },
+    playNote: function(freq, type, duration, vol=0.2) { // Increased volume
+        if (!this.ctx) return; const o=this.ctx.createOscillator(); const g=this.ctx.createGain();
+        o.type=type; o.frequency.setValueAtTime(freq, this.ctx.currentTime); g.gain.setValueAtTime(vol, this.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+duration); o.connect(g); g.connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+duration);
+    },
+    startTitleMusic: function() {
+        this.init(); if(this.isPlaying) return; this.stopMusic(); this.isPlaying=true;
+        let beat=0; const tempo=180;
+        const bass=[146,0,146,0,146,0,110,0,146,0,146,0,110,130,146,0,110,0,110,0,110,0,130,0,110,0,110,0,98,110,130,0,130,0,130,0,130,0,146,0,130,0,130,0,110,123,130,0,98,0,98,0,110,0,110,0,130,0,130,0,146,146,0,0];
+        const mel=[587,0,0,0,440,0,0,0,523,0,493,0,440,0,0,0,587,0,0,0,659,0,0,0,523,0,587,0,493,0,440,0,523,0,0,0,440,0,0,0,392,0,440,0,493,0,0,0,440,0,349,0,392,0,440,0,523,0,587,0,659,587,523,0];
+        this.musicInterval=setInterval(()=>{ if(!this.isPlaying)return; const i=beat%64; if(bass[i])this.playNote(bass[i]/2,'triangle',0.3,0.2); if(mel[i])this.playNote(mel[i],'square',0.2,0.1); beat++; }, tempo);
+    },
+    startMountainMusic: function() {
+        this.init(); if(this.isPlaying) return; this.stopMusic(); this.isPlaying=true;
+        let beat=0; const tempo=150;
+        const bass=[110,110,146,146,164,164,146,146,98,98,130,130,146,146,130,130];
+        const mel=[440,0,440,523,587,0,523,440,392,0,392,440,493,0,440,392];
+        this.musicInterval=setInterval(()=>{ if(!this.isPlaying)return; const i=beat%16; if(bass[i])this.playNote(bass[i],'square',0.2,0.1); if(mel[i]){if(beat%32>24&&Math.random()>0.5)this.playNote(mel[i]*1.5,'sawtooth',0.15,0.05);else this.playNote(mel[i],'sawtooth',0.15,0.05);} beat++;}, tempo);
+    },
+    startSkyscraperMusic: function() {
+        this.stopMusic();
+        this.isPlaying = true;
+        
+        let source = null;
+        if (SKYSCRAPER_MUSIC_URL && SKYSCRAPER_MUSIC_URL.length > 0) {
+            source = SKYSCRAPER_MUSIC_URL;
+        } else if (customMusicUrl) {
+            source = customMusicUrl;
+        }
+
+        if (source) {
+            if (!this.skyscraperAudio) {
+                this.skyscraperAudio = new Audio(source);
+                this.skyscraperAudio.loop = true;
+                this.skyscraperAudio.volume = 0.4;
+                
+                // ERROR HANDLING
+                this.skyscraperAudio.onerror = () => {
+                    console.log("Custom Audio Failed. Switching to Generated.");
+                    this.skyscraperAudio = null;
+                    this.playGeneratedSkyscraperTheme();
+                };
+            } else if (this.skyscraperAudio.src !== source) {
+                 this.skyscraperAudio.src = source;
+            }
+            this.skyscraperAudio.play().catch(e => {
+                console.log("Audio play failed:", e);
+                this.playGeneratedSkyscraperTheme(); // Fallback
+            });
+        } else {
+            this.playGeneratedSkyscraperTheme();
+        }
+    },
+    playGeneratedSkyscraperTheme: function() {
+        // Generated Fallback (Retro City)
+        this.init();
+        let beat=0; const tempo=130; 
+        
+        // New Ending we created earlier
+        const bass = [
+            73,0,73,0, 87,0,87,0, 98,0,98,0, 116,0,65,0, // A
+            73,0,73,0, 87,0,87,0, 98,0,98,0, 65,0,65,0,  // B
+            73,0,73,0, 87,0,87,0, 58,0,58,0, 65,0,65,0,  // C
+            73,0,73,0, 69,0,69,0, 65,0,65,0, 55,0,110,0  // D (Descending)
+        ];
+        
+        const mel = [
+            587,0,739,0, 880,0,0,0, 739,0,880,0, 1174,0,0,0,
+            880,0,739,0, 587,0,523,0, 587,0,0,0, 0,0,0,0,
+            587,0,739,0, 880,0,1174,0, 1318,0,1174,0, 880,0,739,0,
+            1046,0,0,0, 880,0,0,0, 783,0,0,0, 698,0,659,0
+        ];
+
+        this.musicInterval = setInterval(() => {
+            if(!this.isPlaying) return;
+            const i = beat % 64; 
+            
+            if (bass[i%64]) this.playNote(bass[i%64], 'sawtooth', 0.1, 0.2);
+            if (mel[i%64]) this.playNote(mel[i%64], 'square', 0.1, 0.1);
+            
+            beat++;
+        }, tempo);
+    },
+    startVolcanoMusic: function() {
+        this.init(); if(this.isPlaying) return; this.stopMusic(); this.isPlaying=true;
+        let beat=0; const tempo=200; // Fast and chaotic
+        this.musicInterval=setInterval(()=>{ 
+            if(!this.isPlaying)return; 
+            const i=beat%32;
+            
+            // Low rumbling bass
+            if (i%4===0) this.playNote(55, 'sawtooth', 0.2, 0.3);
+            if (i%8===2) this.playNote(49, 'sawtooth', 0.2, 0.3);
+
+            // Chaotic melody
+            if (Math.random() < 0.3) {
+                 this.playNote(200 + Math.random()*400, 'square', 0.05, 0.05);
+            }
+            
+            beat++;
+        }, tempo);
+    },
+    stopMusic: function() { 
+        if(this.musicInterval){ clearInterval(this.musicInterval); this.musicInterval=null; } 
+        if (this.skyscraperAudio) {
+            this.skyscraperAudio.pause();
+            this.skyscraperAudio.currentTime = 0;
+        }
+        this.isPlaying=false; 
+    },
+    playWinTune: function() { this.stopMusic(); this.init(); setTimeout(()=>this.playNote(523,'square',0.2,0.2),0); setTimeout(()=>this.playNote(659,'square',0.2,0.2),200); setTimeout(()=>this.playNote(783,'square',0.2,0.2),400); setTimeout(()=>this.playNote(1046,'square',0.6,0.2),600); },
+    playLoseTune: function() { this.stopMusic(); this.init(); setTimeout(()=>this.playNote(392,'sawtooth',0.3,0.2),0); setTimeout(()=>this.playNote(370,'sawtooth',0.3,0.2),300); setTimeout(()=>this.playNote(349,'sawtooth',0.6,0.2),600); },
+    playSFX: function(type) {
+        this.init(); const t=this.ctx.currentTime;
+        const pt=(o,f,e,d,v)=>{const os=this.ctx.createOscillator();const g=this.ctx.createGain();os.connect(g);g.connect(this.ctx.destination);os.type=o;os.frequency.setValueAtTime(f,t);os.frequency.exponentialRampToValueAtTime(e,t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.01,t+d);os.start();os.stop(t+d);};
+        if(type==='jump')pt('square',150,300,0.1,0.1);
+        else if(type==='boom')pt('sawtooth',100,10,0.3,0.3);
+        else if(type==='eruption') { 
+            // Deep explosion sound
+            pt('sawtooth', 50, 10, 1.5, 0.5); 
+            pt('square', 80, 20, 1.0, 0.3);
+        }
+        else if(type==='launch') { pt('triangle',60,10,0.5,0.8); pt('square',80,20,0.2,0.2); if(!this.noiseBuffer)this.noiseBuffer=this.createNoiseBuffer();const n=this.ctx.createBufferSource();n.buffer=this.noiseBuffer;const ng=this.ctx.createGain();const f=this.ctx.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(800,t);f.frequency.exponentialRampToValueAtTime(100,t+0.4);n.connect(f);f.connect(ng);ng.connect(this.ctx.destination);ng.gain.setValueAtTime(0.6,t);ng.gain.exponentialRampToValueAtTime(0.01,t+0.4);n.start();n.stop(t+0.4); }
+        else if(type==='warp') { const o=this.ctx.createOscillator();const g=this.ctx.createGain();o.type='sine';o.frequency.setValueAtTime(400,t);o.frequency.linearRampToValueAtTime(800,t+0.2);g.gain.setValueAtTime(0.1,t);g.gain.exponentialRampToValueAtTime(0.01,t+0.2);const l=this.ctx.createOscillator();l.type='sine';l.frequency.value=20;const lg=this.ctx.createGain();lg.gain.value=100;l.connect(lg);lg.connect(o.frequency);o.connect(g);g.connect(this.ctx.destination);o.start();l.start();o.stop(t+0.2);l.stop(t+0.2); }
+        else if(type==='coin')pt('sine',1000,1500,0.1,0.1);
+        else if(type==='diamond')pt('sine',1500,2000,0.2,0.1);
+        else if(type==='claim'||type==='buy') { pt('square',400,800,0.1,0.1); setTimeout(()=>pt('square',800,1200,0.2,0.1),100); }
+    }
+};
+
+// --- HELPER & LOGIC FUNCTIONS ---
+
+async function initAuth() {
+    // Local mode: simulate auth with a local user
+    currentUser = { uid: "local_player" };
+    saveStatus.innerText = "Connected";
+    try { loadLocalData(); } catch(e) { console.error("loadLocalData error:", e); }
+}
+
+function checkQuestNotifications() {
+    if (!playerQuests || !playerQuests.list) return;
+    const hasClaimable = playerQuests.list.some(q => q.progress >= q.target && !q.claimed);
+    if (hasClaimable) {
+        questBadge.classList.add('visible');
+    } else {
+        questBadge.classList.remove('visible');
+    }
+}
+
+function createExplosion(x, y) {
+    for(let i=0; i<15; i++) {
+        const color = ['#FF5722', '#FFC107', '#F44336'][Math.floor(Math.random()*3)];
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function generateDailyQuests() {
+    const todayPST = new Date().toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" });
+    const newQuests = [];
+    const shuffled = [...QUEST_TEMPLATES].sort(() => 0.5 - Math.random());
+    const selectedTemplates = shuffled.slice(0, 3);
+
+    selectedTemplates.forEach((t, index) => {
+        const tier = Math.floor(Math.random() * t.targets.length);
+        const target = t.targets[tier];
+        const reward = t.rewards[tier];
+        let rewardType = reward.c ? 'coins' : 'diamonds';
+        let rewardAmt = reward.c || reward.d;
+
+        newQuests.push({
+            id: `q_${todayPST}_${index}`, desc: t.desc.replace('{x}', target),
+            type: t.type, target: target, progress: 0, claimed: false,
+            rewardType: rewardType, rewardAmount: rewardAmt
+        });
+    });
+    return { date: todayPST, list: newQuests };
+}
+
+function loadLocalData() {
+    try {
+        const raw = localStorage.getItem(BLOOT_SAVE_KEY);
+        if (raw) {
+            const data = JSON.parse(raw);
+            playerWins = data.wins || 0;
+            playerCoins = data.coins || 0;
+            playerDiamonds = data.diamonds || 0;
+            playerInventory = data.inventory || { speed: 0, jump: 0, luck: 0 };
+            if (data.name) { playerName = data.name; nameInput.value = playerName; }
+            if (data.unlockedSkins) unlockedSkins = data.unlockedSkins;
+            const todayPST = new Date().toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" });
+            const questsExist = data.quests && Array.isArray(data.quests) && data.quests.length > 0;
+            const dateValid = data.questDate === todayPST;
+            if (questsExist && dateValid) {
+                playerQuests = { date: data.questDate, list: data.quests };
+            } else {
+                playerQuests = generateDailyQuests();
+                saveGameData();
+            }
+        } else {
+            playerQuests = generateDailyQuests();
+            saveGameData();
+        }
+    } catch(e) { console.error("Load failed", e); }
+    updateHUD();
+    updateBuffDisplay();
+    updateMapLock();
+    checkQuestNotifications();
+    drawPreview();
+    if (!shopScreen.classList.contains('hidden')) renderShop();
+    if (!questScreen.classList.contains('hidden')) renderQuests();
+}
+
+function setupDataListener(userId) { /* no-op in local mode */ }
+
+async function saveGameData() {
+    if (!currentUser) return;
+    saveStatus.innerText = "Saving...";
+    const questData = playerQuests ? playerQuests.list : [];
+    const questDate = playerQuests ? playerQuests.date : "";
+    try {
+        localStorage.setItem(BLOOT_SAVE_KEY, JSON.stringify({
+            wins: playerWins, name: playerName, coins: playerCoins, diamonds: playerDiamonds,
+            inventory: playerInventory, unlockedSkins: unlockedSkins,
+            quests: questData, questDate: questDate
+        }));
+        saveStatus.innerText = "Saved";
+    } catch (e) {
+        console.error("Save failed", e);
+        saveStatus.innerText = "Save Failed";
+    }
+}
+
+function isCharacterUnlocked(char) {
+    if (char.unlockWins) {
+        return playerWins >= char.unlockWins;
+    }
+    if (unlockedSkins.includes(char.id)) return true;
+    return false;
+}
+
+function updateHUD() {
+    winsDisplay.innerText = "WINS: " + playerWins;
+    const ct = gameState === 'PLAYING' ? playerCoins + sessionCoins : playerCoins;
+    const dt = gameState === 'PLAYING' ? playerDiamonds + sessionDiamonds : playerDiamonds;
+    coinDisplay.innerText = "COINS: " + ct; diamondDisplay.innerText = "DIAMONDS: " + dt;
+    if (gameState === 'MENU') {
+        shopCoinDisplay.innerText = "COINS: " + playerCoins;
+        shopDiamondDisplay.innerText = "GEMS: " + playerDiamonds;
+    }
+}
+
+function updateBuffDisplay() {
+    activeBuffsDiv.innerHTML = '';
+    if (playerInventory.speed > 0) activeBuffsDiv.innerHTML += `<div>[SPEED +10%]</div>`;
+    if (playerInventory.jump > 0) activeBuffsDiv.innerHTML += `<div>[JUMP +20%]</div>`;
+    if (playerInventory.luck > 0) activeBuffsDiv.innerHTML += `<div>[LUCK ACTIVE]</div>`;
+}
+
+function updateMapLock() {
+    // Skyscraper
+    if (playerWins >= 25) {
+        skyscraperBtn.classList.remove('locked');
+        skyscraperBtn.innerHTML = "SKYSCRAPER";
+        skyscraperBtn.removeAttribute('data-tooltip');
+    } else {
+        skyscraperBtn.classList.add('locked');
+        skyscraperBtn.innerHTML = "SKYSCRAPER &#128274;";
+        skyscraperBtn.setAttribute('data-tooltip', "Win 25 Games to Unlock");
+    }
+    
+    // Volcano
+    if (playerWins >= 50) {
+        volcanoBtn.classList.remove('locked');
+        volcanoBtn.innerHTML = "VOLCANO";
+        volcanoBtn.removeAttribute('data-tooltip');
+    } else {
+        volcanoBtn.classList.add('locked');
+        volcanoBtn.innerHTML = "VOLCANO &#128274;";
+        volcanoBtn.setAttribute('data-tooltip', "Win 50 Games to Unlock");
+    }
+}
+
+function drawStickman(ctx, x, y, width, height, facingRight, charData, animTime) {
+    const cx = x + width/2; const fy = y + height; const hy = fy - 30; const bl = 15;
+    ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const wc = Math.sin(animTime * 0.2) * 10;
+    ctx.strokeStyle = charData.pants || charData.skin; ctx.beginPath();
+    ctx.moveTo(cx, fy - bl); ctx.lineTo(cx - (wc*0.5), fy); ctx.moveTo(cx, fy - bl); ctx.lineTo(cx + (wc*0.5), fy); ctx.stroke();
+    ctx.strokeStyle = charData.shirt || charData.skin; ctx.beginPath(); ctx.moveTo(cx, fy - bl); ctx.lineTo(cx, hy); ctx.stroke();
+    const sy = hy + 5; ctx.beginPath(); ctx.moveTo(cx, sy); ctx.lineTo(cx + (wc*0.8), sy + 10); ctx.moveTo(cx, sy); ctx.lineTo(cx - (wc*0.8), sy + 10); ctx.stroke();
+    ctx.fillStyle = charData.skin; ctx.beginPath(); ctx.arc(cx, hy - 5, 6, 0, Math.PI * 2); ctx.fill();
+    if (charData.props.includes('headband')) { ctx.strokeStyle='#F44336';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx-6,hy-8);ctx.lineTo(cx+6,hy-8);ctx.stroke();ctx.beginPath();ctx.moveTo(cx+6,hy-8);if(facingRight)ctx.lineTo(cx-10,hy-6);else ctx.lineTo(cx+10,hy-6);ctx.stroke();}
+    if (charData.props.includes('hardhat')) { ctx.fillStyle='#FFC107';ctx.beginPath();ctx.arc(cx,hy-8,7,Math.PI,0);ctx.lineTo(cx+8,hy-4);ctx.lineTo(cx-8,hy-4);ctx.fill();}
+    if (charData.props.includes('mohawk')) { ctx.strokeStyle='#00E676';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,hy-11);ctx.lineTo(cx,hy-18);ctx.stroke();}
+    if (charData.props.includes('ninja_eyes')) { ctx.fillStyle='white'; if(facingRight)ctx.fillRect(cx+2,hy-7,3,2);else ctx.fillRect(cx-5,hy-7,3,2);}
+    if (charData.props.includes('crown')) { ctx.fillStyle='#FFD700';ctx.strokeStyle='#DAA520';ctx.beginPath();ctx.moveTo(cx-6,hy-10);ctx.lineTo(cx-6,hy-18);ctx.lineTo(cx-2,hy-12);ctx.lineTo(cx,hy-19);ctx.lineTo(cx+2,hy-12);ctx.lineTo(cx+6,hy-18);ctx.lineTo(cx+6,hy-10);ctx.fill();ctx.stroke();}
+    if (charData.props.includes('cyborg_eye')) { ctx.fillStyle='red'; if(facingRight)ctx.fillRect(cx+2,hy-7,4,3);else ctx.fillRect(cx-6,hy-7,4,3);}
+    if (charData.props.includes('wizard_hat')) { ctx.fillStyle='#673AB7';ctx.beginPath();ctx.moveTo(cx-8,hy-8);ctx.lineTo(cx+8,hy-8);ctx.lineTo(cx,hy-25);ctx.fill();}
+}
+
+function drawPotion(ctx, x, y, color) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    const bx = x + 10; const by = y + 10;
+    ctx.strokeRect(bx+6, by, 8, 6); ctx.strokeRect(bx, by+6, 20, 20);
+    ctx.fillStyle = color; ctx.fillRect(bx+2, by+12, 16, 12);
+    ctx.fillStyle = '#795548'; ctx.fillRect(bx+6, by-2, 8, 2);
+}
+
+function drawShopIcon(ctx, item) {
+    ctx.clearRect(0, 0, 40, 40);
+    if (item.type === 'skin') {
+        const char = CHARACTERS.find(c => c.id === item.id);
+        if (char) drawStickman(ctx, 8, 20, 24, 24, true, char, Date.now()/100);
+    } else if (item.type === 'potion') {
+        drawPotion(ctx, 0, 0, item.color);
+    }
+}
+
+function renderShop() {
+    shopListContainer.innerHTML = '';
+    SHOP_ITEMS.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'shop-item';
+        let btnState = ''; let btnText = 'BUY'; let ownedClass = '';
+        if (item.type === 'skin') {
+            if (unlockedSkins.includes(item.id)) {
+                btnState = 'disabled';
+                btnText = 'OWNED';
+                ownedClass = ' owned';
+            } else if ((item.currency === 'coins' && playerCoins < item.cost) || (item.currency === 'diamonds' && playerDiamonds < item.cost)) {
+                btnState = 'disabled';
+            }
+        } else if (item.type === 'potion') {
+            const count = playerInventory[item.id] || 0;
+            if (count > 0) {
+                 btnText = `OWNED: ${count}`;
+                 ownedClass = ' owned';
+            }
+            if ((item.currency === 'coins' && playerCoins < item.cost)) {
+                btnState = 'disabled';
+            }
+        }
+
+        const color = item.currency === 'coins' ? '#FFD700' : '#00E5FF';
+        div.innerHTML = `
+            <canvas class="shop-icon-canvas" width="40" height="40"></canvas>
+            <div class="shop-info">
+                <div>${item.name}</div>
+                <div class="shop-desc">${item.desc}</div>
+                <div style="color:${color}">${item.cost} ${item.currency.toUpperCase()}</div>
+            </div>
+            <button class="buy-btn${ownedClass}" ${btnState} data-id="${item.id}">${btnText}</button>
+        `;
+        shopListContainer.appendChild(div);
+
+        // Draw icon on the canvas we just added
+        const canvas = div.querySelector('canvas');
+        const ctx = canvas.getContext('2d');
+        drawShopIcon(ctx, item);
+    });
+
+    document.querySelectorAll('.buy-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (e.target.disabled) return;
+            const id = e.target.getAttribute('data-id');
+            buyItem(id);
+        });
+    });
+}
+
+function buyItem(id) {
+    const item = SHOP_ITEMS.find(i => i.id === id);
+    if (!item) return;
+
+    // Deduct Cost
+    if (item.currency === 'coins') {
+        if (playerCoins < item.cost) return;
+        playerCoins -= item.cost;
+    } else {
+        if (playerDiamonds < item.cost) return;
+        playerDiamonds -= item.cost;
+    }
+
+    // Grant Item
+    if (item.type === 'skin') {
+        unlockedSkins.push(item.id);
+        alert("Skin Unlocked!");
+    } else if (item.type === 'potion') {
+        playerInventory[item.id]++;
+    }
+
+    AudioSys.playSFX('buy');
+    saveGameData();
+    renderShop();
+    updateHUD();
+    updateBuffDisplay();
+}
+
+function renderQuests() {
+    questListContainer.innerHTML = '';
+    if (!playerQuests || !playerQuests.list) {
+        questListContainer.innerHTML = '<div class="quest-empty-msg">Loading or No Quests...</div>';
+        return;
+    }
+    if (playerQuests.list.length === 0) {
+         questListContainer.innerHTML = '<div class="quest-empty-msg">No Active Quests</div>';
+         return;
+    }
+
+    playerQuests.list.forEach((q, index) => {
+        const item = document.createElement('div');
+        item.className = 'quest-item';
+        
+        let btnState = 'disabled';
+        let btnText = 'CLAIM';
+        let doneClass = '';
+        if (q.claimed) {
+            btnText = 'DONE';
+            doneClass = ' done';
+        } else if (q.progress >= q.target) {
+            btnState = '';
+        }
+
+        item.innerHTML = `
+            <div class="quest-info">
+                <div>${q.desc}</div>
+                <div class="quest-progress">${q.progress} / ${q.target}</div>
+                <div style="color:${q.rewardType === 'coins' ? '#FFD700' : '#00E5FF'}">
+                    +${q.rewardAmount} ${q.rewardType.toUpperCase()}
+                </div>
+            </div>
+            <button class="claim-btn${doneClass}" ${btnState} data-index="${index}">${btnText}</button>
+        `;
+        questListContainer.appendChild(item);
+    });
+
+    document.querySelectorAll('.claim-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const idx = e.target.getAttribute('data-index');
+            claimQuest(idx);
+        });
+    });
+}
+
+function claimQuest(index) {
+    if (!playerQuests || !playerQuests.list[index]) return;
+    const q = playerQuests.list[index];
+    
+    if (!q.claimed && q.progress >= q.target) {
+        q.claimed = true;
+        if (q.rewardType === 'coins') playerCoins += q.rewardAmount;
+        if (q.rewardType === 'diamonds') playerDiamonds += q.rewardAmount;
+        
+        AudioSys.playSFX('claim');
+        saveGameData();
+        renderQuests();
+        updateHUD();
+        checkQuestNotifications(); 
+    }
+}
+
+function updateQuestProgress(type, amount) {
+    if (!playerQuests || !playerQuests.list) return;
+    let changed = false;
+    
+    playerQuests.list.forEach(q => {
+        if (!q.claimed && q.progress < q.target) {
+            if (q.type === type) {
+                q.progress += amount;
+                if (q.progress > q.target) q.progress = q.target;
+                changed = true;
+            }
+            if (type.startsWith('win_') && q.type === 'win_total') {
+                q.progress += amount;
+                if (q.progress > q.target) q.progress = q.target;
+                changed = true;
+            }
+        }
+    });
+    
+    if (changed) {
+        saveGameData();
+        checkQuestNotifications(); 
+    }
+}
+
+function updateQuestTimer() {
+    const now = new Date();
+    const pstString = now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" });
+    const pstDate = new Date(pstString);
+    const target = new Date(pstDate);
+    target.setDate(target.getDate() + 1);
+    target.setHours(0, 0, 0, 0);
+    const diff = target - pstDate;
+    const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const m = Math.floor((diff / (1000 * 60)) % 60);
+    const s = Math.floor((diff / 1000) % 60);
+    if(questTimerDisplay) questTimerDisplay.innerText = `Resets in: ${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+function drawPreview() {
+    previewCtx.clearRect(0, 0, 80, 80);
+    if (selectedCharIndex === -1) {
+        previewCtx.fillStyle = '#9C27B0'; previewCtx.fillRect(0, 0, 80, 80);
+        previewCtx.fillStyle = 'white'; previewCtx.font = '40px Arial'; 
+        previewCtx.textAlign = 'center'; previewCtx.textBaseline = 'middle';
+        previewCtx.fillText("?", 40, 42); charNameDisplay.innerText = "RANDOM";
+    } else {
+        previewCtx.fillStyle = '#87CEEB'; previewCtx.fillRect(0, 0, 80, 80);
+        const char = CHARACTERS[selectedCharIndex];
+        const anim = Date.now() / 100;
+        drawStickman(previewCtx, 28, 20, 25, 25, true, char, anim);
+        charNameDisplay.innerText = char.name;
+    }
+    requestAnimationFrame(drawPreview);
+}
+requestAnimationFrame(drawPreview);
+
+// --- Classes ---
+class GameLevel {
+    constructor(luckyMode, levelType) {
+        this.type = levelType; // 'mountain' or 'skyscraper' or 'volcano'
+        this.floorY = 580; 
+        this.platforms = []; this.ladders = []; this.tnts = []; 
+        this.cannons = []; this.portals = []; this.clouds = []; 
+        this.collectibles = []; this.luckyMode = luckyMode;
+        this.star = { x: 385, y: 30, width: 30, height: 30 };
+        this.spawnPlayer = { x: 50, y: 500 };
+        this.spawnCpu = { x: 720, y: 500 };
+        this.eruptionTimer = 0;
+        this.isErupting = false;
+        
+        if (this.type === 'skyscraper') {
+            this.generateSkyscraper();
+        } else if (this.type === 'volcano') {
+            this.generateVolcano();
+        } else {
+            this.generateMountain();
+        }
+    }
+    
+    // Explicitly define spawnCollectibles as a method
+    spawnCollectibles() {
+        const safeSpawn = (type) => {
+            let attempts = 0; let valid = false; let item = null;
+            while (!valid && attempts < 50) {
+                const plat = this.platforms[Math.floor(Math.random() * this.platforms.length)];
+                const x = plat.x + plat.width / 2 - 10; const y = plat.y - 30; const w = 20; const h = 20;
+                let overlaps = false;
+                for (let c of this.cannons) { if (x < c.x + c.width && x + w > c.x && y < c.y + c.height && y + h > c.y) { overlaps = true; break; } }
+                if (!overlaps) { const s = this.star; if (x < s.x + s.width && x + w > s.x && y < s.y + s.height && y + h > s.y) overlaps = true; }
+                if (!overlaps) { for (let c of this.collectibles) { if (x < c.x + c.width && x + w > c.x && y < c.y + c.height && y + h > c.y) { overlaps = true; break; } } }
+                if (!overlaps) { valid = true; item = { x, y, width: w, height: h, type }; }
+                attempts++;
+            }
+            if (item) this.collectibles.push(item);
+        };
+        safeSpawn('coin');
+        let diamondChance = 0.033; if (currentDifficulty === 'MEDIUM') diamondChance = 0.066; if (currentDifficulty === 'HARD') diamondChance = 0.1; if (this.luckyMode) diamondChance = 1.0;
+        if (Math.random() < diamondChance) safeSpawn('diamond');
+    }
+    
+    update() {
+        if (this.type === 'volcano') {
+             this.eruptionTimer++;
+             // Cycle: 3s Dormant (180), 1s Rumble (60), 2s Erupt (120) = 360 total
+             if (this.eruptionTimer > 360) this.eruptionTimer = 0;
+             
+             if (this.eruptionTimer === 240) AudioSys.playSFX('eruption');
+             
+             this.isErupting = (this.eruptionTimer > 240);
+        }
+    }
+    
+    generateMountain() {
+        for (let i = 0; i < 5; i++) { this.clouds.push({ x: Math.random() * 800, y: Math.random() * 200, speed: 0.2 + Math.random() * 0.3 }); }
+        this.platforms.push({ x: 50, y: 480, width: 100, height: 20 }, { x: 20, y: 350, width: 80, height: 20 }, { x: 150, y: 250, width: 100, height: 20 }, { x: 280, y: 150, width: 60, height: 20 });
+        this.ladders.push({ x: 80, y: 480, width: 30, height: 100 }, { x: 40, y: 350, width: 30, height: 130 });
+        this.tnts.push({ x: 200, y: 230, width: 30, height: 20 });
+        this.cannons.push({ x: 60, y: 460, width: 40, height: 20, direction: 'right' });
+        this.platforms.push({ x: 650, y: 480, width: 100, height: 20 }, { x: 700, y: 350, width: 80, height: 20 }, { x: 550, y: 250, width: 100, height: 20 }, { x: 460, y: 150, width: 60, height: 20 });
+        this.ladders.push({ x: 680, y: 480, width: 30, height: 100 }, { x: 720, y: 350, width: 30, height: 130 });
+        this.portals.push({ x: 600, y: 220, width: 40, height: 40, targetX: 460, targetY: 100 });
+        this.platforms.push({ x: 350, y: 80, width: 100, height: 20 });
+        this.cannons.push({ x: 380, y: 560, width: 40, height: 20, direction: 'up' });
+        this.spawnCollectibles();
+    }
+
+    generateSkyscraper() {
+        this.spawnPlayer = { x: 50, y: 550 };
+        this.spawnCpu = { x: 700, y: 550 };
+        this.star = { x: 385, y: 20, width: 30, height: 30 };
+        for (let i = 0; i < 4; i++) { this.clouds.push({ x: Math.random() * 800, y: Math.random() * 150, speed: 0.3 }); }
+        this.platforms.push({ x: 300, y: 450, width: 60, height: 20 }, { x: 440, y: 450, width: 60, height: 20 }, { x: 300, y: 300, width: 60, height: 20 }, { x: 440, y: 300, width: 60, height: 20 }, { x: 300, y: 150, width: 200, height: 20 });
+        this.ladders.push({ x: 100, y: 450, width: 30, height: 130 }); 
+        this.platforms.push({ x: 80, y: 450, width: 70, height: 20 }); 
+        this.tnts.push({ x: 180, y: 560, width: 30, height: 20 }); 
+        this.platforms.push({ x: 180, y: 380, width: 40, height: 20 }); 
+        this.tnts.push({ x: 310, y: 430, width: 20, height: 20 }); 
+        this.platforms.push({ x: 50, y: 280, width: 60, height: 20 }); 
+        this.tnts.push({ x: 280, y: 300, width: 20, height: 20 }); 
+        this.platforms.push({ x: 600, y: 480, width: 120, height: 20 }); 
+        this.ladders.push({ x: 620, y: 480, width: 30, height: 100 });
+        this.platforms.push({ x: 650, y: 350, width: 80, height: 20 }); 
+        this.ladders.push({ x: 660, y: 350, width: 30, height: 130 }); 
+        this.cannons.push({ x: 690, y: 330, width: 40, height: 20, direction: 'left' }); 
+        this.platforms.push({ x: 700, y: 200, width: 60, height: 20 }); 
+        this.ladders.push({ x: 720, y: 200, width: 30, height: 150 }); 
+        this.portals.push({ x: 700, y: 160, width: 40, height: 40, targetX: 450, targetY: 130 });
+        this.tnts.push({ x: 350, y: 130, width: 30, height: 20 }); 
+        this.platforms.push({ x: 220, y: 140, width: 40, height: 20 }); 
+        this.tnts.push({ x: 230, y: 120, width: 20, height: 20 }); 
+        this.platforms.push({ x: 120, y: 100, width: 40, height: 20 }); 
+        this.platforms.push({ x: 20, y: 80, width: 40, height: 20 }); 
+        this.spawnCollectibles();
+    }
+    
+    generateVolcano() {
+        this.spawnPlayer = { x: 50, y: 550 };
+        this.spawnCpu = { x: 700, y: 550 };
+        this.star = { x: 385, y: -3850, width: 60, height: 60 }; // High up, center
+
+        // Volcano Slope Left - Step Platforms to prevent falling through texture
+        this.platforms.push({ x: 50, y: 450, width: 80, height: 20 });
+        this.platforms.push({ x: 150, y: 350, width: 80, height: 20 });
+        this.platforms.push({ x: 250, y: 250, width: 80, height: 20 });
+
+        // Volcano Slope Right - WIDER and safer for CPU
+        // P1 (Low) - Extended left to ensure ladder catch
+        this.platforms.push({ x: 550, y: 450, width: 200, height: 20 }); 
+        // P2 (Mid) - Overlaps P1 better
+        this.platforms.push({ x: 450, y: 350, width: 200, height: 20 });
+        // P3 (High) - Overlaps P2 better
+        this.platforms.push({ x: 350, y: 250, width: 200, height: 20 });
+
+        // Summit Rims (Hollow Center)
+        this.platforms.push({ x: 320, y: 200, width: 60, height: 20, type: 'summit' }); // Left Rim
+        this.platforms.push({ x: 420, y: 200, width: 60, height: 20, type: 'summit' }); // Right Rim
+        
+        // NEW: Safety Grate (So CPU/Player can stand in the middle)
+        this.platforms.push({ x: 380, y: 200, width: 40, height: 20, type: 'grate' }); 
+        
+        // Vent (Targetable by AI)
+        // Overlaps the grate so standing on it triggers the launch when active
+        this.portals.push({ x: 380, y: 180, width: 40, height: 20, type: 'vent' }); 
+
+        // Lava Hazards (TNTs) - Now act as reset zones in Volcano level
+        this.tnts.push({ x: 385, y: 580, width: 30, height: 20, type: 'lava' }); // Floor lava inside
+        this.tnts.push({ x: 200, y: 450, width: 30, height: 20, type: 'lava' }); 
+        this.tnts.push({ x: 570, y: 450, width: 30, height: 20, type: 'lava' });
+        
+        // Ladders - Left
+        this.ladders.push({ x: 100, y: 450, width: 30, height: 100 });
+        
+        // Ladders - Right Side CPU Path (Moved inward to prevent falling)
+        this.ladders.push({ x: 700, y: 450, width: 30, height: 100 }); // Ground -> P1
+        this.ladders.push({ x: 600, y: 350, width: 30, height: 100 }); // P1 -> P2
+        this.ladders.push({ x: 500, y: 250, width: 30, height: 100 }); // P2 -> P3
+        this.ladders.push({ x: 450, y: 200, width: 30, height: 50 });  // P3 -> Summit Rim
+
+        // --- CLOUD MOUNTAIN EXTENSION (EASIER) ---
+        // 1. Base Landing Pad (Target for Blast) - Much Wider
+        this.platforms.push({ x: 250, y: -2800, width: 300, height: 20, type: 'cloud_rock' }); 
+
+        // 2. First Climb (Left Side) - Wider
+        this.platforms.push({ x: 150, y: -2950, width: 120, height: 20, type: 'cloud_rock' });
+        this.ladders.push({ x: 180, y: -2950, width: 30, height: 150 }); 
+
+        // 3. The Crossing (Bridge the gap to the right) - Added steps
+        this.platforms.push({ x: 300, y: -3020, width: 80, height: 20, type: 'cloud_rock' }); // Step 1
+        this.platforms.push({ x: 420, y: -3060, width: 80, height: 20, type: 'cloud_rock' }); // Step 2
+        
+        // 4. Right Side Platform - Wider
+        this.platforms.push({ x: 550, y: -3100, width: 120, height: 20, type: 'cloud_rock' });
+        
+        // 5. Climb Up Right Side
+        this.ladders.push({ x: 580, y: -3250, width: 30, height: 150 }); 
+        // WIDENED PLATFORM (Was x:550 width:120) - Now extends further left to x:520
+        this.platforms.push({ x: 520, y: -3250, width: 150, height: 20, type: 'cloud_rock' });
+
+        // 6. Traverse Back Left (High Altitude) - Wider, No TNT
+        this.platforms.push({ x: 350, y: -3325, width: 120, height: 20, type: 'cloud_rock' }); 
+
+        // NEW: Stepping Stone to bridge the gap
+        this.platforms.push({ x: 230, y: -3360, width: 80, height: 20, type: 'cloud_rock' });
+
+        // 7. Upper Left Platform - Wider
+        this.platforms.push({ x: 80, y: -3400, width: 150, height: 20, type: 'cloud_rock' });
+        
+        // 8. Final Ascent
+        this.ladders.push({ x: 120, y: -3550, width: 30, height: 150 }); 
+        this.platforms.push({ x: 80, y: -3550, width: 150, height: 20, type: 'cloud_rock' });
+
+        // 9. The Cannon Boost
+        this.cannons.push({ x: 130, y: -3570, width: 40, height: 20, direction: 'up-right' }); 
+
+        // 10. Star Platform - Huge target
+        this.platforms.push({ x: 300, y: -3800, width: 200, height: 20, type: 'cloud_rock' });
+        this.star = { x: 385, y: -3850, width: 60, height: 60 };
+        
+        this.spawnCollectibles();
+    }
+
+    draw() {
+        if (this.type === 'volcano') {
+            // Ashy Sky (Infinite)
+            ctx.fillStyle = '#212121'; 
+            // Draw background huge to cover scrolling area
+            ctx.fillRect(0, -6000, 800, 7000); 
+
+            // Volcano Body (Bottom)
+            ctx.fillStyle = '#3E2723';
+            ctx.beginPath();
+            ctx.moveTo(0, 600); ctx.lineTo(330, 200); ctx.lineTo(470, 200); ctx.lineTo(800, 600);
+            ctx.fill();
+            
+            // SIGNPOST: Star + Up Arrow
+            // Post
+            ctx.fillStyle = '#4E342E';
+            ctx.fillRect(345, 180, 4, 20);
+            // Board
+            ctx.fillStyle = '#795548';
+            ctx.fillRect(330, 160, 34, 20);
+            // Star Icon
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            const sx = 338, sy = 170;
+            for(let i=0; i<5; i++){
+                ctx.lineTo(sx + Math.cos((18+i*72)*Math.PI/180)*9, sy - Math.sin((18+i*72)*Math.PI/180)*9);
+                ctx.lineTo(sx + Math.cos((54+i*72)*Math.PI/180)*4, sy - Math.sin((54+i*72)*Math.PI/180)*4);
+            }
+            ctx.fill();
+            // Up Arrow
+            ctx.fillStyle = '#FFF';
+            ctx.beginPath();
+            ctx.moveTo(353, 176); ctx.lineTo(353, 170); // Shaft base
+            ctx.lineTo(350, 170); ctx.lineTo(355, 164); // Tip
+            ctx.lineTo(360, 170); ctx.lineTo(357, 170); // Right side
+            ctx.lineTo(357, 176);
+            ctx.fill();
+            
+            // Lava inside vent
+            if (this.isErupting) {
+                 ctx.fillStyle = '#FF5722'; // Bright lava
+                 ctx.fillRect(380, -2800, 40, 3400); // Blast column goes to cloud base
+                 
+                 // Eruption Particles
+                 for(let i=0; i<10; i++) {
+                     ctx.fillStyle = Math.random() > 0.5 ? '#FFEB3B' : '#FF5722';
+                     const px = 360 + Math.random()*80;
+                     // Particles relative to camera view would be better, but world coords work fine
+                     const py = 200 - Math.random()*3000; 
+                     const size = Math.random() * 5 + 2;
+                     ctx.fillRect(px, py, size, size);
+                 }
+            } else if (this.eruptionTimer > 180) {
+                 // Rumbling
+                 ctx.fillStyle = '#BF360C';
+                 ctx.fillRect(380, 200, 40, 10);
+                 if (frameCount % 4 === 0) {
+                      ctx.fillStyle = '#FF9800';
+                      ctx.fillRect(380 + Math.random()*40, 180, 5, 5); // Sparks
+                 }
+            }
+        } else if (this.type === 'skyscraper') {
+            // Sky Background for Skyscraper
+            ctx.fillStyle = '#1A237E'; // Darker Blue
+            ctx.fillRect(0, -2000, 800, 3000); // Infinite sky
+            
+            // Ground
+            ctx.fillStyle = '#333'; 
+            ctx.fillRect(0, 580, 800, 20);
+
+            // Draw Tower
+            ctx.fillStyle = '#607D8B'; // Concrete
+            ctx.fillRect(300, 150, 200, 430);
+            ctx.strokeStyle = '#455A64';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(300, 150, 200, 430);
+
+            // Windows
+            ctx.fillStyle = '#81D4FA';
+            for(let wy = 180; wy < 550; wy += 80) {
+                for(let wx = 320; wx < 480; wx += 50) {
+                    ctx.fillRect(wx, wy, 30, 40);
+                }
+            }
+
+            // Roof (Triangle)
+            ctx.fillStyle = '#37474F';
+            ctx.beginPath();
+            ctx.moveTo(300, 150);
+            ctx.lineTo(400, 50);
+            ctx.lineTo(500, 150);
+            ctx.fill();
+
+            // Antenna
+            ctx.strokeStyle = '#B0BEC5';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(400, 50);
+            ctx.lineTo(400, 20);
+            ctx.stroke();
+            ctx.fillStyle = '#F44336'; // Red blinking light
+            ctx.beginPath();
+            ctx.arc(400, 20, 5, 0, Math.PI*2);
+            ctx.fill();
+            
+        } else {
+            // Standard Mountain
+            ctx.fillStyle = COLORS.mountain; ctx.beginPath(); ctx.moveTo(0, 600); ctx.lineTo(400, 50); ctx.lineTo(800, 600); ctx.fill();
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.beginPath(); ctx.moveTo(350, 125); ctx.lineTo(400, 50); ctx.lineTo(450, 125); ctx.lineTo(420, 140); ctx.lineTo(400, 120); ctx.lineTo(380, 140); ctx.fill();
+            this.clouds.forEach(c => { ctx.beginPath(); ctx.arc(c.x, c.y, 30, 0, Math.PI*2); ctx.arc(c.x+25, c.y-10, 35, 0, Math.PI*2); ctx.arc(c.x+50, c.y, 30, 0, Math.PI*2); ctx.fill(); c.x += c.speed; if (c.x > canvas.width + 50) c.x = -100; });
+        }
+
+        ctx.fillStyle = COLORS.ladder;
+        this.ladders.forEach(l => { ctx.fillRect(l.x, l.y, 5, l.height); ctx.fillRect(l.x+l.width-5, l.y, 5, l.height); for(let y=l.y; y<l.y+l.height; y+=15) ctx.fillRect(l.x, y, l.width, 3); });
+        this.platforms.forEach(p => { ctx.fillStyle = '#5D4037'; ctx.fillRect(p.x, p.y, p.width, p.height); ctx.fillStyle = COLORS.grass; ctx.fillRect(p.x, p.y, p.width, 5); });
+        this.tnts.forEach(t => { 
+            ctx.fillStyle = COLORS.tnt; 
+            ctx.fillRect(t.x, t.y, t.width, t.height); 
+            ctx.fillStyle = 'white'; 
+            ctx.font = 'bold 10px Arial'; 
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText("TNT", t.x + t.width / 2, t.y + t.height / 2 + 1);
+            ctx.textAlign = 'start'; 
+            ctx.textBaseline = 'alphabetic';
+        });
+        this.cannons.forEach(c => {
+            const centerX = c.x + 20; const centerY = c.y + 15;
+            ctx.fillStyle = '#3E2723'; ctx.beginPath(); ctx.arc(centerX - 8, centerY + 8, 7, 0, Math.PI*2); ctx.fill();
+            ctx.save(); ctx.translate(centerX, centerY); let rotation = 0; if (c.direction === 'right') rotation = -Math.PI / 4; else if (c.direction === 'up') rotation = -3 * Math.PI / 4; else if (c.direction === 'up-right') rotation = -Math.PI/3; else rotation = -3 * Math.PI / 4; ctx.rotate(rotation); 
+            ctx.fillStyle = '#455A64'; ctx.beginPath(); ctx.moveTo(-5, -6); ctx.lineTo(25, -9); ctx.lineTo(25, 9); ctx.lineTo(-5, 6); ctx.lineTo(-8, 0); ctx.fill();
+            ctx.fillStyle = '#263238'; ctx.fillRect(5, -7, 4, 14); ctx.fillRect(18, -8, 4, 16); ctx.fillStyle = 'black'; ctx.fillRect(25, -6, 2, 12); ctx.restore();
+            ctx.fillStyle = '#5D4037'; ctx.beginPath(); ctx.arc(centerX + 8, centerY + 8, 7, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#3E2723'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(centerX + 8, centerY + 1); ctx.lineTo(centerX + 8, centerY + 15); ctx.moveTo(centerX + 1, centerY + 8); ctx.lineTo(centerX + 15, centerY + 8); ctx.stroke();
+            ctx.beginPath(); ctx.arc(centerX + 8, centerY + 8, 7, 0, Math.PI*2); ctx.stroke();
+        });
+        this.portals.forEach(p => { 
+            if (p.type === 'vent') {
+                 // Draw invisible hitbox trigger for AI logic
+            } else {
+                ctx.fillStyle = (frameCount%20<10)?COLORS.portalOuter:COLORS.portalInner; ctx.beginPath(); ctx.arc(p.x+p.width/2, p.y+p.height/2, p.width/2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle='white'; ctx.stroke(); 
+            }
+        });
+        this.collectibles.forEach(c => {
+            const cx = c.x + c.width/2; const cy = c.y + c.height/2;
+            if (c.type === 'coin') { ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#FFC107'; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#FFF8E1'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('$', cx, cy + 1); } 
+            else { ctx.fillStyle = COLORS.diamond; ctx.beginPath(); ctx.moveTo(cx, cy - 10); ctx.lineTo(cx + 8, cy); ctx.lineTo(cx, cy + 10); ctx.lineTo(cx - 8, cy); ctx.fill(); ctx.fillStyle = '#E0F7FA'; ctx.beginPath(); ctx.moveTo(cx, cy - 6); ctx.lineTo(cx + 4, cy); ctx.lineTo(cx, cy + 6); ctx.lineTo(cx - 4, cy); ctx.fill(); }
+        });
+    }
+
+    drawStar() {
+        const s = this.star; 
+        // Draw Star with Black Outline
+        ctx.save();
+        ctx.translate(s.x+s.width/2, s.y+s.height/2);
+        ctx.rotate(frameCount*0.05);
+        ctx.beginPath();
+        for(let i=0;i<5;i++){ ctx.lineTo(Math.cos((18+i*72)*Math.PI/180)*30, -Math.sin((18+i*72)*Math.PI/180)*30); ctx.lineTo(Math.cos((54+i*72)*Math.PI/180)*15, -Math.sin((54+i*72)*Math.PI/180)*15); }
+        ctx.fillStyle = COLORS.star; 
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Entity {
+    constructor(x, y, width, height, charId, isCpu = false) {
+        this.x = x; this.y = y; this.width = width; this.height = height;
+        this.vx = 0; this.vy = 0;
+        this.isGrounded = false; this.onLadder = false;
+        this.isCpu = isCpu; this.stunned = 0; 
+        this.facingRight = true; this.animTime = 0;
+        this.ladderTimer = 0; 
+        this.charData = CHARACTERS.find(c => c.id === charId) || CHARACTERS[0];
+        this.aiTarget = null; this.aiDecisionTimer = 0; this.stuckTimer = 0; this.lastX = x; this.lastY = y;
+        this.lastTargetId = null;
+        this.spawnX = x; 
+        this.spawnY = y;
+        this.runSpeed = 0.6;
+        if (this.isCpu && currentMap === 'skyscraper') this.runSpeed = 0.95;
+        this.jumpPower = -10;
+        if (this.isCpu && currentMap === 'skyscraper') this.jumpPower = -12;
+    }
+    
+    update() {
+        if (this.stunned > 0) { this.stunned--; this.vy += 0.5; this.x += this.vx; this.y += this.vy; if(this.y + this.height > gameLevel.floorY) { this.y = gameLevel.floorY - this.height; this.vy = 0; this.vx *= 0.8; } return; }
+        if (!this.onLadder && this.ladderTimer > 0) { this.ladderTimer--; }
+        if (this.isCpu) this.aiLogic(); else this.inputLogic();
+        if (!this.onLadder) this.vy += 0.5; else this.vy = 0;
+        this.vx *= 0.8; this.x += this.vx; this.y += this.vy;
+        if (Math.abs(this.vx) > 0.1 || (this.onLadder && Math.abs(this.vy) > 0.1)) this.animTime += 1; else this.animTime = 0;
+        if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+        this.isGrounded = false; this.onLadder = false;
+        this.checkCollisions();
+        if (this.onLadder) this.ladderTimer = 30; 
+    }
+    inputLogic() {
+        const left = keys.ArrowLeft || keys.a; const right = keys.ArrowRight || keys.d;
+        const up = keys.ArrowUp || keys.w; const down = keys.ArrowDown || keys.s;
+        const ladderSpeed = 3;
+        if (left) { this.vx -= this.runSpeed; this.facingRight = false; }
+        if (right) { this.vx += this.runSpeed; this.facingRight = true; }
+        if (this.onLadder) { if (up) this.y -= ladderSpeed; if (down) this.y += ladderSpeed; }
+        else { if (up && this.isGrounded) this.vy = this.jumpPower; }
+    }
+
+    aiLogic() {
+        const settings = DIFFICULTY_SETTINGS[currentDifficulty];
+        const ladderSpeed = 3;
+        const distMoved = Math.abs(this.x - this.lastX) + Math.abs(this.y - this.lastY);
+        if (distMoved < 1.0) { this.stuckTimer++; } else { this.stuckTimer = 0; this.lastX = this.x; this.lastY = this.y; }
+        
+        // Volcano Logic: Wait at summit for eruption
+        if (currentMap === 'volcano') {
+            const vent = gameLevel.portals.find(p => p.type === 'vent');
+            if (vent) {
+                 // Check if we are at the summit (approx y=200)
+                 if (this.y <= vent.y + 50 && this.y >= vent.y - 50) {
+                     this.aiTarget = null;
+                     // Move towards vent center (380) with a wider tolerance to stop jitter
+                     if (this.x < 370) { this.vx += this.runSpeed; this.facingRight = true; }
+                     else if (this.x > 410) { this.vx -= this.runSpeed; this.facingRight = false; }
+                     else {
+                         this.vx = 0; // Stand still
+                         if (gameLevel.isErupting) {
+                             this.vy = -12; // Jump to catch blast
+                         }
+                     }
+                     return; 
+                 }
+            }
+        }
+
+        if (this.aiDecisionTimer <= 0 || !this.aiTarget || this.stuckTimer > 120) {
+            this.aiTarget = this.pickRandomTarget();
+            if(this.stuckTimer > 120 && this.aiTarget && this.aiTarget === this.lastTargetId) { this.aiTarget = null; }
+            this.aiDecisionTimer = settings.reactionTime + Math.random() * 20; 
+            if (this.stuckTimer > 120 && this.isGrounded) { this.vy = this.jumpPower; this.vx = (Math.random() < 0.5 ? -1 : 1) * 8; this.stuckTimer = 0; }
+        }
+        this.aiDecisionTimer--;
+
+        let destX = gameLevel.star.x; let destY = gameLevel.star.y;
+        if (this.aiTarget) {
+            destX = this.aiTarget.x + (this.aiTarget.width ? this.aiTarget.width/2 : 0);
+            destY = this.aiTarget.y;
+            this.lastTargetId = this.aiTarget; 
+        }
+
+        let moveDir = 0; 
+        if (this.onLadder) { 
+            if (destY < this.y) { this.y -= ladderSpeed * settings.speedMult; } else { this.y += ladderSpeed * settings.speedMult; }
+            return; 
+        }
+        
+        if (Math.abs(destX - this.x) > 15) { if (this.x < destX) moveDir = 1; else moveDir = -1; } else { if (currentDifficulty !== 'HARD' && this.aiDecisionTimer < 10) { this.aiDecisionTimer = 10; } else { this.aiDecisionTimer = 0; } }
+        
+        if (moveDir === 1) { this.vx += this.runSpeed * settings.speedMult; this.facingRight = true; }
+        else if (moveDir === -1) { this.vx -= this.runSpeed * settings.speedMult; this.facingRight = false; }
+        
+        if (moveDir !== 0 && Math.abs(this.vx) < 0.2 && this.isGrounded) { this.vy = this.jumpPower; }
+
+        if (this.isGrounded) {
+            let shouldJump = false;
+            let isTargetingLadder = false;
+            if (this.aiTarget && gameLevel.ladders.includes(this.aiTarget)) { isTargetingLadder = true; }
+            
+            // A. Vertical Ambition
+            if (destY < this.y - 10) { 
+                 let jumpTolerance = 100;
+                 if (currentMap === 'skyscraper') jumpTolerance = 150;
+                 if (currentMap === 'volcano' && this.y < 0) jumpTolerance = 250; // Increased aggression in clouds
+
+                 if (Math.abs(destX - this.x) < jumpTolerance) shouldJump = true;
+            }
+
+            // CRITICAL FIX: NEVER jump if targeting a ladder, just walk to it.
+            if (isTargetingLadder) { shouldJump = false; }
+            
+            // B. Portal Magnetism
+            if (this.aiTarget && this.aiTarget.targetX !== undefined) { 
+                 if (Math.abs(this.x - this.aiTarget.x) < 50 && Math.abs(this.y - this.aiTarget.y) < 80) { shouldJump = true; }
+            }
+            // C. Random Jump
+            if (Math.random() < settings.jumpChance && !isTargetingLadder) shouldJump = true;
+            
+            // D. Gap Detection
+            if (moveDir !== 0) {
+                let lookAhead = 40; 
+                if (currentDifficulty === 'HARD') lookAhead = 100; 
+                if (currentMap === 'skyscraper') lookAhead += 30; 
+                
+                // VOLCANO FIX: In clouds, reduce lookAhead to force "Late Jumps" at edge
+                if (currentMap === 'volcano' && this.y < 0) lookAhead = 10; 
+
+                const edgeThreshold = (this.width / 2) + lookAhead; const checkX = this.x + (this.width / 2) + (moveDir * edgeThreshold); const checkY = this.y + this.height + 5; 
+                let solidGroundAhead = false; if (checkY >= gameLevel.floorY) solidGroundAhead = true;
+                if (!solidGroundAhead) { for (let p of gameLevel.platforms) { if (checkX >= p.x && checkX <= p.x + p.width && checkY >= p.y && checkY <= p.y + p.height + 20) { solidGroundAhead = true; break; } } }
+                if (!solidGroundAhead) { shouldJump = true; this.ladderTimer = 0; }
+            }
+            
+            // Volcano: Don't jump if waiting for vent
+            if (currentMap === 'volcano' && Math.abs(this.x - 400) < 50 && this.y < 250 && this.y > 0) {
+                 shouldJump = false; 
+                 this.vx = 0; 
+            }
+
+            if (shouldJump && this.ladderTimer <= 0) { this.vy = this.jumpPower; if (moveDir !== 0) this.vx += (moveDir * 2); }
+        }
+    }
+    
+    pickRandomTarget() {
+        // If in Volcano Clouds, force smart pathing
+        if (currentMap === 'volcano' && this.isCpu && this.y < 0) {
+            // Find lowest platform/ladder that is still ABOVE us
+            let bestTarget = null;
+            let minDiffY = 10000;
+            
+            [...gameLevel.ladders, ...gameLevel.platforms, ...gameLevel.cannons].forEach(obj => {
+                if (obj.y < this.y - 10) { // Is above
+                    const diffY = this.y - obj.y;
+                    if (diffY < minDiffY) {
+                        minDiffY = diffY;
+                        bestTarget = obj;
+                    }
+                }
+            });
+            
+            // If we found the next step up, take it. Otherwise default to Star.
+            if (bestTarget) return bestTarget;
+            return gameLevel.star;
+        }
+
+        const potentialTargets = [];
+        let lookUpOnly = true; let rangeY = 0;
+        if (this.stuckTimer > 100) { lookUpOnly = false; rangeY = 200; }
+        
+        // ADDED: ...gameLevel.platforms to the list so CPU sees clouds as valid destinations
+        [...gameLevel.ladders, ...gameLevel.cannons, ...gameLevel.portals, ...gameLevel.tnts, ...gameLevel.platforms].forEach(obj => {
+             if (obj === this.lastTargetId && this.stuckTimer > 30) return;
+             
+             // CPU VOLCANO LOGIC: Stick to the right side until reaching the summit (y < 250)
+             if (currentMap === 'volcano' && this.isCpu && this.y > 250 && obj.x < 400) return;
+
+             if (lookUpOnly) { if (obj.y < this.y) potentialTargets.push(obj); } else { if (obj.y < this.y + rangeY) potentialTargets.push(obj); }
+        });
+        
+        if (potentialTargets.length === 0) return null; 
+        
+        if (Math.random() < 0.90) { 
+            potentialTargets.sort((a, b) => {
+                const valA = (a.y < this.y) ? -1000 : 0; const valB = (b.y < this.y) ? -1000 : 0;
+                // If in clouds (y < -1000), prefer CLOSEST vertical target (don't jump to star)
+                let weight = 1;
+                if (this.y < -1000) weight = 2; // Penalize distance more in clouds
+
+                const distA = Math.abs(this.y - a.y)*weight + Math.abs(this.x - a.x); 
+                const distB = Math.abs(this.y - b.y)*weight + Math.abs(this.x - b.x);
+                
+                return (valA + distA) - (valB + distB);
+            });
+            return potentialTargets[0];
+        } else { return potentialTargets[Math.floor(Math.random() * potentialTargets.length)]; }
+    }
+
+    checkCollisions() {
+        if (this.y + this.height > gameLevel.floorY) { this.y = gameLevel.floorY - this.height; this.vy = 0; this.isGrounded = true; }
+        gameLevel.platforms.forEach(p => { if (this.vy >= 0 && this.y + this.height <= p.y + p.height && this.y + this.height + this.vy >= p.y && this.x + this.width > p.x && this.x < p.x + p.width) { this.y = p.y - this.height; this.vy = 0; this.isGrounded = true; } });
+        gameLevel.ladders.forEach(l => { if (this.x + this.width/2 > l.x && this.x + this.width/2 < l.x + l.width && this.y + this.height > l.y && this.y < l.y + l.height) this.onLadder = true; });
+        
+        // Lava/TNT handling
+        gameLevel.tnts.forEach(t => { 
+            if (this.checkOverlap(t)) { 
+                if (t.type === 'lava') {
+                    // Reset to start
+                    this.x = this.spawnX;
+                    this.y = this.spawnY;
+                    this.vx = 0;
+                    this.vy = 0;
+                    createExplosion(this.x, this.y); // Poof
+                    AudioSys.playSFX('boom');
+                } else {
+                    // Normal TNT Bounce
+                    this.vy = -20; 
+                    createExplosion(this.x, this.y + this.height); 
+                    AudioSys.playSFX('boom'); 
+                }
+            } 
+        });
+
+        gameLevel.cannons.forEach(c => {
+             if (this.checkOverlap(c) && this.stunned <= 0) { 
+                 this.vy = -15; 
+                 if (c.direction === 'up-right') {
+                     this.vy = -22; this.vx = 10;
+                 } else {
+                     this.vx = (c.direction === 'right') ? 15 : -15; 
+                 }
+                 this.stunned = 30; 
+                 this.createParticles(this.x, this.y, '#555'); 
+                 AudioSys.playSFX('launch'); 
+            } 
+        });
+        gameLevel.portals.forEach(p => { 
+            // Standard portal logic
+            if (p.type !== 'vent' && this.checkOverlap(p) && this.stunned <= 0) { this.x = p.targetX; this.y = p.targetY; this.vx = 0; this.vy = -5; this.stunned = 10; this.createParticles(this.x, this.y, '#D0F'); AudioSys.playSFX('warp'); }
+            // Volcano Vent Logic (Super Blast)
+            if (p.type === 'vent' && this.checkOverlap(p) && gameLevel.isErupting) {
+                 this.vy = -56; // BLAST to landing pad (-2800 ish)
+                 this.createParticles(this.x, this.y, '#FF5722');
+                 AudioSys.playSFX('launch');
+            }
+        });
+        if (!this.isCpu) {
+            for (let i = gameLevel.collectibles.length - 1; i >= 0; i--) {
+                const c = gameLevel.collectibles[i];
+                if (this.checkOverlap(c)) { gameLevel.collectibles.splice(i, 1); if (c.type === 'coin') { sessionCoins++; AudioSys.playSFX('coin'); updateHUD(); updateQuestProgress('collect_coins', 1); } else { sessionDiamonds++; AudioSys.playSFX('diamond'); updateHUD(); updateQuestProgress('collect_diamonds', 1); } }
+            }
+        }
+        if (this.checkOverlap(gameLevel.star)) endGame(this.isCpu ? 'CPU' : 'PLAYER');
+    }
+    checkOverlap(rect) { return (this.x < rect.x + rect.width && this.x + this.width > rect.x && this.y < rect.y + rect.height && this.y + this.height > rect.y); }
+    createParticles(x, y, color) { for(let i=0; i<10; i++) particles.push(new Particle(x, y, color)); }
+    draw() {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(this.x + 5, this.y + 20, this.width, 5); 
+        drawStickman(ctx, this.x, this.y, this.width, this.height, this.facingRight, this.charData, this.animTime);
+        if (this.isCpu) { ctx.fillStyle = '#F44336'; ctx.font = '10px Arial'; ctx.fillText("CPU", this.x, this.y - 35); }
+        else { ctx.fillStyle = '#4CAF50'; ctx.font = '10px Arial'; ctx.fillText("P1", this.x, this.y - 35); }
+    }
+}
+
+class Particle {
+    constructor(x, y, color) { this.x = x; this.y = y; this.vx = (Math.random() - 0.5) * 5; this.vy = (Math.random() - 0.5) * 5; this.life = 30; this.color = color; }
+    update() { this.x += this.vx; this.y += this.vy; this.life--; }
+    draw() { ctx.fillStyle = this.color; ctx.globalAlpha = this.life / 30; ctx.fillRect(this.x, this.y, 4, 4); ctx.globalAlpha = 1; }
+}
+
+// --- Main Loop ---
+
+function initGame() {
+    AudioSys.stopMusic();
+    playerName = nameInput.value.trim().toUpperCase() || "PLAYER";
+    sessionCoins = 0; sessionDiamonds = 0; updateHUD();
+
+    let speedMult = 1.0; let jumpMult = 1.0; let luckActive = false;
+    if (playerInventory.speed > 0) { speedMult = 1.1; playerInventory.speed--; }
+    if (playerInventory.jump > 0) { jumpMult = 1.2; playerInventory.jump--; }
+    if (playerInventory.luck > 0) { luckActive = true; playerInventory.luck--; }
+    if (speedMult > 1 || jumpMult > 1 || luckActive) saveGameData();
+    updateBuffDisplay();
+
+    gameLevel = new GameLevel(luckActive, currentMap); 
+    
+    if (currentMap === 'skyscraper') AudioSys.startSkyscraperMusic();
+    else if (currentMap === 'volcano') AudioSys.startVolcanoMusic();
+    else AudioSys.startMountainMusic();
+    
+    let pIndex = selectedCharIndex;
+    if (pIndex === -1) {
+        const unlockedChars = CHARACTERS.filter(c => isCharacterUnlocked(c));
+        const randomChar = unlockedChars[Math.floor(Math.random() * unlockedChars.length)];
+        pIndex = CHARACTERS.indexOf(randomChar);
+    }
+    const pChar = CHARACTERS[pIndex];
+    // Use dynamic spawn points
+    player = new Entity(gameLevel.spawnPlayer.x, gameLevel.spawnPlayer.y, 25, 25, pChar.id, false);
+    player.runSpeed *= speedMult; player.jumpPower *= jumpMult;
+
+    let cpuIndex;
+    const restrictedSkins = ['gold', 'cyborg', 'wizard'];
+    const cpuCandidates = CHARACTERS.filter((c, index) => index !== pIndex && !restrictedSkins.includes(c.id));
+    const randomCpu = cpuCandidates[Math.floor(Math.random() * cpuCandidates.length)];
+    // Use dynamic spawn points
+    cpu = new Entity(gameLevel.spawnCpu.x, gameLevel.spawnCpu.y, 25, 25, randomCpu.id, true);
+    
+    particles = []; timeLeft = 90;
+    startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden');
+    
+    gameState = 'COUNTDOWN';
+    countdownValue = 3;
+    countdownStartTime = Date.now();
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function endGame(winner) {
+    if (gameState === 'GAMEOVER') return; // Prevent double trigger
+    gameState = 'GAMEOVER';
+    if (winner === 'PLAYER') {
+        winnerText.innerText = playerName + ' WINS!'; 
+        playerWins++; playerCoins += sessionCoins; playerDiamonds += sessionDiamonds;
+        updateQuestProgress(`win_${currentDifficulty.toLowerCase()}`, 1);
+        let report = `Collected: ${sessionCoins} Coins`;
+        if (sessionDiamonds > 0) report += `, ${sessionDiamonds} Diamonds!`;
+        lootReport.innerText = report;
+        saveGameData(); updateHUD(); winsDisplay.innerText = "WINS: " + playerWins; winnerText.style.color = '#4CAF50'; AudioSys.playWinTune();
+    } else {
+        winnerText.innerText = 'CPU WINS!'; lootReport.innerText = "Loot Lost!"; winnerText.style.color = '#F44336'; AudioSys.playLoseTune();
+    }
+    gameOverScreen.classList.remove('hidden');
+}
+
+function goToMenu() {
+    gameState = 'MENU'; AudioSys.stopMusic(); AudioSys.startTitleMusic();
+    gameOverScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); updateHUD();
+    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "#202028"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function gameLoop(timestamp) {
+    if (gameState === 'COUNTDOWN') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        gameLevel.draw(); player.draw(); cpu.draw(); 
+        const elapsed = (Date.now() - countdownStartTime) / 1000;
+        countdownValue = 3 - Math.floor(elapsed);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '20px "Press Start 2P"'; ctx.fillStyle = '#FFD700'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText("FIRST TO THE STAR WINS!", canvas.width/2, canvas.height/2 - 50);
+        ctx.font = '60px "Press Start 2P"'; ctx.fillStyle = '#FFF';
+        if (countdownValue > 0) ctx.fillText(countdownValue, canvas.width/2, canvas.height/2 + 20);
+        else { ctx.fillText("GO!", canvas.width/2, canvas.height/2 + 20); if (elapsed > 3.5) { gameState = 'PLAYING'; lastTime = timestamp; } }
+        requestAnimationFrame(gameLoop); return;
+    }
+
+    if (gameState !== 'PLAYING') return;
+    const dt = timestamp - lastTime; lastTime = timestamp;
+    
+    // CAMERA LOGIC (Vertical Scrolling for Volcano)
+    let targetCamY = 0;
+    if (currentMap === 'volcano') {
+        // Follow the PLAYER ONLY - ignore CPU position
+        if (player.y < 200) {
+            targetCamY = 200 - player.y;
+        }
+    }
+    // Smooth lerp
+    cameraY = cameraY + (targetCamY - cameraY) * 0.1;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Apply Camera Transform
+    ctx.save();
+    ctx.translate(0, cameraY);
+    
+    if(gameLevel.update) gameLevel.update();
+    gameLevel.draw(); 
+    
+    // Update logic first (Order matters for ties!)
+    cpu.update(); 
+    player.update(); 
+    
+    player.draw(); cpu.draw();
+    particles.forEach((p, index) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(index, 1); });
+    
+    // DRAW STAR LAST (Top Layer)
+    gameLevel.drawStar();
+
+    ctx.restore(); // Restore context for HUD
+
+    frameCount++;
+    if (frameCount % 60 === 0) {
+        timeLeft--; if (timeLeft <= 0) endGame('CPU');
+        const m = Math.floor(timeLeft / 60); const s = timeLeft % 60;
+        timerDisplay.innerText = `TIME: ${m}:${s < 10 ? '0'+s : s}`;
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+// --- UI Handlers ---
+window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+diffButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        diffButtons.forEach(b => b.classList.remove('selected')); e.target.classList.add('selected'); currentDifficulty = e.target.dataset.diff;
+    });
+});
+mapBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const map = e.currentTarget.dataset.map;
+        if (map === 'skyscraper' && playerWins < 25) { 
+            // alert("You need 25 Wins!"); // Removed alert as tooltip explains it
+            return; 
+        } 
+        if (map === 'volcano' && playerWins < 50) { 
+            // alert("You need 50 Wins!"); 
+            return; 
+        }
+        mapBtns.forEach(b => b.classList.remove('selected'));
+        e.currentTarget.classList.add('selected');
+        currentMap = map;
+    });
+});
+
+musicUploadBtn.addEventListener('click', () => musicFileInput.click());
+musicFileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { customMusicUrl = URL.createObjectURL(file); musicUploadBtn.textContent = "MUSIC READY!"; musicUploadBtn.classList.add('loaded'); } });
+
+debugWinsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerWins += 100; winsDisplay.innerText = "WINS: " + playerWins; saveGameData(); updateMapLock(); drawPreview(); alert("Added 100 Wins!"); });
+debugCoinsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerCoins += 500; updateHUD(); saveGameData(); renderShop(); alert("Added 500 Coins!"); });
+debugDiamondsBtn.addEventListener('click', () => { if (!currentUser) { alert("Wait for connection..."); return; } playerDiamonds += 25; updateHUD(); saveGameData(); renderShop(); alert("Added 25 Gems!"); });
+document.getElementById('debug-reset-quests-btn').addEventListener('click', () => { if (!currentUser) return; console.log("Forcing Quest Reset..."); playerQuests = generateDailyQuests(); saveGameData(); if (!questScreen.classList.contains('hidden')) renderQuests(); alert("Quests Reset!"); });
+
+playBtn.addEventListener('click', initGame);
+restartBtn.addEventListener('click', initGame);
+quitBtn.addEventListener('click', goToMenu);
+questBtn.addEventListener('click', () => { questScreen.classList.remove('hidden'); if (!playerQuests || !playerQuests.list || playerQuests.list.length === 0) { playerQuests = generateDailyQuests(); saveGameData(); } renderQuests(); updateQuestTimer(); if(questTimerInterval) clearInterval(questTimerInterval); questTimerInterval = setInterval(updateQuestTimer, 1000); });
+closeQuestBtn.addEventListener('click', () => { questScreen.classList.add('hidden'); if(questTimerInterval) clearInterval(questTimerInterval); });
+shopBtn.addEventListener('click', () => { shopScreen.classList.remove('hidden'); renderShop(); });
+closeShopBtn.addEventListener('click', () => { shopScreen.classList.add('hidden'); });
+prevCharBtn.addEventListener('click', () => { let attempts = 0; do { selectedCharIndex--; if (selectedCharIndex < 0) selectedCharIndex = CHARACTERS.length - 1; attempts++; } while (!isCharacterUnlocked(CHARACTERS[selectedCharIndex]) && attempts < CHARACTERS.length); });
+nextCharBtn.addEventListener('click', () => { let attempts = 0; do { selectedCharIndex++; if (selectedCharIndex >= CHARACTERS.length) selectedCharIndex = 0; attempts++; } while (!isCharacterUnlocked(CHARACTERS[selectedCharIndex]) && attempts < CHARACTERS.length); });
+randomCharBtn.addEventListener('click', () => { selectedCharIndex = -1; });
+window.initGame = initGame;
+window.goToMenu = goToMenu;
+
+document.addEventListener('click', function() { if (AudioSys.ctx && AudioSys.ctx.state === 'suspended') AudioSys.ctx.resume(); if (gameState === 'MENU' && !AudioSys.isPlaying) AudioSys.startTitleMusic(); }, { once: false });
+initAuth();
+
+</script>
+</body>
+</html>
