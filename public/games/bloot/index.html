@@ -468,6 +468,20 @@
     </style>
 </head>
 <body>
+<!-- Dudeworks Splash Screen -->
+<div id="dudeworks-splash" style="position:fixed;inset:0;z-index:99999;background:#e91e8a;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.6s ease;opacity:1;">
+  <img src="/Dudeworks.png" alt="Dudeworks" style="width:220px;height:220px;border-radius:24px;animation:dw-pop 0.6s ease-out;box-shadow:0 0 40px rgba(0,0,0,0.3);">
+  <p style="margin-top:18px;font-family:sans-serif;font-size:14px;font-weight:700;color:white;letter-spacing:3px;opacity:0.8;">A DUDEWORKS GAME</p>
+</div>
+<style>
+  @keyframes dw-pop { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+</style>
+<script>
+  setTimeout(function(){
+    var s=document.getElementById('dudeworks-splash');
+    if(s){s.style.opacity='0';setTimeout(function(){s.remove();},600);}
+  }, 2200);
+</script>
 
 <div id="game-container">
     <canvas id="gameCanvas" width="800" height="600"></canvas>
