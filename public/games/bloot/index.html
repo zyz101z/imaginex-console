@@ -1004,25 +1004,25 @@ function updateBuffDisplay() {
 
 function updateMapLock() {
     // Skyscraper
-    if (playerWins >= 25) {
+    if (playerWins >= 10) {
         skyscraperBtn.classList.remove('locked');
         skyscraperBtn.innerHTML = "SKYSCRAPER";
         skyscraperBtn.removeAttribute('data-tooltip');
     } else {
         skyscraperBtn.classList.add('locked');
         skyscraperBtn.innerHTML = "SKYSCRAPER &#128274;";
-        skyscraperBtn.setAttribute('data-tooltip', "Win 25 Games to Unlock");
+        skyscraperBtn.setAttribute('data-tooltip', "Win 10 Games to Unlock");
     }
-    
+
     // Volcano
-    if (playerWins >= 50) {
+    if (playerWins >= 20) {
         volcanoBtn.classList.remove('locked');
         volcanoBtn.innerHTML = "VOLCANO";
         volcanoBtn.removeAttribute('data-tooltip');
     } else {
         volcanoBtn.classList.add('locked');
         volcanoBtn.innerHTML = "VOLCANO &#128274;";
-        volcanoBtn.setAttribute('data-tooltip', "Win 50 Games to Unlock");
+        volcanoBtn.setAttribute('data-tooltip', "Win 20 Games to Unlock");
     }
 }
 
