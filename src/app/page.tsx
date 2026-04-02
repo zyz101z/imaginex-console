@@ -227,8 +227,64 @@ function GameDetail({
     } catch { /* ignore */ }
   }, [game.id]);
 
+  const playInsertSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const now = ctx.currentTime;
+
+      // Mechanical slide sound (filtered noise burst)
+      const noiseLen = 0.15;
+      const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * noiseLen, ctx.sampleRate);
+      const noiseData = noiseBuf.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) noiseData[i] = (Math.random() * 2 - 1) * 0.3;
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuf;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.setValueAtTime(800, now);
+      noiseFilter.frequency.linearRampToValueAtTime(200, now + noiseLen);
+      noiseFilter.Q.value = 2;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.4, now);
+      noiseGain.gain.linearRampToValueAtTime(0, now + noiseLen);
+      noiseSrc.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+      noiseSrc.start(now + 0.4);
+
+      // Click/snap when cartridge seats
+      const clickOsc = ctx.createOscillator();
+      clickOsc.type = "square";
+      clickOsc.frequency.setValueAtTime(150, now + 0.55);
+      clickOsc.frequency.exponentialRampToValueAtTime(40, now + 0.62);
+      const clickGain = ctx.createGain();
+      clickGain.gain.setValueAtTime(0.5, now + 0.55);
+      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+      clickOsc.connect(clickGain).connect(ctx.destination);
+      clickOsc.start(now + 0.55);
+      clickOsc.stop(now + 0.65);
+
+      // Power-on chime (ascending tones)
+      [440, 554, 659].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        const t = now + 1.1 + i * 0.12;
+        osc.frequency.setValueAtTime(freq, t);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.2, t + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.3);
+      });
+
+      // Cleanup
+      setTimeout(() => ctx.close(), 3000);
+    } catch { /* audio not available */ }
+  }, []);
+
   const handleInsert = () => {
     if (phase !== "idle") return;
+    playInsertSound();
     setPhase("lifting");
     setTimeout(() => setPhase("dropping"), 400);
     setTimeout(() => setPhase("seated"), 900);

@@ -661,9 +661,9 @@ const CHARACTERS = [
 ];
 
 const DIFFICULTY_SETTINGS = {
-    'EASY': { speedMult: 0.7, jumpChance: 0.015, reactionTime: 45 },   
+    'EASY': { speedMult: 0.85, jumpChance: 0.025, reactionTime: 30 },
     'MEDIUM': { speedMult: 1.0, jumpChance: 0.03, reactionTime: 20 },
-    'HARD': { speedMult: 1.3, jumpChance: 0.06, reactionTime: 15 } 
+    'HARD': { speedMult: 1.3, jumpChance: 0.06, reactionTime: 15 }
 };
 
 const COLORS = {
@@ -1682,11 +1682,23 @@ class Entity {
             }
         }
 
-        if (this.aiDecisionTimer <= 0 || !this.aiTarget || this.stuckTimer > 120) {
-            this.aiTarget = this.pickRandomTarget();
-            if(this.stuckTimer > 120 && this.aiTarget && this.aiTarget === this.lastTargetId) { this.aiTarget = null; }
-            this.aiDecisionTimer = settings.reactionTime + Math.random() * 20; 
-            if (this.stuckTimer > 120 && this.isGrounded) { this.vy = this.jumpPower; this.vx = (Math.random() < 0.5 ? -1 : 1) * 8; this.stuckTimer = 0; }
+        const stuckThreshold = currentDifficulty === 'EASY' ? 60 : 120;
+        if (this.aiDecisionTimer <= 0 || !this.aiTarget || this.stuckTimer > stuckThreshold) {
+            if (this.stuckTimer > stuckThreshold) {
+                // Force pick a DIFFERENT target when stuck
+                const oldTarget = this.aiTarget;
+                this.aiTarget = this.pickRandomTarget();
+                if (this.aiTarget === oldTarget || this.aiTarget === this.lastTargetId) { this.aiTarget = null; }
+                if (this.isGrounded) {
+                    // Jump in a random direction to unstick
+                    this.vy = this.jumpPower;
+                    this.vx = (Math.random() < 0.5 ? -1 : 1) * 8;
+                }
+                this.stuckTimer = 0;
+            } else {
+                this.aiTarget = this.pickRandomTarget();
+            }
+            this.aiDecisionTimer = settings.reactionTime + Math.random() * 20;
         }
         this.aiDecisionTimer--;
 
@@ -1708,7 +1720,11 @@ class Entity {
         if (moveDir === 1) { this.vx += this.runSpeed * settings.speedMult; this.facingRight = true; }
         else if (moveDir === -1) { this.vx -= this.runSpeed * settings.speedMult; this.facingRight = false; }
         
-        if (moveDir !== 0 && Math.abs(this.vx) < 0.2 && this.isGrounded) { this.vy = this.jumpPower; }
+        // Wall-blocked: pick new target instead of endlessly jumping
+        if (moveDir !== 0 && Math.abs(this.vx) < 0.2 && this.isGrounded) {
+            this.stuckTimer += 10;
+            if (this.stuckTimer < 40) { this.vy = this.jumpPower; }
+        }
 
         if (this.isGrounded) {
             let shouldJump = false;
