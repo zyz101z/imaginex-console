@@ -143,6 +143,110 @@
         .score-val { font-size: 18px; font-weight: bold; }
         #save-status { position: absolute; top: 60px; right: 20px; font-size: 8px; color: #0f0; display: none; pointer-events: none; }
         /* debug toggle removed for production */
+
+        /* --- MOBILE TOUCH CONTROLS --- */
+        #touch-controls {
+            display: none;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 60;
+        }
+        #touch-controls.visible {
+            display: block;
+        }
+
+        /* D-Pad */
+        .touch-dpad {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 140px;
+            height: 140px;
+            pointer-events: none;
+        }
+        .touch-dpad-btn {
+            position: absolute;
+            pointer-events: all;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 20px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        .touch-dpad-btn.active {
+            background: rgba(207, 255, 0, 0.3);
+            border-color: rgba(207, 255, 0, 0.6);
+        }
+        .dpad-up    { left: 46px; top: 0; width: 48px; height: 48px; }
+        .dpad-down  { left: 46px; bottom: 0; width: 48px; height: 48px; }
+        .dpad-left  { left: 0; top: 46px; width: 48px; height: 48px; }
+        .dpad-right { right: 0; top: 46px; width: 48px; height: 48px; }
+
+        /* Diagonal zones (invisible but touchable) */
+        .dpad-zone {
+            position: absolute;
+            pointer-events: all;
+            background: transparent;
+            touch-action: none;
+        }
+
+        /* Action button */
+        .touch-action-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: rgba(207, 255, 0, 0.2);
+            border: 3px solid rgba(207, 255, 0, 0.5);
+            pointer-events: all;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(207, 255, 0, 0.8);
+            font-family: 'Press Start 2P', cursive;
+            font-size: 8px;
+            text-align: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        .touch-action-btn.active {
+            background: rgba(207, 255, 0, 0.45);
+            border-color: rgba(207, 255, 0, 0.9);
+        }
+
+        /* Pause button */
+        .touch-pause-btn {
+            position: absolute;
+            top: 34px;
+            right: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            pointer-events: all;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        .touch-pause-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -213,6 +317,21 @@
             </div>
             <div id="bottom-bar" class="control-guide hidden">WASD: Move | SPACE: Interact/Serve | ESC: Pause</div>
             <!-- debug toggle removed for production -->
+
+            <!-- MOBILE TOUCH CONTROLS -->
+            <div id="touch-controls">
+                <!-- D-Pad -->
+                <div class="touch-dpad" id="touch-dpad">
+                    <div class="touch-dpad-btn dpad-up" data-dir="up">&#9650;</div>
+                    <div class="touch-dpad-btn dpad-down" data-dir="down">&#9660;</div>
+                    <div class="touch-dpad-btn dpad-left" data-dir="left">&#9664;</div>
+                    <div class="touch-dpad-btn dpad-right" data-dir="right">&#9654;</div>
+                </div>
+                <!-- Action Button -->
+                <div class="touch-action-btn" id="touch-action">ACTION</div>
+                <!-- Pause Button -->
+                <div class="touch-pause-btn" id="touch-pause">&#10074;&#10074;</div>
+            </div>
         </div>
     </div>
 
@@ -1632,6 +1751,192 @@
             // Special now auto-triggers on ball hit when meter is full
         });
         window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // --- MOBILE TOUCH CONTROLS ---
+        (function initTouchControls() {
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            const touchEl = document.getElementById('touch-controls');
+            if (!isTouchDevice || !touchEl) return;
+            touchEl.classList.add('visible');
+
+            // Hide the keyboard hint on touch devices
+            const bottomBar = document.getElementById('bottom-bar');
+            if (bottomBar) bottomBar.style.display = 'none';
+
+            // Map direction names to key codes
+            const dirMap = {
+                up: 'KeyW',
+                down: 'KeyS',
+                left: 'KeyA',
+                right: 'KeyD'
+            };
+
+            // Track active directions (allows multi-touch diagonals)
+            const activeDirections = new Set();
+            const touchDirMap = new Map(); // touchId -> Set of directions
+
+            function syncKeys() {
+                // Rebuild active directions from all touches
+                activeDirections.clear();
+                for (const dirs of touchDirMap.values()) {
+                    for (const d of dirs) activeDirections.add(d);
+                }
+                // Set keys based on active directions
+                for (const [dir, code] of Object.entries(dirMap)) {
+                    keys[code] = activeDirections.has(dir);
+                }
+                // Update visual feedback
+                document.querySelectorAll('.touch-dpad-btn').forEach(btn => {
+                    const d = btn.getAttribute('data-dir');
+                    if (d) btn.classList.toggle('active', activeDirections.has(d));
+                });
+            }
+
+            // D-pad: use a single touch area that detects direction from position
+            const dpad = document.getElementById('touch-dpad');
+
+            function getDirsFromTouch(touch) {
+                const rect = dpad.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const dx = touch.clientX - cx;
+                const dy = touch.clientY - cy;
+                const dirs = new Set();
+
+                // Dead zone in the center
+                const deadZone = 10;
+                if (Math.abs(dx) < deadZone && Math.abs(dy) < deadZone) return dirs;
+
+                // Use angle-based detection for 8-directional support
+                const angle = Math.atan2(dy, dx); // radians
+                // Right: -pi/8 to pi/8, Down-Right: pi/8 to 3pi/8, etc.
+                const PI = Math.PI;
+                const a = angle;
+
+                if (a > -3*PI/8 && a < 3*PI/8) dirs.add('right');
+                if (a < -PI/8 && a > -7*PI/8) dirs.add('up');
+                if (a > 5*PI/8 || a < -5*PI/8) dirs.add('left');
+                if (a > PI/8 && a < 7*PI/8) dirs.add('down');
+
+                return dirs;
+            }
+
+            function isTouchOnDpad(touch) {
+                const rect = dpad.getBoundingClientRect();
+                const margin = 20; // extra touch area
+                return touch.clientX >= rect.left - margin && touch.clientX <= rect.right + margin &&
+                       touch.clientY >= rect.top - margin && touch.clientY <= rect.bottom + margin;
+            }
+
+            // Prevent default on touch to avoid scrolling/zooming
+            document.addEventListener('touchstart', function(e) {
+                // Only prevent default on game wrapper to avoid blocking other UI
+                if (e.target.closest('#game-wrapper')) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchmove', function(e) {
+                if (e.target.closest('#game-wrapper')) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            // D-pad touch handling - applied to the whole dpad container
+            dpad.style.pointerEvents = 'all';
+
+            dpad.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                for (const touch of e.changedTouches) {
+                    const dirs = getDirsFromTouch(touch);
+                    touchDirMap.set(touch.identifier, dirs);
+                }
+                syncKeys();
+            }, { passive: false });
+
+            dpad.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+                for (const touch of e.changedTouches) {
+                    if (touchDirMap.has(touch.identifier)) {
+                        const dirs = getDirsFromTouch(touch);
+                        touchDirMap.set(touch.identifier, dirs);
+                    }
+                }
+                syncKeys();
+            }, { passive: false });
+
+            dpad.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                for (const touch of e.changedTouches) {
+                    touchDirMap.delete(touch.identifier);
+                }
+                syncKeys();
+            }, { passive: false });
+
+            dpad.addEventListener('touchcancel', function(e) {
+                for (const touch of e.changedTouches) {
+                    touchDirMap.delete(touch.identifier);
+                }
+                syncKeys();
+            }, { passive: false });
+
+            // Action button
+            const actionBtn = document.getElementById('touch-action');
+            actionBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                keys['Space'] = true;
+                actionBtn.classList.add('active');
+                if (gameState !== 'PAUSED') handleSpace();
+            }, { passive: false });
+
+            actionBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                keys['Space'] = false;
+                actionBtn.classList.remove('active');
+            }, { passive: false });
+
+            actionBtn.addEventListener('touchcancel', function(e) {
+                keys['Space'] = false;
+                actionBtn.classList.remove('active');
+            }, { passive: false });
+
+            // Pause button
+            const pauseBtn = document.getElementById('touch-pause');
+            pauseBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                pauseBtn.classList.add('active');
+                togglePause();
+            }, { passive: false });
+
+            pauseBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                pauseBtn.classList.remove('active');
+            }, { passive: false });
+
+            pauseBtn.addEventListener('touchcancel', function(e) {
+                pauseBtn.classList.remove('active');
+            }, { passive: false });
+
+            // Hide touch controls when main menu or pause is active, show otherwise
+            function updateTouchVisibility() {
+                if (!touchEl) return;
+                const hide = (gameState === 'MENU' || gameState === 'PAUSED' || gameState === 'SHOP');
+                touchEl.style.opacity = hide ? '0' : '1';
+                touchEl.style.transition = 'opacity 0.2s';
+                // Keep pointer events for dpad/buttons even while faded? No, disable them.
+                const btns = touchEl.querySelectorAll('.touch-dpad, .touch-action-btn, .touch-pause-btn');
+                btns.forEach(b => b.style.pointerEvents = hide ? 'none' : 'all');
+                // Always show pause button when in game (even during match)
+                if (gameState === 'PAUSED') {
+                    // Let the pause menu handle interaction
+                }
+            }
+            // Poll visibility (lightweight, runs with game loop)
+            setInterval(updateTouchVisibility, 200);
+        })();
 
         user = { uid: 'local' };
         scanSlots();
