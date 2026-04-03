@@ -465,54 +465,65 @@
             color: #FFD700; font-size: 12px; text-shadow: 2px 2px 0 #000; margin-bottom: 5px; text-align: center;
         }
 
-        /* --- Mobile Touch Controls --- */
+        /* --- Mobile Joystick Controls --- */
         #touch-controls {
             display: none;
             position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 140px;
+            inset: 0;
             z-index: 900;
             pointer-events: none;
             user-select: none;
             -webkit-user-select: none;
         }
 
-        #touch-controls .touch-btn {
+        #joystick-zone {
             pointer-events: auto;
             position: absolute;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.15);
-            border: 2px solid rgba(255, 255, 255, 0.35);
-            border-radius: 14px;
-            color: rgba(255, 255, 255, 0.75);
-            font-family: 'Press Start 2P', cursive;
-            font-size: 22px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-            backdrop-filter: blur(2px);
-            -webkit-backdrop-filter: blur(2px);
-            transition: background 0.08s, transform 0.08s;
+            bottom: 10px;
+            left: 10px;
+            width: 160px;
+            height: 160px;
             touch-action: none;
         }
 
-        #touch-controls .touch-btn.active {
-            background: rgba(255, 255, 255, 0.35);
-            transform: scale(0.93);
+        #joystick-base {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.2);
         }
 
-        /* Left side: D-pad style */
-        #touch-left { bottom: 16px; left: 12px; width: 72px; height: 72px; font-size: 26px; }
-        #touch-right { bottom: 16px; left: 100px; width: 72px; height: 72px; font-size: 26px; }
+        #joystick-thumb {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.25);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: background 0.1s;
+        }
 
-        /* Right side: Jump (big) */
-        #touch-jump { bottom: 16px; right: 12px; width: 100px; height: 100px; font-size: 14px; border-radius: 50%; }
+        #joystick-thumb.active {
+            background: rgba(255, 255, 255, 0.45);
+        }
 
-        /* Ladder up/down (smaller, above jump) */
-        #touch-climb-up { bottom: 90px; right: 130px; width: 52px; height: 52px; font-size: 16px; }
-        #touch-climb-down { bottom: 24px; right: 130px; width: 52px; height: 52px; font-size: 16px; }
+        /* Direction indicators */
+        .joy-arrow {
+            position: absolute;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.25);
+            font-family: 'Press Start 2P', cursive;
+            pointer-events: none;
+        }
+        .joy-arrow.up { top: 6px; left: 50%; transform: translateX(-50%); }
+        .joy-arrow.down { bottom: 6px; left: 50%; transform: translateX(-50%); }
+        .joy-arrow.left { left: 8px; top: 50%; transform: translateY(-50%); }
+        .joy-arrow.right { right: 8px; top: 50%; transform: translateY(-50%); }
+        .joy-arrow.lit { color: rgba(255, 255, 255, 0.8); }
 
         @media (pointer: coarse) {
             #touch-controls { display: block; }
@@ -558,13 +569,17 @@
 
     <div id="save-status">Connecting...</div>
 
-    <!-- Mobile Touch Controls -->
+    <!-- Mobile Joystick -->
     <div id="touch-controls">
-        <div id="touch-left" class="touch-btn" data-key="ArrowLeft">&#9664;</div>
-        <div id="touch-right" class="touch-btn" data-key="ArrowRight">&#9654;</div>
-        <div id="touch-jump" class="touch-btn" data-key="ArrowUp">JUMP</div>
-        <div id="touch-climb-up" class="touch-btn" data-key="w">&#9650;</div>
-        <div id="touch-climb-down" class="touch-btn" data-key="s">&#9660;</div>
+        <div id="joystick-zone">
+            <div id="joystick-base">
+                <span class="joy-arrow up" id="joy-up">&#9650;</span>
+                <span class="joy-arrow down" id="joy-down">&#9660;</span>
+                <span class="joy-arrow left" id="joy-left">&#9664;</span>
+                <span class="joy-arrow right" id="joy-right">&#9654;</span>
+            </div>
+            <div id="joystick-thumb"></div>
+        </div>
     </div>
 
     <!-- MAIN MENU (Hidden by default until loaded) -->
@@ -2215,7 +2230,7 @@ window.goToMenu = goToMenu;
 document.addEventListener('click', function() { if (AudioSys.ctx && AudioSys.ctx.state === 'suspended') AudioSys.ctx.resume(); if (gameState === 'MENU' && !AudioSys.isPlaying) AudioSys.startTitleMusic(); if (soundHint) soundHint.style.display = 'none'; }, { once: false });
 initAuth();
 
-// --- Mobile Touch Controls ---
+// --- Mobile Joystick Controls ---
 (function() {
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (!isTouchDevice) return;
@@ -2224,27 +2239,95 @@ initAuth();
     if (!touchControls) return;
     touchControls.style.display = 'block';
 
-    const touchBtns = touchControls.querySelectorAll('.touch-btn');
+    const zone = document.getElementById('joystick-zone');
+    const thumb = document.getElementById('joystick-thumb');
+    const arrows = { up: document.getElementById('joy-up'), down: document.getElementById('joy-down'), left: document.getElementById('joy-left'), right: document.getElementById('joy-right') };
 
-    function handleTouchStart(e) {
-        e.preventDefault();
-        const key = e.currentTarget.dataset.key;
-        if (key && keys.hasOwnProperty(key)) keys[key] = true;
-        e.currentTarget.classList.add('active');
+    const DEAD_ZONE = 0.2; // fraction of radius
+    let activeTouch = null;
+    let baseRect = null;
+    let centerX = 0, centerY = 0, radius = 0;
+
+    function recalcBase() {
+        baseRect = zone.getBoundingClientRect();
+        centerX = baseRect.left + baseRect.width / 2;
+        centerY = baseRect.top + baseRect.height / 2;
+        radius = baseRect.width / 2;
     }
 
-    function handleTouchEnd(e) {
-        e.preventDefault();
-        const key = e.currentTarget.dataset.key;
-        if (key && keys.hasOwnProperty(key)) keys[key] = false;
-        e.currentTarget.classList.remove('active');
+    function updateJoystick(touchX, touchY) {
+        let dx = touchX - centerX;
+        let dy = touchY - centerY;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        // Clamp to radius
+        if (dist > radius) { dx = dx / dist * radius; dy = dy / dist * radius; dist = radius; }
+        // Move thumb visual
+        thumb.style.left = (baseRect.width / 2 + dx) + 'px';
+        thumb.style.top = (baseRect.height / 2 + dy) + 'px';
+        thumb.style.transform = 'translate(-50%, -50%)';
+        thumb.classList.add('active');
+
+        const norm = dist / radius;
+        // Determine active directions
+        const goLeft = (dx < 0 && norm > DEAD_ZONE);
+        const goRight = (dx > 0 && norm > DEAD_ZONE);
+        const goUp = (dy < 0 && norm > DEAD_ZONE && Math.abs(dy) > Math.abs(dx) * 0.5);
+        const goDown = (dy > 0 && norm > DEAD_ZONE && Math.abs(dy) > Math.abs(dx) * 0.5);
+
+        keys.ArrowLeft = goLeft; keys.a = goLeft;
+        keys.ArrowRight = goRight; keys.d = goRight;
+        keys.ArrowUp = goUp; keys.w = goUp;
+        keys.ArrowDown = goDown; keys.s = goDown;
+
+        // Light up arrows
+        arrows.left.classList.toggle('lit', goLeft);
+        arrows.right.classList.toggle('lit', goRight);
+        arrows.up.classList.toggle('lit', goUp);
+        arrows.down.classList.toggle('lit', goDown);
     }
 
-    touchBtns.forEach(btn => {
-        btn.addEventListener('touchstart', handleTouchStart, { passive: false });
-        btn.addEventListener('touchend', handleTouchEnd, { passive: false });
-        btn.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-    });
+    function resetJoystick() {
+        activeTouch = null;
+        thumb.style.left = '50%'; thumb.style.top = '50%';
+        thumb.style.transform = 'translate(-50%, -50%)';
+        thumb.classList.remove('active');
+        keys.ArrowLeft = false; keys.a = false;
+        keys.ArrowRight = false; keys.d = false;
+        keys.ArrowUp = false; keys.w = false;
+        keys.ArrowDown = false; keys.s = false;
+        Object.values(arrows).forEach(a => a.classList.remove('lit'));
+    }
+
+    zone.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (activeTouch !== null) return; // only one joystick touch
+        recalcBase();
+        const t = e.changedTouches[0];
+        activeTouch = t.identifier;
+        updateJoystick(t.clientX, t.clientY);
+    }, { passive: false });
+
+    zone.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        for (const t of e.changedTouches) {
+            if (t.identifier === activeTouch) {
+                updateJoystick(t.clientX, t.clientY);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    zone.addEventListener('touchend', function(e) {
+        for (const t of e.changedTouches) {
+            if (t.identifier === activeTouch) { resetJoystick(); break; }
+        }
+    }, { passive: false });
+
+    zone.addEventListener('touchcancel', function(e) {
+        for (const t of e.changedTouches) {
+            if (t.identifier === activeTouch) { resetJoystick(); break; }
+        }
+    }, { passive: false });
 
     // Prevent scroll/zoom on the game container
     const gameContainer = document.getElementById('game-container');
