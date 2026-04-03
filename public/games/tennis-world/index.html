@@ -840,16 +840,21 @@
                 ? `<div style="display:flex; gap:8px; align-items:center;"><div class="text-blue-400 text-[8px] border border-blue-400/40 px-3 py-2">LOAD</div><div class="slot-delete-btn" style="color:#ef4444; font-size:8px; border:1px solid rgba(239,68,68,0.4); padding:4px 8px; cursor:pointer; font-family:'Press Start 2P',cursive;">DEL</div></div>`
                 : `<div class="text-blue-400 text-[8px] border border-blue-400/40 px-3 py-2">CREATE</div>`;
             card.innerHTML = info + actions;
-            card.onclick = (e) => { if (e.target.closest('.slot-delete-btn')) return; if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); musicPlaying = true; loadSlotData(i); };
+            const slotIdx = i;
+            function handleSlotClick(e) { if (e.target.closest('.slot-delete-btn')) return; if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); musicPlaying = true; loadSlotData(slotIdx); }
+            card.onclick = handleSlotClick;
+            card.addEventListener('touchend', function(e) { e.preventDefault(); handleSlotClick(e); }, { passive: false });
             if (data) {
                 const delBtn = card.querySelector('.slot-delete-btn');
                 const slotNum = i;
-                delBtn.onclick = (e) => {
+                function handleDel(e) {
                     e.stopPropagation();
                     if (delBtn.dataset.confirm) { deleteSlot(slotNum); return; }
                     delBtn.dataset.confirm = '1'; delBtn.innerText = 'SURE?'; delBtn.style.borderColor = '#ef4444'; delBtn.style.color = '#fff'; delBtn.style.background = '#991b1b';
                     setTimeout(() => { delBtn.removeAttribute('data-confirm'); delBtn.innerText = 'DEL'; delBtn.style.borderColor = 'rgba(239,68,68,0.4)'; delBtn.style.color = '#ef4444'; delBtn.style.background = ''; }, 2000);
-                };
+                }
+                delBtn.onclick = handleDel;
+                delBtn.addEventListener('touchend', function(e) { e.preventDefault(); e.stopPropagation(); handleDel(e); }, { passive: false });
             }
             container.appendChild(card);
         }
@@ -1755,7 +1760,9 @@
         
         const bindUI = (id, fn) => {
             const el = document.getElementById(id);
-            if (el) el.onclick = fn;
+            if (!el) return;
+            el.onclick = fn;
+            el.addEventListener('touchend', function(e) { e.preventDefault(); fn(e); }, { passive: false });
         };
 
         bindUI('dialog-confirm-btn', () => { document.getElementById('dialog-rematch-btn').style.display = 'none'; handleDialogAction(); });
@@ -1949,7 +1956,8 @@
                 const hide = (gameState === 'MENU' || gameState === 'PAUSED' || gameState === 'SHOP');
                 touchEl.style.opacity = hide ? '0' : '1';
                 touchEl.style.transition = 'opacity 0.2s';
-                // Keep pointer events for dpad/buttons even while faded? No, disable them.
+                touchEl.style.display = hide ? 'none' : 'block';
+                // Disable all pointer events when hidden
                 const btns = touchEl.querySelectorAll('.touch-dpad, .touch-action-btn, .touch-pause-btn');
                 btns.forEach(b => b.style.pointerEvents = hide ? 'none' : 'all');
                 // Always show pause button when in game (even during match)
