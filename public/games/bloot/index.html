@@ -1215,8 +1215,7 @@ function updateQuestProgress(type, amount) {
                 q.progress += amount;
                 if (q.progress > q.target) q.progress = q.target;
                 changed = true;
-            }
-            if (type.startsWith('win_') && q.type === 'win_total') {
+            } else if (type.startsWith('win_') && q.type === 'win_total') {
                 q.progress += amount;
                 if (q.progress > q.target) q.progress = q.target;
                 changed = true;
@@ -1258,7 +1257,7 @@ function drawPreview() {
         drawStickman(previewCtx, 28, 20, 25, 25, true, char, anim);
         charNameDisplay.innerText = char.name;
     }
-    requestAnimationFrame(drawPreview);
+    if (gameState === 'MENU') requestAnimationFrame(drawPreview);
 }
 requestAnimationFrame(drawPreview);
 
@@ -1990,7 +1989,7 @@ function initGame() {
     // Use dynamic spawn points
     cpu = new Entity(gameLevel.spawnCpu.x, gameLevel.spawnCpu.y, 25, 25, randomCpu.id, true);
     
-    particles = []; timeLeft = 90;
+    particles = []; timeLeft = 90; cameraY = 0;
     startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden');
     
     gameState = 'COUNTDOWN';
@@ -2019,8 +2018,9 @@ function endGame(winner) {
 
 function goToMenu() {
     gameState = 'MENU'; AudioSys.stopMusic(); AudioSys.startTitleMusic();
-    gameOverScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); updateHUD();
+    gameOverScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); updateHUD(); updateMapLock();
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "#202028"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    requestAnimationFrame(drawPreview);
 }
 
 function gameLoop(timestamp) {
@@ -2066,7 +2066,7 @@ function gameLoop(timestamp) {
     player.update(); 
     
     player.draw(); cpu.draw();
-    particles.forEach((p, index) => { p.update(); p.draw(); if (p.life <= 0) particles.splice(index, 1); });
+    particles = particles.filter(p => { p.update(); p.draw(); return p.life > 0; });
     
     // DRAW STAR LAST (Top Layer)
     gameLevel.drawStar();
@@ -2085,6 +2085,7 @@ function gameLoop(timestamp) {
 // --- UI Handlers ---
 window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
 window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+window.addEventListener('blur', () => { for (let k in keys) keys[k] = false; });
 diffButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
         diffButtons.forEach(b => b.classList.remove('selected')); e.target.classList.add('selected'); currentDifficulty = e.target.dataset.diff;
@@ -2093,14 +2094,7 @@ diffButtons.forEach(btn => {
 mapBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
         const map = e.currentTarget.dataset.map;
-        if (map === 'skyscraper' && playerWins < 25) { 
-            // alert("You need 25 Wins!"); // Removed alert as tooltip explains it
-            return; 
-        } 
-        if (map === 'volcano' && playerWins < 50) { 
-            // alert("You need 50 Wins!"); 
-            return; 
-        }
+        if (e.currentTarget.classList.contains('locked')) return;
         mapBtns.forEach(b => b.classList.remove('selected'));
         e.currentTarget.classList.add('selected');
         currentMap = map;
@@ -2125,7 +2119,7 @@ randomCharBtn.addEventListener('click', () => { selectedCharIndex = -1; });
 window.initGame = initGame;
 window.goToMenu = goToMenu;
 
-document.addEventListener('click', function() { if (AudioSys.ctx && AudioSys.ctx.state === 'suspended') AudioSys.ctx.resume(); if (gameState === 'MENU' && !AudioSys.isPlaying) AudioSys.startTitleMusic(); }, { once: false });
+document.addEventListener('click', function() { if (AudioSys.ctx && AudioSys.ctx.state === 'suspended') AudioSys.ctx.resume(); if (gameState === 'MENU' && !AudioSys.isPlaying) AudioSys.startTitleMusic(); if (soundHint) soundHint.style.display = 'none'; }, { once: false });
 initAuth();
 
 </script>
