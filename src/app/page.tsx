@@ -9,6 +9,7 @@ import {
   updatePlayTime,
   getStats,
   getLeaderboard,
+  addLeaderboardEntry,
 } from "@/lib/storage";
 
 // --- Icons (inline SVGs) ---
@@ -467,6 +468,22 @@ function GamePlayer({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data && e.data.type === "imaginex-score") {
+        const profile = getProfile();
+        addLeaderboardEntry({
+          nickname: profile?.nickname || e.data.nickname || "Player",
+          gameId: e.data.gameId,
+          score: e.data.score,
+          date: Date.now(),
+        });
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, []);
 
   return (

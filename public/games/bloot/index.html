@@ -525,6 +525,32 @@
         .joy-arrow.right { right: 8px; top: 50%; transform: translateY(-50%); }
         .joy-arrow.lit { color: rgba(255, 255, 255, 0.8); }
 
+        #jump-btn {
+            pointer-events: auto;
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.75);
+            font-family: 'Press Start 2P', cursive;
+            font-size: 13px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            touch-action: none;
+            transition: background 0.08s, transform 0.08s;
+        }
+
+        #jump-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.93);
+        }
+
         @media (pointer: coarse) {
             #touch-controls { display: block; }
         }
@@ -569,7 +595,7 @@
 
     <div id="save-status">Connecting...</div>
 
-    <!-- Mobile Joystick -->
+    <!-- Mobile Joystick + Jump -->
     <div id="touch-controls">
         <div id="joystick-zone">
             <div id="joystick-base">
@@ -580,6 +606,7 @@
             </div>
             <div id="joystick-thumb"></div>
         </div>
+        <div id="jump-btn">JUMP</div>
     </div>
 
     <!-- MAIN MENU (Hidden by default until loaded) -->
@@ -749,7 +776,7 @@ const COLORS = {
     portalInner: '#9C27B0', portalOuter: '#E1BEE7', star: '#FFD700', coin: '#FFD700', diamond: '#00E5FF'
 };
 
-const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false };
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, jump: false };
 
 // --- DOM Elements ---
 const saveStatus = document.getElementById('save-status');
@@ -1755,12 +1782,14 @@ class Entity {
     }
     inputLogic() {
         const left = keys.ArrowLeft || keys.a; const right = keys.ArrowRight || keys.d;
-        const up = keys.ArrowUp || keys.w; const down = keys.ArrowDown || keys.s;
+        const climb = keys.w || keys.s || keys.ArrowUp || keys.ArrowDown;
+        const climbUp = keys.ArrowUp || keys.w; const climbDown = keys.ArrowDown || keys.s;
+        const jump = keys.ArrowUp || keys.jump;
         const ladderSpeed = 3;
         if (left) { this.vx -= this.runSpeed; this.facingRight = false; }
         if (right) { this.vx += this.runSpeed; this.facingRight = true; }
-        if (this.onLadder) { if (up) this.y -= ladderSpeed; if (down) this.y += ladderSpeed; }
-        else { if (up && this.isGrounded) this.vy = this.jumpPower; }
+        if (this.onLadder) { if (climbUp) this.y -= ladderSpeed; if (climbDown) this.y += ladderSpeed; }
+        else { if (jump && this.isGrounded) this.vy = this.jumpPower; }
     }
 
     aiLogic() {
@@ -2118,6 +2147,7 @@ function endGame(winner) {
         if (sessionDiamonds > 0) report += `, ${sessionDiamonds} Diamonds!`;
         lootReport.innerText = report;
         saveGameData(); updateHUD(); winsDisplay.innerText = "WINS: " + playerWins; winnerText.style.color = '#4CAF50'; AudioSys.playWinTune();
+        try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'bloot', score: playerWins, nickname: playerName || 'Player' }, '*'); } catch(e) {}
     } else {
         winnerText.innerText = 'CPU WINS!'; lootReport.innerText = "Loot Lost!"; winnerText.style.color = '#F44336'; AudioSys.playLoseTune();
     }
@@ -2276,8 +2306,8 @@ initAuth();
 
         keys.ArrowLeft = goLeft; keys.a = goLeft;
         keys.ArrowRight = goRight; keys.d = goRight;
-        keys.ArrowUp = goUp; keys.w = goUp;
-        keys.ArrowDown = goDown; keys.s = goDown;
+        keys.w = goUp;
+        keys.s = goDown; keys.ArrowDown = goDown;
 
         // Light up arrows
         arrows.left.classList.toggle('lit', goLeft);
@@ -2293,7 +2323,7 @@ initAuth();
         thumb.classList.remove('active');
         keys.ArrowLeft = false; keys.a = false;
         keys.ArrowRight = false; keys.d = false;
-        keys.ArrowUp = false; keys.w = false;
+        keys.w = false;
         keys.ArrowDown = false; keys.s = false;
         Object.values(arrows).forEach(a => a.classList.remove('lit'));
     }
@@ -2327,6 +2357,23 @@ initAuth();
         for (const t of e.changedTouches) {
             if (t.identifier === activeTouch) { resetJoystick(); break; }
         }
+    }, { passive: false });
+
+    // Jump button
+    const jumpBtn = document.getElementById('jump-btn');
+    jumpBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        keys.jump = true;
+        jumpBtn.classList.add('active');
+    }, { passive: false });
+    jumpBtn.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        keys.jump = false;
+        jumpBtn.classList.remove('active');
+    }, { passive: false });
+    jumpBtn.addEventListener('touchcancel', function(e) {
+        keys.jump = false;
+        jumpBtn.classList.remove('active');
     }, { passive: false });
 
     // Prevent scroll/zoom on the game container

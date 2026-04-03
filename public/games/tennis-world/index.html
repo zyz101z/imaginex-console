@@ -990,6 +990,7 @@
                 } else { const reward = (activeNPC && activeNPC.name === 'Leafy') ? 25 : 50; rep += reward; document.getElementById('rep-val').innerText = rep; document.getElementById('dialog-text').innerText = `Win! +${reward} Rep.`; if(activeNPC) activeNPC.action = 'EXIT'; }
             } else { if (gameState !== 'TUTORIAL_MATCH') matchStats.currentStreak = 0; document.getElementById('dialog-text').innerText = "Defeat!"; tournamentRound = 0; if(activeNPC) activeNPC.action = 'EXIT'; }
             saveGameData(); updateObjectiveHint(); checkAchievements();
+            if (w === 'p1') { try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tennis-world', score: rep, nickname: 'Player' }, '*'); } catch(e) {} }
             // Show rematch button for non-tournament, non-tutorial matches
             const rematchBtn = document.getElementById('dialog-rematch-btn');
             if (activeNPC && !tournamentRound && !['bully','bully_done'].includes(activeNPC.type)) { rematchBtn.style.display = 'inline-block'; } else { rematchBtn.style.display = 'none'; }
