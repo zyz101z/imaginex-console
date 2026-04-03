@@ -1625,6 +1625,7 @@ class Entity {
         this.charData = CHARACTERS.find(c => c.id === charId) || CHARACTERS[0];
         this.aiTarget = null; this.aiDecisionTimer = 0; this.stuckTimer = 0; this.lastX = x; this.lastY = y;
         this.lastTargetId = null; this.gapJumpCooldown = 0; this.gapJumpCount = 0; this.gapJumpX = 0;
+        this.jumpAttempts = 0; this.lastGroundY = y;
         this.spawnX = x; 
         this.spawnY = y;
         this.runSpeed = 0.6;
@@ -1731,8 +1732,38 @@ class Entity {
             let isTargetingLadder = false;
             if (this.aiTarget && gameLevel.ladders.includes(this.aiTarget)) { isTargetingLadder = true; }
             
+            // Track if we keep landing at the same height (failed jump attempts)
+            if (Math.abs(this.y - this.lastGroundY) < 5) {
+                this.jumpAttempts++;
+            } else {
+                this.jumpAttempts = 0;
+                this.lastGroundY = this.y;
+            }
+
+            // If we've failed to gain height after 4 jumps, find a ladder instead
+            if (this.jumpAttempts >= 4 && destY < this.y - 10) {
+                let nearestLadder = null;
+                let nearestDist = Infinity;
+                for (const l of gameLevel.ladders) {
+                    if (l.y + l.height >= this.y - 20 && l.y < this.y) {
+                        const d = Math.abs(this.x - l.x);
+                        if (d < nearestDist) { nearestDist = d; nearestLadder = l; }
+                    }
+                }
+                if (nearestLadder) {
+                    this.aiTarget = nearestLadder;
+                    this.jumpAttempts = 0;
+                    isTargetingLadder = true;
+                    destX = nearestLadder.x + nearestLadder.width / 2;
+                    destY = nearestLadder.y;
+                    // Recalculate moveDir for the ladder
+                    moveDir = 0;
+                    if (Math.abs(destX - this.x) > 15) { moveDir = this.x < destX ? 1 : -1; }
+                }
+            }
+
             // A. Vertical Ambition (only if gap cooldown allows)
-            if (destY < this.y - 10 && this.gapJumpCooldown <= 0) {
+            if (destY < this.y - 10 && this.gapJumpCooldown <= 0 && !isTargetingLadder) {
                  let jumpTolerance = 100;
                  if (currentMap === 'skyscraper') jumpTolerance = 150;
                  if (currentMap === 'volcano' && this.y < 0) jumpTolerance = 250;
@@ -1742,9 +1773,9 @@ class Entity {
 
             // CRITICAL FIX: NEVER jump if targeting a ladder, just walk to it.
             if (isTargetingLadder) { shouldJump = false; }
-            
+
             // B. Portal Magnetism
-            if (this.aiTarget && this.aiTarget.targetX !== undefined) { 
+            if (this.aiTarget && this.aiTarget.targetX !== undefined) {
                  if (Math.abs(this.x - this.aiTarget.x) < 50 && Math.abs(this.y - this.aiTarget.y) < 80) { shouldJump = true; }
             }
             // C. Random Jump
