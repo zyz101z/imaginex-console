@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BLOOT - Mountain Race</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -27,6 +27,7 @@
             width: 800px;
             height: 600px;
             background-color: #000;
+            transform-origin: top left;
         }
 
         canvas {
@@ -781,6 +782,28 @@ const musicFileInput = document.getElementById('music-file-input');
 const soundHint = document.getElementById('sound-hint'); // New Element
 
 // --- Loading Sequence Logic ---
+// --- Responsive scaling for mobile ---
+function scaleGameToFit() {
+    const container = document.getElementById('game-container');
+    if (!container) return;
+    const gameW = 800, gameH = 600;
+    const winW = window.innerWidth, winH = window.innerHeight;
+    const scale = Math.min(winW / (gameW + 8), winH / (gameH + 8));
+    if (scale < 1) {
+        document.body.style.justifyContent = 'flex-start';
+        document.body.style.alignItems = 'flex-start';
+        container.style.transform = 'scale(' + scale + ')';
+        container.style.marginLeft = ((winW - gameW * scale) / 2) + 'px';
+        container.style.marginTop = ((winH - gameH * scale) / 2) + 'px';
+    } else {
+        container.style.transform = '';
+        container.style.marginLeft = '';
+        container.style.marginTop = '';
+    }
+}
+scaleGameToFit();
+window.addEventListener('resize', scaleGameToFit);
+
 function bootToMenu() {
     setTimeout(() => {
         loadingScreen.classList.add('hidden');

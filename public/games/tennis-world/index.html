@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tennis World - Elemental Quest</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -26,6 +26,7 @@
             border: 6px solid #222;
             box-shadow: 0 0 60px rgba(0,0,0,0.9);
             background: #000;
+            transform-origin: top left;
         }
 
         canvas {
@@ -357,6 +358,28 @@
     const VOLCANO_PATH_WIDTH = 35;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+
+    // --- Responsive scaling for mobile ---
+    function scaleGameToFit() {
+        const wrapper = document.getElementById('game-wrapper');
+        if (!wrapper) return;
+        const gameW = 800, gameH = 600;
+        const winW = window.innerWidth, winH = window.innerHeight;
+        const scale = Math.min(winW / (gameW + 12), winH / (gameH + 12));
+        if (scale < 1) {
+            document.body.style.justifyContent = 'flex-start';
+            document.body.style.alignItems = 'flex-start';
+            wrapper.style.transform = 'scale(' + scale + ')';
+            wrapper.style.marginLeft = ((winW - gameW * scale) / 2) + 'px';
+            wrapper.style.marginTop = ((winH - gameH * scale) / 2) + 'px';
+        } else {
+            wrapper.style.transform = '';
+            wrapper.style.marginLeft = '';
+            wrapper.style.marginTop = '';
+        }
+    }
+    scaleGameToFit();
+    window.addEventListener('resize', scaleGameToFit);
     const worldBg = document.createElement('canvas');
     worldBg.width = WORLD_W; worldBg.height = WORLD_H;
     const wctx = worldBg.getContext('2d');
