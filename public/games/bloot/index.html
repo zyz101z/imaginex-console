@@ -1628,9 +1628,17 @@ class Entity {
         this.spawnX = x; 
         this.spawnY = y;
         this.runSpeed = 0.6;
-        if (this.isCpu && currentMap === 'skyscraper') this.runSpeed = 0.95;
+        if (this.isCpu && currentMap === 'skyscraper') {
+            if (currentDifficulty === 'EASY') this.runSpeed = 0.65;
+            else if (currentDifficulty === 'MEDIUM') this.runSpeed = 0.8;
+            else this.runSpeed = 0.95;
+        }
         this.jumpPower = -10;
-        if (this.isCpu && currentMap === 'skyscraper') this.jumpPower = -12;
+        if (this.isCpu && currentMap === 'skyscraper') {
+            if (currentDifficulty === 'EASY') this.jumpPower = -10.5;
+            else if (currentDifficulty === 'MEDIUM') this.jumpPower = -11;
+            else this.jumpPower = -12;
+        }
     }
     
     update() {
