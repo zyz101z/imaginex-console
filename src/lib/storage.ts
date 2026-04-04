@@ -79,7 +79,19 @@ export function getLeaderboard(gameId?: string): LeaderboardEntry[] {
 
 export function addLeaderboardEntry(entry: LeaderboardEntry): void {
   const entries = getLeaderboard();
-  entries.push(entry);
+  // Update existing entry for same player+game, or add new
+  const existing = entries.findIndex(
+    (e) => e.nickname === entry.nickname && e.gameId === entry.gameId
+  );
+  if (existing !== -1) {
+    // Only update if new score is higher
+    if (entry.score > entries[existing].score) {
+      entries[existing].score = entry.score;
+      entries[existing].date = entry.date;
+    }
+  } else {
+    entries.push(entry);
+  }
   // Keep top 100
   entries.sort((a, b) => b.score - a.score);
   const trimmed = entries.slice(0, 100);
