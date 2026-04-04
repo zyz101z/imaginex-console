@@ -526,43 +526,64 @@ function GamePlayer({
 }
 
 // --- Leaderboard View ---
+const GAME_SCORE_LABELS: Record<string, string> = {
+  bloot: "Wins",
+  "tennis-world": "REP",
+};
+
 function LeaderboardView() {
+  const [activeTab, setActiveTab] = useState<string>("bloot");
   const [entries, setEntries] = useState<ReturnType<typeof getLeaderboard>>([]);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
 
   useEffect(() => {
-    setEntries(getLeaderboard());
+    setEntries(getLeaderboard(activeTab));
     setProfile(getProfile());
-  }, []);
+  }, [activeTab]);
+
+  const scoreLabel = GAME_SCORE_LABELS[activeTab] || "Score";
+  const gameTitle = games.find((g) => g.id === activeTab)?.title || activeTab;
 
   return (
     <div className="fade-in h-full overflow-y-auto p-6">
       <h2 className="text-2xl font-bold mb-6 glow-text text-[var(--accent)]">
         Leaderboard
       </h2>
+
+      {/* Game tabs */}
+      <div className="flex gap-2 mb-6">
+        {games.filter((g) => g.status === "available").map((g) => (
+          <button
+            key={g.id}
+            onClick={() => setActiveTab(g.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeTab === g.id ? "bg-[var(--accent)]/20 text-[var(--accent)] border border-[var(--accent)]/30" : "bg-gray-800/40 text-gray-400 hover:text-gray-200"}`}
+          >
+            {g.title}
+          </button>
+        ))}
+      </div>
+
       {entries.length === 0 ? (
         <div className="text-center py-20">
-          <p className="text-gray-500 text-lg">No scores yet!</p>
-          <p className="text-gray-600 text-sm mt-2">Play some games to see scores here.</p>
+          <p className="text-gray-500 text-lg">No {gameTitle} scores yet!</p>
+          <p className="text-gray-600 text-sm mt-2">Play {gameTitle} to see {scoreLabel.toLowerCase()} here.</p>
         </div>
       ) : (
         <div className="max-w-2xl">
-          <div className="grid grid-cols-[40px_1fr_120px_100px] gap-2 text-sm text-gray-500 mb-3 px-4">
+          <div className="grid grid-cols-[40px_1fr_100px] gap-2 text-sm text-gray-500 mb-3 px-4">
             <span>#</span>
             <span>Player</span>
-            <span>Game</span>
-            <span className="text-right">Score</span>
+            <span className="text-right">{scoreLabel}</span>
           </div>
           {entries.slice(0, 50).map((entry, i) => (
             <div
               key={i}
-              className={`grid grid-cols-[40px_1fr_120px_100px] gap-2 items-center px-4 py-3 rounded-lg mb-1 ${entry.nickname === profile?.nickname ? "bg-[var(--accent)]/10 border border-[var(--accent)]/20" : "bg-gray-800/30"}`}
+              className={`grid grid-cols-[40px_1fr_100px] gap-2 items-center px-4 py-3 rounded-lg mb-1 ${entry.nickname === profile?.nickname ? "bg-[var(--accent)]/10 border border-[var(--accent)]/20" : "bg-gray-800/30"}`}
             >
               <span className={`font-bold ${i < 3 ? "text-[var(--accent)]" : "text-gray-500"}`}>
                 {i + 1}
               </span>
               <span className="font-medium">{entry.nickname}</span>
-              <span className="text-gray-400 text-sm">{entry.gameId}</span>
               <span className="text-right font-mono font-bold">{entry.score.toLocaleString()}</span>
             </div>
           ))}

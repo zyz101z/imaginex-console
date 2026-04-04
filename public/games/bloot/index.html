@@ -776,7 +776,7 @@ const COLORS = {
     portalInner: '#9C27B0', portalOuter: '#E1BEE7', star: '#FFD700', coin: '#FFD700', diamond: '#00E5FF'
 };
 
-const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, jump: false };
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, jump: false, joyUp: false, joyDown: false };
 
 // --- DOM Elements ---
 const saveStatus = document.getElementById('save-status');
@@ -1782,9 +1782,8 @@ class Entity {
     }
     inputLogic() {
         const left = keys.ArrowLeft || keys.a; const right = keys.ArrowRight || keys.d;
-        const climb = keys.w || keys.s || keys.ArrowUp || keys.ArrowDown;
-        const climbUp = keys.ArrowUp || keys.w; const climbDown = keys.ArrowDown || keys.s;
-        const jump = keys.ArrowUp || keys.jump;
+        const climbUp = keys.ArrowUp || keys.w || keys.joyUp; const climbDown = keys.ArrowDown || keys.s || keys.joyDown;
+        const jump = keys.ArrowUp || keys.w || keys.jump;
         const ladderSpeed = 3;
         if (left) { this.vx -= this.runSpeed; this.facingRight = false; }
         if (right) { this.vx += this.runSpeed; this.facingRight = true; }
@@ -2306,8 +2305,8 @@ initAuth();
 
         keys.ArrowLeft = goLeft; keys.a = goLeft;
         keys.ArrowRight = goRight; keys.d = goRight;
-        keys.w = goUp;
-        keys.s = goDown; keys.ArrowDown = goDown;
+        keys.joyUp = goUp;
+        keys.joyDown = goDown;
 
         // Light up arrows
         arrows.left.classList.toggle('lit', goLeft);
@@ -2323,8 +2322,8 @@ initAuth();
         thumb.classList.remove('active');
         keys.ArrowLeft = false; keys.a = false;
         keys.ArrowRight = false; keys.d = false;
-        keys.w = false;
-        keys.ArrowDown = false; keys.s = false;
+        keys.joyUp = false;
+        keys.joyDown = false;
         Object.values(arrows).forEach(a => a.classList.remove('lit'));
     }
 
