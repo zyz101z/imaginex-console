@@ -776,7 +776,7 @@ const COLORS = {
     portalInner: '#9C27B0', portalOuter: '#E1BEE7', star: '#FFD700', coin: '#FFD700', diamond: '#00E5FF'
 };
 
-const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, jump: false, joyUp: false, joyDown: false };
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, w: false, a: false, s: false, d: false, ' ': false, jump: false, joyUp: false, joyDown: false };
 
 // --- DOM Elements ---
 const saveStatus = document.getElementById('save-status');
@@ -1783,7 +1783,7 @@ class Entity {
     inputLogic() {
         const left = keys.ArrowLeft || keys.a; const right = keys.ArrowRight || keys.d;
         const climbUp = keys.ArrowUp || keys.w || keys.joyUp; const climbDown = keys.ArrowDown || keys.s || keys.joyDown;
-        const jump = keys.ArrowUp || keys.w || keys.jump;
+        const jump = keys[' '] || keys.jump;
         const ladderSpeed = 3;
         if (left) { this.vx -= this.runSpeed; this.facingRight = false; }
         if (right) { this.vx += this.runSpeed; this.facingRight = true; }
