@@ -11,6 +11,7 @@ import {
   getLeaderboard,
   addLeaderboardEntry,
 } from "@/lib/storage";
+import { containsProfanity } from "@/lib/profanity";
 
 // --- Icons (inline SVGs) ---
 function IconHome({ className }: { className?: string }) {
@@ -117,8 +118,19 @@ function BootScreen({ onDone }: { onDone: () => void }) {
 // --- Profile Setup Modal ---
 function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) {
   const [nickname, setNickname] = useState("");
+  const [error, setError] = useState("");
   const colors = ["#4fc3f7", "#f44336", "#66bb6a", "#ffa726", "#ab47bc", "#26c6da", "#ef5350", "#8d6e63"];
   const [selectedColor, setSelectedColor] = useState(colors[0]);
+
+  const handleSubmit = () => {
+    const name = nickname.trim();
+    if (!name) return;
+    if (containsProfanity(name)) {
+      setError("That name isn't allowed. Please choose another.");
+      return;
+    }
+    onSave({ nickname: name, avatarColor: selectedColor, createdAt: Date.now() });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 fade-in">
@@ -132,11 +144,14 @@ function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) 
         <input
           type="text"
           value={nickname}
-          onChange={(e) => setNickname(e.target.value.slice(0, 20))}
+          onChange={(e) => { setNickname(e.target.value.slice(0, 20)); setError(""); }}
           placeholder="Enter your name..."
-          className="w-full bg-[var(--background)] border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-[var(--accent)] focus:outline-none transition mb-6"
+          className={`w-full bg-[var(--background)] border rounded-lg px-4 py-3 text-white focus:outline-none transition ${error ? "border-red-500" : "border-gray-700 focus:border-[var(--accent)]"} mb-1`}
           autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
         />
+        {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
+        {!error && <div className="mb-5" />}
 
         <label className="block text-sm text-gray-300 mb-3">Avatar Color</label>
         <div className="flex gap-3 mb-8">
@@ -151,15 +166,7 @@ function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) 
         </div>
 
         <button
-          onClick={() => {
-            if (nickname.trim()) {
-              onSave({
-                nickname: nickname.trim(),
-                avatarColor: selectedColor,
-                createdAt: Date.now(),
-              });
-            }
-          }}
+          onClick={handleSubmit}
           disabled={!nickname.trim()}
           className="w-full py-3 rounded-xl font-bold text-black bg-[var(--accent)] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition"
         >
