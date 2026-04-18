@@ -461,11 +461,25 @@ function GamePlayer({
 
   useEffect(() => {
     startTimeRef.current = Date.now();
-    return () => {
+
+    const flush = () => {
       const seconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
       if (seconds > 0) {
         updatePlayTime(game.id, seconds);
+        startTimeRef.current = Date.now();
       }
+    };
+
+    const interval = window.setInterval(flush, 30_000);
+    const onPageHide = () => flush();
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onPageHide);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onPageHide);
+      flush();
     };
   }, [game.id]);
 
