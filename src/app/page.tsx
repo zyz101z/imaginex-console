@@ -481,7 +481,7 @@ function GamePlayer({
     const handler = (e: MessageEvent) => {
       if (e.data && e.data.type === "imaginex-score") {
         const profile = getProfile();
-        addLeaderboardEntry({
+        void addLeaderboardEntry({
           nickname: profile?.nickname || e.data.nickname || "Player",
           gameId: e.data.gameId,
           score: e.data.score,
@@ -540,12 +540,23 @@ const GAME_SCORE_LABELS: Record<string, string> = {
 
 function LeaderboardView() {
   const [activeTab, setActiveTab] = useState<string>("bloot");
-  const [entries, setEntries] = useState<ReturnType<typeof getLeaderboard>>([]);
+  const [entries, setEntries] = useState<Awaited<ReturnType<typeof getLeaderboard>>>([]);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setEntries(getLeaderboard(activeTab));
+    let cancelled = false;
+    setLoading(true);
     setProfile(getProfile());
+    getLeaderboard(activeTab).then((rows) => {
+      if (!cancelled) {
+        setEntries(rows);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab]);
 
   const scoreLabel = GAME_SCORE_LABELS[activeTab] || "Score";
@@ -570,7 +581,11 @@ function LeaderboardView() {
         ))}
       </div>
 
-      {entries.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-20">
+          <p className="text-gray-500 text-lg">Loading scores…</p>
+        </div>
+      ) : entries.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-gray-500 text-lg">No {gameTitle} scores yet!</p>
           <p className="text-gray-600 text-sm mt-2">Play {gameTitle} to see {scoreLabel.toLowerCase()} here.</p>
@@ -605,8 +620,13 @@ function ProfileView({ profile }: { profile: PlayerProfile }) {
   const [stats, setStats] = useState({ totalPlayTime: 0, gamesPlayed: 0, leaderboardEntries: 0, lastPlayed: 0 });
 
   useEffect(() => {
-    const s = getStats();
-    setStats(s);
+    let cancelled = false;
+    getStats().then((s) => {
+      if (!cancelled) setStats(s);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

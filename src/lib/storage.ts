@@ -63,46 +63,35 @@ export function updatePlayTime(gameId: string, seconds: number): void {
   saveGameData(gameId, save);
 }
 
-// Leaderboard (local for now)
-export function getLeaderboard(gameId?: string): LeaderboardEntry[] {
-  const entries: LeaderboardEntry[] = safeParse(
-    localStorage.getItem(`${STORAGE_PREFIX}leaderboard`),
-    []
-  );
-  if (gameId) {
-    return entries
-      .filter((e) => e.gameId === gameId)
-      .sort((a, b) => b.score - a.score);
+// Leaderboard (remote via /api/leaderboard — shared across all players)
+export async function getLeaderboard(gameId?: string): Promise<LeaderboardEntry[]> {
+  try {
+    const url = gameId
+      ? `/api/leaderboard?gameId=${encodeURIComponent(gameId)}`
+      : `/api/leaderboard`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
   }
-  return entries.sort((a, b) => b.score - a.score);
 }
 
-export function addLeaderboardEntry(entry: LeaderboardEntry): void {
-  const entries = getLeaderboard();
-  // Update existing entry for same player+game, or add new
-  const existing = entries.findIndex(
-    (e) => e.nickname === entry.nickname && e.gameId === entry.gameId
-  );
-  if (existing !== -1) {
-    // Only update if new score is higher
-    if (entry.score > entries[existing].score) {
-      entries[existing].score = entry.score;
-      entries[existing].date = entry.date;
-    }
-  } else {
-    entries.push(entry);
+export async function addLeaderboardEntry(entry: LeaderboardEntry): Promise<void> {
+  try {
+    await fetch(`/api/leaderboard`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    });
+  } catch {
+    // Swallow: leaderboard is best-effort, don't break gameplay.
   }
-  // Keep top 100
-  entries.sort((a, b) => b.score - a.score);
-  const trimmed = entries.slice(0, 100);
-  localStorage.setItem(
-    `${STORAGE_PREFIX}leaderboard`,
-    JSON.stringify(trimmed)
-  );
 }
 
 // Stats
-export function getStats() {
+export async function getStats() {
   const profile = getProfile();
   const allKeys = Object.keys(localStorage).filter((k) =>
     k.startsWith(`${STORAGE_PREFIX}save_`)
@@ -120,11 +109,18 @@ export function getStats() {
     }
   }
 
+  const nickname = profile?.nickname;
+  let myEntries = 0;
+  if (nickname) {
+    const all = await getLeaderboard();
+    myEntries = all.filter((e) => e.nickname === nickname).length;
+  }
+
   return {
     profile,
     totalPlayTime,
     gamesPlayed,
     lastPlayed,
-    leaderboardEntries: getLeaderboard().length,
+    leaderboardEntries: myEntries,
   };
 }
