@@ -162,10 +162,12 @@
 <div id="wrap">
   <canvas id="c" width="800" height="600"></canvas>
   <audio id="bgm" src="audio/Froggo_Act1.mp3" loop preload="auto"></audio>
+  <audio id="bgm2" src="audio/Froggo_Act2_Cyber_Swamp.mp3" loop preload="auto"></audio>
   <div class="hud hidden" id="hud">
     <div>DROPLETS <span id="dropletCount">0</span></div>
     <div>TIME <span id="timer">0.0</span></div>
     <div>SCORE <span id="scoreLive">0</span></div>
+    <div>LIVES <span id="livesCount">3</span></div>
   </div>
 
   <div class="overlay title-bg active" id="titleScreen">
@@ -377,7 +379,191 @@ function sfxGoal() {
 // Background music
 const bgm = document.getElementById('bgm');
 if (bgm) bgm.volume = 0.6;
+const bgm2 = document.getElementById('bgm2');
+if (bgm2) bgm2.volume = 0.6;
+let cyberMusic = null;    // Lazily initialized synth fallback for Zone 2 (used only if MP3 fails)
+
+function createCyberMusic() {
+  const ctx = ensureAudio();
+  if (!ctx) return null;
+  const master = ctx.createGain();
+  master.gain.value = 0.45;
+  const lpf = ctx.createBiquadFilter();
+  lpf.type = 'lowpass'; lpf.frequency.value = 6000; lpf.Q.value = 0.6;
+  master.connect(lpf).connect(ctx.destination);
+
+  const BPM = 126;
+  const BEAT = 60 / BPM;
+  const SUB = BEAT / 4;            // 16th note
+  const LOOP_LEN_16 = 64;          // 4 bars, 16 sixteenths each
+
+  // C natural minor: C Eb F G Ab Bb
+  // Bass line per 16th step (null = rest)
+  const bassLine = new Array(LOOP_LEN_16).fill(null);
+  // Bar 1 Cm: C2(65.4), G2(98)
+  for (let i = 0; i < 16; i += 2) bassLine[i]     = i % 4 === 0 ? 65.41 : 98.00;
+  // Bar 2 Abm: Ab2(103.8), Eb3(155.6)
+  for (let i = 0; i < 16; i += 2) bassLine[16 + i] = i % 4 === 0 ? 103.83 : 155.56;
+  // Bar 3 Fm: F2(87.3), C3(130.8)
+  for (let i = 0; i < 16; i += 2) bassLine[32 + i] = i % 4 === 0 ? 87.31 : 130.81;
+  // Bar 4 G: G2(98), D3(146.8)
+  for (let i = 0; i < 16; i += 2) bassLine[48 + i] = i % 4 === 0 ? 98.00 : 146.83;
+
+  // Lead (square) — sparse syncopated melody in C minor
+  const leadLine = new Array(LOOP_LEN_16).fill(null);
+  const leadPlace = (step, freq, dur) => { leadLine[step] = { freq, dur }; };
+  leadPlace(0,  622.25, SUB * 3);   // Eb5
+  leadPlace(4,  698.46, SUB * 2);   // F5
+  leadPlace(6,  622.25, SUB * 2);   // Eb5
+  leadPlace(10, 783.99, SUB * 4);   // G5
+  leadPlace(16, 830.61, SUB * 3);   // Ab5
+  leadPlace(20, 932.33, SUB * 3);   // Bb5
+  leadPlace(26, 783.99, SUB * 3);   // G5
+  leadPlace(32, 698.46, SUB * 2);   // F5
+  leadPlace(34, 622.25, SUB * 2);   // Eb5
+  leadPlace(38, 783.99, SUB * 4);   // G5
+  leadPlace(44, 932.33, SUB * 3);   // Bb5
+  leadPlace(48, 932.33, SUB * 2);   // Bb5
+  leadPlace(52, 783.99, SUB * 2);   // G5
+  leadPlace(56, 698.46, SUB * 6);   // F5 long
+
+  // Drums
+  const kickSteps  = new Set([0, 6, 8, 16, 22, 24, 32, 38, 40, 48, 54, 56]);
+  const snareSteps = new Set([4, 12, 20, 28, 36, 44, 52, 60]);
+  const hatSteps   = new Set();
+  for (let i = 0; i < LOOP_LEN_16; i += 2) hatSteps.add(i);
+
+  // Voices
+  function playKick(at) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(150, at);
+    o.frequency.exponentialRampToValueAtTime(42, at + 0.16);
+    g.gain.setValueAtTime(0.55, at);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 0.22);
+    o.connect(g).connect(master);
+    o.start(at); o.stop(at + 0.25);
+  }
+  function playSnare(at) {
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.14), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.2);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.value = 0.28;
+    src.connect(bp).connect(g).connect(master);
+    src.start(at);
+    // tonal body
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(220, at);
+    og.gain.setValueAtTime(0.18, at);
+    og.gain.exponentialRampToValueAtTime(0.001, at + 0.08);
+    o.connect(og).connect(master);
+    o.start(at); o.stop(at + 0.1);
+  }
+  function playHat(at) {
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.04), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6500;
+    const g = ctx.createGain(); g.gain.value = 0.11;
+    src.connect(hp).connect(g).connect(master);
+    src.start(at);
+  }
+  function playBass(at, freq) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.26, at + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.001, at + SUB * 1.8);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 1.5;
+    o.connect(lp).connect(g).connect(master);
+    o.start(at); o.stop(at + SUB * 2);
+  }
+  function playLead(at, freq, dur) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.14, at + 0.008);
+    g.gain.linearRampToValueAtTime(0.07, at + dur * 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, at + dur);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
+    o.connect(hp).connect(g).connect(master);
+    o.start(at); o.stop(at + dur + 0.05);
+    // Light detuned harmony for thickness
+    const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o2.type = 'square';
+    o2.frequency.setValueAtTime(freq * 1.01, at);
+    g2.gain.setValueAtTime(0, at);
+    g2.gain.linearRampToValueAtTime(0.06, at + 0.015);
+    g2.gain.exponentialRampToValueAtTime(0.001, at + dur);
+    o2.connect(g2).connect(master);
+    o2.start(at); o2.stop(at + dur + 0.05);
+  }
+
+  let running = false;
+  let scheduledUpTo = 0;
+  let stepCounter = 0;
+  let timerId = null;
+
+  function tick() {
+    if (!running) return;
+    const now = ctx.currentTime;
+    const LOOKAHEAD = 0.25;
+    while (scheduledUpTo < now + LOOKAHEAD) {
+      const step = stepCounter % LOOP_LEN_16;
+      const at = scheduledUpTo;
+      const b = bassLine[step]; if (b) playBass(at, b);
+      const l = leadLine[step]; if (l) playLead(at, l.freq, l.dur);
+      if (kickSteps.has(step))  playKick(at);
+      if (snareSteps.has(step)) playSnare(at);
+      if (hatSteps.has(step))   playHat(at);
+      scheduledUpTo += SUB;
+      stepCounter += 1;
+    }
+    timerId = setTimeout(tick, 60);
+  }
+
+  return {
+    start() {
+      if (running) return;
+      running = true;
+      scheduledUpTo = ctx.currentTime + 0.08;
+      stepCounter = 0;
+      tick();
+    },
+    stop() {
+      running = false;
+      if (timerId) { clearTimeout(timerId); timerId = null; }
+    },
+  };
+}
+
 function startMusic() {
+  if (currentZone === 1) {
+    try { bgm && bgm.pause(); } catch (e) {}
+    if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+    if (bgm2) {
+      const p = bgm2.play();
+      if (p && p.catch) p.catch(() => {
+        // If MP3 fails for any reason, fall back to the synth loop so Zone 2 isn't silent.
+        if (!cyberMusic) cyberMusic = createCyberMusic();
+        if (cyberMusic && cyberMusic.start) cyberMusic.start();
+      });
+      return;
+    }
+    // No MP3 element at all — use synth
+    if (!cyberMusic) cyberMusic = createCyberMusic();
+    if (cyberMusic && cyberMusic.start) cyberMusic.start();
+    return;
+  }
+  // Zone 1 music — stop Zone 2 sources if running
+  if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+  try { bgm2 && bgm2.pause(); } catch (e) {}
   if (!bgm) return;
   bgm.play().catch(() => {});
 }
@@ -422,6 +608,80 @@ function sfxLaunch() {
   o.start(now); o.stop(now + 0.26);
 }
 
+function sfxOneUp() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  // Classic "1UP" fanfare: C5-E5-G5-C6 fast ascending
+  const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
+  notes.forEach((f, i) => {
+    const t = now + i * 0.06;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    o.connect(g).connect(ctx.destination);
+    o.start(t); o.stop(t + 0.28);
+  });
+}
+
+function sfxCheckpoint() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  // Rising chime: G5 B5 D6
+  const notes = [784, 988, 1175];
+  notes.forEach((f, i) => {
+    const t = now + i * 0.07;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g).connect(ctx.destination);
+    o.start(t); o.stop(t + 0.32);
+  });
+}
+
+function sfxZap() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(520, now);
+  o.frequency.exponentialRampToValueAtTime(220, now + 0.18);
+  g.gain.setValueAtTime(0.14, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 180;
+  o.connect(hp).connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.22);
+}
+
+function sfxShock() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const bufSize = ctx.sampleRate * 0.18;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 3;
+  const g = ctx.createGain(); g.gain.value = 0.12;
+  src.connect(bp).connect(g).connect(ctx.destination);
+  src.start(now);
+}
+
+function sfxSaw() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(120, now);
+  g.gain.setValueAtTime(0.08, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.13);
+}
+
 function sfxFirework() {
   const ctx = ensureAudio(); if (!ctx) return;
   const now = ctx.currentTime;
@@ -464,16 +724,39 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'win' || state === 'play')) {
-    resetLevel();
-    state = 'play';
-    showScreen('hud');
-    startMusic();
+    if (state === 'win' && winFx && winFx.hasNextZone && !winFx.isFinalZone) {
+      // Advance to next zone instead of restarting
+      ensureAudio();
+      startZone(winFx.clearedZoneIdx + 1);
+      showScreen('hud');
+    } else {
+      resetLevel();
+      state = 'play';
+      showScreen('hud');
+      startMusic();
+    }
   }
   if (e.key === 'Enter' && state === 'title') {
     state = 'play';
     showScreen('hud');
     ensureAudio();
     startMusic();
+  }
+  // Zone select from title (numeric keys)
+  if (state === 'title' && (e.key === '1' || e.key === '2')) {
+    const zIdx = parseInt(e.key, 10) - 1;
+    if (zIdx < getUnlockedZones() && zIdx >= 0) {
+      ensureAudio();
+      if (zIdx === 0) {
+        state = 'play';
+        showScreen('hud');
+        resetLevel();
+        startMusic();
+      } else {
+        showScreen('hud');
+        startZone(zIdx);
+      }
+    }
   }
 });
 window.addEventListener('keyup', (e) => {
@@ -497,6 +780,10 @@ function startGameFromInput() {
     showScreen('hud');
     ensureAudio();
     startMusic();
+  } else if (state === 'win' && winFx && winFx.hasNextZone && !winFx.isFinalZone) {
+    ensureAudio();
+    startZone(winFx.clearedZoneIdx + 1);
+    showScreen('hud');
   } else if (state === 'gameover' || state === 'win') {
     resetLevel();
     state = 'play';
@@ -587,71 +874,531 @@ if (isTouchDevice) {
   if (goBlink) goBlink.textContent = 'TAP TO TRY AGAIN';
 }
 
-// ---------- Level data ----------
-// Ground surface: segments with top-line endpoints. Fills downward.
-const ground = [
-  { x1:    0, x2:  500, y1: 520, y2: 520 },
-  { x1:  500, x2:  700, y1: 520, y2: 440 },
-  { x1:  700, x2: 1100, y1: 440, y2: 440 },
-  { x1: 1100, x2: 1260, y1: 440, y2: 540 },
-  { x1: 1260, x2: 1700, y1: 540, y2: 540 },
-  // pit 1700-1900 (water)
-  { x1: 1900, x2: 2400, y1: 500, y2: 500 },
-  { x1: 2400, x2: 2700, y1: 500, y2: 380 },
-  { x1: 2700, x2: 3100, y1: 380, y2: 380 },
-  { x1: 3100, x2: 3300, y1: 380, y2: 580 },
-  { x1: 3300, x2: 3800, y1: 580, y2: 580 },
-  { x1: 3800, x2: 4100, y1: 580, y2: 520 },
-  { x1: 4100, x2: 4800, y1: 520, y2: 520 },
-];
-const LEVEL_WIDTH  = 4800;
-const LEVEL_HEIGHT = 720;
+// Zone picker on title (shown if more than one zone unlocked)
+function refreshTitleZonePicker() {
+  const unlocked = getUnlockedZones();
+  let picker = document.getElementById('zonePicker');
+  if (unlocked <= 1) {
+    if (picker) picker.remove();
+    return;
+  }
+  const titleScreen = document.getElementById('titleScreen');
+  if (!picker) {
+    picker = document.createElement('div');
+    picker.id = 'zonePicker';
+    picker.style.marginTop = '10px';
+    picker.style.marginBottom = '14px';
+    picker.style.display = 'flex';
+    picker.style.gap = '12px';
+    picker.style.justifyContent = 'center';
+    picker.style.flexWrap = 'wrap';
+    picker.style.pointerEvents = 'auto';
+    titleScreen.insertBefore(picker, titleScreen.querySelector('.blink'));
+  }
+  picker.innerHTML = '';
+  for (let i = 0; i < unlocked; i++) {
+    const btn = document.createElement('button');
+    btn.textContent = `ZONE ${i + 1}`;
+    btn.style.font = '12px "Press Start 2P", monospace';
+    btn.style.padding = '10px 14px';
+    btn.style.color = '#fff';
+    btn.style.background = i === 1 ? 'rgba(143, 63, 217, 0.45)' : 'rgba(78, 191, 104, 0.45)';
+    btn.style.border = `3px solid ${i === 1 ? '#d946ef' : '#8effa6'}`;
+    btn.style.cursor = 'pointer';
+    btn.addEventListener('click', () => {
+      ensureAudio();
+      if (i === 0) {
+        resetLevel();
+        state = 'play';
+        showScreen('hud');
+        startMusic();
+      } else {
+        showScreen('hud');
+        startZone(i);
+      }
+    });
+    picker.appendChild(btn);
+  }
+}
+refreshTitleZonePicker();
 
-// Floating rectangular platforms (AABB, top-only collision).
-// Widths tuned so a full-speed spring arc actually lands on them.
-const platforms = [
-  { x: 900,  y: 300, w: 500, h: 16 },  // secret cache platform (spring 1 target)
-  { x: 1720, y: 440, w: 200, h: 16 },  // mid-pit lily pad (jump stepping-stone)
-  { x: 2880, y: 240, w: 620, h: 16 },  // upper plateau secret (spring 2 target)
-];
+// ---------- Level data (per-act) ----------
+// Ground surface segments (top-line endpoints; fill extends downward to LEVEL_HEIGHT).
+// These references get swapped by loadAct() when switching between Act 1 and Act 2.
+let ground = [];
+let platforms = [];
+let LEVEL_WIDTH  = 4800;
+let LEVEL_HEIGHT = 720;
 
+let levelPalette = 'day';  // palette id keys renderers
+let boss = null;
 let droplets, bugbots, springs, goal;
-function initEntities() {
-  droplets = [
-    // Early cluster
-    ...makeDropletArc(260, 480, 5),
-    ...makeDropletLine(740, 400, 4),
-    ...makeDropletLine(920, 270, 9),   // on secret platform (spring 1 payoff)
-    // Low ground
-    ...makeDropletLine(1350, 500, 5),
-    ...makeDropletArc(1800, 400, 4),   // above lily pad
-    // Mid
-    ...makeDropletLine(2100, 460, 5),
-    ...makeDropletArc(2300, 440, 4),
-    // Upper plateau
-    ...makeDropletLine(2740, 340, 6),
-    ...makeDropletLine(2920, 210, 12), // secret upper (spring 2 payoff)
-    // Final stretch
-    ...makeDropletLine(3400, 540, 5),
-    ...makeDropletArc(3950, 460, 4),
-    ...makeDropletLine(4200, 480, 5),
-  ].map(d => ({ ...d, collected: false }));
+let hazards;        // spikes + sawblades (Zone 2+)
+let zappers;        // stationary turrets (Zone 2+)
+let projectiles;    // live zapper plasma shots
+let shockbots;      // electrified patrollers (Zone 2+)
+let checkpoints;    // mid-level respawn totems (Zone 2+)
+let activeCheckpoint = null; // {x,y} of touched checkpoint for current act
+let currentZone = 0;
+let currentAct = 0;
 
-  bugbots = [
-    { x: 800,  y: 410, vx:  60, dir:  1, patrolMin: 720, patrolMax: 1080, alive: true },
-    { x: 1400, y: 510, vx:  50, dir: -1, patrolMin: 1300, patrolMax: 1650, alive: true },
-    { x: 2200, y: 470, vx:  70, dir:  1, patrolMin: 2000, patrolMax: 2380, alive: true },
-    { x: 3500, y: 550, vx:  55, dir: -1, patrolMin: 3320, patrolMax: 3780, alive: true },
-  ];
+// Each zone has its own list of acts. Currently two zones:
+//   Zone 0 — Lily Pond (nature theme)
+//   Zone 1 — Cyber Swamp (tech theme)
+const ZONES_ACT_LILY_POND = [
+  // ==================== Act 1: Lily Pond — Morning ====================
+  {
+    id: 'lily-pond-1',
+    name: 'Lily Pond Zone  —  Act 1',
+    subtitle: '— LILY POND, MORNING —',
+    width: 4800,
+    height: 720,
+    palette: 'day',
+    ground: [
+      { x1:    0, x2:  500, y1: 520, y2: 520 },
+      { x1:  500, x2:  700, y1: 520, y2: 440 },
+      { x1:  700, x2: 1100, y1: 440, y2: 440 },
+      { x1: 1100, x2: 1260, y1: 440, y2: 540 },
+      { x1: 1260, x2: 1700, y1: 540, y2: 540 },
+      // pit 1700-1900 (water)
+      { x1: 1900, x2: 2400, y1: 500, y2: 500 },
+      { x1: 2400, x2: 2700, y1: 500, y2: 380 },
+      { x1: 2700, x2: 3100, y1: 380, y2: 380 },
+      { x1: 3100, x2: 3300, y1: 380, y2: 580 },
+      { x1: 3300, x2: 3800, y1: 580, y2: 580 },
+      { x1: 3800, x2: 4100, y1: 580, y2: 520 },
+      { x1: 4100, x2: 4800, y1: 520, y2: 520 },
+    ],
+    platforms: [
+      { x: 900,  y: 300, w: 500, h: 16 },
+      { x: 1720, y: 440, w: 200, h: 16 },
+      { x: 2880, y: 240, w: 620, h: 16 },
+    ],
+    makeEntities() {
+      droplets = [
+        ...makeDropletArc(260, 480, 5),
+        ...makeDropletLine(740, 400, 4),
+        ...makeDropletLine(920, 270, 9),
+        ...makeDropletLine(1350, 500, 5),
+        ...makeDropletArc(1800, 400, 4),
+        ...makeDropletLine(2100, 460, 5),
+        ...makeDropletArc(2300, 440, 4),
+        ...makeDropletLine(2740, 340, 6),
+        ...makeDropletLine(2920, 210, 12),
+        ...makeDropletLine(3400, 540, 5),
+        ...makeDropletArc(3950, 460, 4),
+        ...makeDropletLine(4200, 480, 5),
+      ].map(d => ({ ...d, collected: false }));
 
-  springs = [
-    { x: 800,  y: 440 - 14 },  // on flat plateau, launches to cache platform
-    { x: 2860, y: 380 - 14 },  // on upper plateau, launches to secret
-  ];
+      bugbots = [
+        { type: 'basic', x: 800,  y: 410, vx: 60, dir:  1, patrolMin: 720,  patrolMax: 1080, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 1400, y: 510, vx: 50, dir: -1, patrolMin: 1300, patrolMax: 1650, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2200, y: 470, vx: 70, dir:  1, patrolMin: 2000, patrolMax: 2380, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 3500, y: 550, vx: 55, dir: -1, patrolMin: 3320, patrolMax: 3780, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+      ];
 
-  // Goal zone: a grand arch. Collision box spans the archway interior.
-  goal = { x: 4560, y: 520 - 180, w: 140, h: 180, armed: true };
+      springs = [
+        { x: 800,  y: 440 - 14 },
+        { x: 2860, y: 380 - 14 },
+      ];
+
+      goal = { x: 4560, y: 520 - 180, w: 140, h: 180, armed: true };
+      boss = null;
+    },
+  },
+
+  // ==================== Act 2: Lily Pond — Sunset + Boss ====================
+  {
+    id: 'lily-pond-2',
+    name: 'Lily Pond Zone  —  Act 2',
+    subtitle: '— LILY POND, SUNSET —',
+    width: 6200,
+    height: 720,
+    palette: 'sunset',
+    ground: [
+      { x1:    0, x2:  400, y1: 520, y2: 520 },
+      { x1:  400, x2:  600, y1: 520, y2: 460 },
+      { x1:  600, x2:  900, y1: 460, y2: 460 },
+      // pit 900-1100
+      { x1: 1100, x2: 1400, y1: 500, y2: 500 },
+      { x1: 1400, x2: 1600, y1: 500, y2: 420 },
+      { x1: 1600, x2: 1900, y1: 420, y2: 420 },
+      { x1: 1900, x2: 2100, y1: 420, y2: 560 },
+      { x1: 2100, x2: 2400, y1: 560, y2: 560 },
+      // pit 2400-2650
+      { x1: 2650, x2: 3000, y1: 500, y2: 500 },
+      { x1: 3000, x2: 3300, y1: 500, y2: 360 },
+      { x1: 3300, x2: 3700, y1: 360, y2: 360 },
+      { x1: 3700, x2: 3900, y1: 360, y2: 580 },
+      // pit 3900-4100
+      { x1: 4100, x2: 4500, y1: 540, y2: 540 },
+      { x1: 4500, x2: 4700, y1: 540, y2: 460 },
+      { x1: 4700, x2: 5000, y1: 460, y2: 460 },
+      { x1: 5000, x2: 5200, y1: 460, y2: 520 },
+      // Boss arena starts at 5200 — flat floor, no enemies until boss spawns
+      { x1: 5200, x2: 6200, y1: 520, y2: 520 },
+    ],
+    platforms: [
+      { x: 920,  y: 380, w: 200, h: 16 },  // across first pit
+      { x: 1700, y: 300, w: 240, h: 16 },  // above high plateau — spring target
+      { x: 2450, y: 480, w: 220, h: 16 },  // across 2nd pit
+      { x: 2600, y: 380, w: 160, h: 16 },  // optional higher path
+      { x: 3400, y: 240, w: 380, h: 16 },  // spring target upper
+      { x: 3950, y: 480, w: 180, h: 16 },  // across 3rd pit
+      { x: 4550, y: 360, w: 240, h: 16 },  // spring target near end
+    ],
+    makeEntities() {
+      droplets = [
+        ...makeDropletLine(120, 500, 4),
+        ...makeDropletArc(500, 460, 4),
+        ...makeDropletLine(940, 350, 7),
+        ...makeDropletLine(1250, 480, 5),
+        ...makeDropletLine(1720, 270, 8),   // upper reward
+        ...makeDropletArc(2200, 480, 5),
+        ...makeDropletLine(2460, 450, 6),
+        ...makeDropletLine(2620, 350, 5),
+        ...makeDropletLine(3060, 460, 6),
+        ...makeDropletLine(3420, 210, 12),  // big upper cache
+        ...makeDropletArc(3800, 420, 4),
+        ...makeDropletLine(3970, 450, 5),
+        ...makeDropletLine(4200, 520, 5),
+        ...makeDropletLine(4570, 330, 8),
+        ...makeDropletLine(4850, 430, 4),
+      ].map(d => ({ ...d, collected: false }));
+
+      bugbots = [
+        { type: 'basic', x: 700,  y: 430, vx: 70, dir:  1, patrolMin: 620,  patrolMax: 880,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 1500, y: 390, vx: 45, dir:  1, patrolMin: 1420, patrolMax: 1880, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2180, y: 530, vx: 70, dir: -1, patrolMin: 2110, patrolMax: 2380, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2900, y: 470, vx: 80, dir:  1, patrolMin: 2700, patrolMax: 2980, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 3500, y: 330, vx: 50, dir: -1, patrolMin: 3340, patrolMax: 3680, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 4250, y: 510, vx: 75, dir:  1, patrolMin: 4130, patrolMax: 4480, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 4850, y: 430, vx: 55, dir: -1, patrolMin: 4720, patrolMax: 4980, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+      ];
+
+      springs = [
+        { x: 1520, y: 420 - 14 },  // to upper platform at 1700
+        { x: 3200, y: 360 - 14 },  // to upper cache at 3400
+        { x: 4600, y: 540 - 14 },  // to platform at 4550, near boss arena entry
+      ];
+
+      goal = null;  // Act 2 has a boss, not a goal arch
+      boss = {
+        kind: 'bogmech',
+        x: 5700, y: 380,
+        w: 60, h: 48,
+        vx: 0, vy: 0,
+        hp: 4, maxHp: 4,
+        state: 'hover',      // 'hover' | 'wind-up' | 'dive' | 'return'
+        stateAt: 0,
+        hoverCenterX: 5700, hoverCenterY: 380,
+        hoverPhase: 0,
+        hitFlashUntil: 0,
+        defeated: false,
+        arenaLeft: 5200, arenaRight: 6180,
+      };
+    },
+  },
+];
+
+// Zone 1 (Cyber Swamp) — longer, harder, new enemy mix, mid-level checkpoint.
+const ZONES_ACT_CYBER_SWAMP = [
+  // ==================== Act 1: Cyber Swamp — Dawn ====================
+  {
+    id: 'cyber-swamp-1',
+    name: 'Cyber Swamp Zone  —  Act 1',
+    subtitle: '— CYBER SWAMP, DAWN —',
+    width: 7500,
+    height: 720,
+    palette: 'cyber-dawn',
+    targetTime: 120,
+    ground: [
+      { x1:    0, x2:  400, y1: 520, y2: 520 },
+      { x1:  400, x2:  600, y1: 520, y2: 460 },
+      { x1:  600, x2:  900, y1: 460, y2: 460 },
+      // pit 900-1100
+      { x1: 1100, x2: 1400, y1: 500, y2: 500 },
+      { x1: 1400, x2: 1600, y1: 500, y2: 400 },
+      { x1: 1600, x2: 1900, y1: 400, y2: 400 },
+      { x1: 1900, x2: 2100, y1: 400, y2: 560 },
+      { x1: 2100, x2: 2450, y1: 560, y2: 560 },
+      // pit 2450-2650
+      { x1: 2650, x2: 3000, y1: 500, y2: 500 },
+      { x1: 3000, x2: 3200, y1: 500, y2: 360 },
+      { x1: 3200, x2: 3500, y1: 360, y2: 360 },   // checkpoint plateau
+      { x1: 3500, x2: 3700, y1: 360, y2: 580 },
+      { x1: 3700, x2: 3900, y1: 580, y2: 580 },
+      // pit 3900-4100
+      { x1: 4100, x2: 4500, y1: 540, y2: 540 },
+      { x1: 4500, x2: 4700, y1: 540, y2: 460 },
+      { x1: 4700, x2: 5000, y1: 460, y2: 460 },
+      { x1: 5000, x2: 5400, y1: 460, y2: 500 },
+      { x1: 5400, x2: 5600, y1: 500, y2: 380 },
+      { x1: 5600, x2: 5900, y1: 380, y2: 380 },
+      // pit 5900-6100
+      { x1: 6100, x2: 6400, y1: 520, y2: 520 },
+      { x1: 6400, x2: 6600, y1: 520, y2: 560 },   // gentler slope down
+      { x1: 6600, x2: 6900, y1: 560, y2: 560 },   // low flat, still in camera view
+      { x1: 6900, x2: 7100, y1: 560, y2: 540 },   // ramp up to goal
+      { x1: 7100, x2: 7500, y1: 540, y2: 540 },   // goal area
+    ],
+    platforms: [
+      { x:  950, y: 380, w: 180, h: 16 },  // across pit 1
+      { x: 1680, y: 280, w: 240, h: 16 },  // secret cache (spring 1)
+      { x: 2470, y: 460, w: 200, h: 16 },  // across pit 2
+      { x: 3230, y: 220, w: 300, h: 16 },  // high secret (spring 2)
+      { x: 3920, y: 460, w: 200, h: 16 },  // across pit 3
+      { x: 4840, y: 320, w: 200, h: 16 },  // upper path
+      { x: 5920, y: 400, w: 200, h: 16 },  // across pit 4
+      { x: 6500, y: 260, w: 260, h: 16 },  // high cache near end
+    ],
+    makeEntities() {
+      droplets = [
+        ...makeDropletLine(120, 500, 4),
+        ...makeDropletArc(500, 460, 4),
+        ...makeDropletLine(970, 350, 6),
+        ...makeDropletLine(1230, 480, 5),
+        ...makeDropletLine(1700, 250, 8),   // secret
+        ...makeDropletArc(2000, 420, 4),
+        ...makeDropletLine(2180, 540, 6),
+        ...makeDropletLine(2490, 430, 5),
+        ...makeDropletLine(2720, 480, 5),
+        ...makeDropletLine(3260, 190, 10),  // big secret
+        ...makeDropletArc(3600, 500, 4),
+        ...makeDropletLine(3730, 560, 4),
+        ...makeDropletLine(4140, 520, 5),
+        ...makeDropletArc(4600, 480, 4),
+        ...makeDropletLine(4860, 290, 6),
+        ...makeDropletLine(5120, 440, 5),
+        ...makeDropletArc(5500, 420, 4),
+        ...makeDropletLine(5640, 360, 6),
+        ...makeDropletLine(5940, 370, 5),
+        ...makeDropletLine(6160, 500, 5),
+        ...makeDropletLine(6530, 230, 8),   // high cache
+        ...makeDropletLine(6700, 540, 4),
+        ...makeDropletArc(7100, 500, 4),
+      ].map(d => ({ ...d, collected: false }));
+
+      bugbots = [
+        { type: 'basic', x:  800, y: 430, vx: 70, dir:  1, patrolMin: 700,  patrolMax: 880,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 1750, y: 370, vx: 80, dir:  1, patrolMin: 1620, patrolMax: 1880, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2800, y: 470, vx: 80, dir: -1, patrolMin: 2680, patrolMax: 2980, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 4300, y: 510, vx: 75, dir:  1, patrolMin: 4150, patrolMax: 4480, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 5700, y: 350, vx: 85, dir: -1, patrolMin: 5620, patrolMax: 5880, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+      ];
+
+      springs = [
+        { x: 1350, y: 500 - 14 },  // launch to 1680 secret
+        { x: 3050, y: 500 - 14 },  // launch to 3230 high secret
+        { x: 6250, y: 520 - 14 },  // launch to 6500 high cache
+      ];
+
+      hazards = [
+        { kind: 'spike', x: 2200, y: 560 - 10, w: 140, h: 10 },   // ground spikes in low area
+        { kind: 'spike', x: 5100, y: 460 - 10, w: 120, h: 10 },   // later
+        { kind: 'saw',   x: 1250, y: 540, w: 44, h: 44, vx: 120, dir: 1, patrolMin: 1150, patrolMax: 1380, spin: 0 },
+        { kind: 'saw',   x: 4250, y: 500, w: 44, h: 44, vx: 140, dir: 1, patrolMin: 4150, patrolMax: 4480, spin: 0 },
+      ];
+
+      zappers = [
+        { x:  750, y: 460, alive: true, cooldown: 1.2, fireInterval: 2.4 },   // before first pit
+        { x: 3800, y: 580, alive: true, cooldown: 1.8, fireInterval: 2.6 },   // after checkpoint plateau
+        { x: 5850, y: 380, alive: true, cooldown: 0.8, fireInterval: 2.0 },   // late
+      ];
+
+      shockbots = [];
+      projectiles = [];
+
+      checkpoints = [
+        { x: 3340, y: 360, activated: false, pulseUntil: 0 },   // on mid-level high plateau
+      ];
+
+      goal = { x: 7220, y: 540 - 180, w: 140, h: 180, armed: true };
+      boss = null;
+    },
+  },
+
+  // ==================== Act 2: Cyber Swamp — Core + Slithertron ====================
+  {
+    id: 'cyber-swamp-2',
+    name: 'Cyber Swamp Zone  —  Act 2',
+    subtitle: '— CYBER SWAMP, CORE —',
+    width: 9500,
+    height: 720,
+    palette: 'cyber-core',
+    targetTime: 180,
+    ground: [
+      { x1:    0, x2:  400, y1: 520, y2: 520 },
+      { x1:  400, x2:  600, y1: 520, y2: 440 },
+      { x1:  600, x2:  900, y1: 440, y2: 440 },
+      // pit 900-1100
+      { x1: 1100, x2: 1400, y1: 500, y2: 500 },
+      { x1: 1400, x2: 1600, y1: 500, y2: 380 },
+      { x1: 1600, x2: 1950, y1: 380, y2: 380 },
+      { x1: 1950, x2: 2150, y1: 380, y2: 560 },
+      { x1: 2150, x2: 2500, y1: 560, y2: 560 },
+      // pit 2500-2700
+      { x1: 2700, x2: 3050, y1: 500, y2: 500 },
+      { x1: 3050, x2: 3250, y1: 500, y2: 340 },
+      { x1: 3250, x2: 3550, y1: 340, y2: 340 },
+      { x1: 3550, x2: 3750, y1: 340, y2: 580 },
+      { x1: 3750, x2: 4000, y1: 580, y2: 580 },
+      // pit 4000-4200
+      { x1: 4200, x2: 4600, y1: 540, y2: 540 },
+      { x1: 4600, x2: 4800, y1: 540, y2: 440 },
+      { x1: 4800, x2: 5200, y1: 440, y2: 440 },   // checkpoint plateau
+      { x1: 5200, x2: 5400, y1: 440, y2: 560 },
+      { x1: 5400, x2: 5800, y1: 560, y2: 560 },
+      // pit 5800-6000
+      { x1: 6000, x2: 6400, y1: 500, y2: 500 },
+      { x1: 6400, x2: 6600, y1: 500, y2: 380 },
+      { x1: 6600, x2: 7000, y1: 380, y2: 380 },
+      { x1: 7000, x2: 7200, y1: 380, y2: 560 },
+      { x1: 7200, x2: 7600, y1: 560, y2: 560 },
+      // pit 7600-7800
+      { x1: 7800, x2: 8200, y1: 520, y2: 520 },
+      { x1: 8200, x2: 8400, y1: 520, y2: 480 },
+      // Boss arena entrance 8400 onward — flat floor
+      { x1: 8400, x2: 9500, y1: 480, y2: 480 },
+    ],
+    platforms: [
+      { x:  950, y: 360, w: 180, h: 16 },
+      { x: 1720, y: 260, w: 260, h: 16 },   // high secret
+      { x: 2550, y: 460, w: 200, h: 16 },   // across pit 2
+      { x: 3280, y: 200, w: 320, h: 16 },   // upper cache
+      { x: 4050, y: 460, w: 180, h: 16 },   // across pit 3
+      { x: 4920, y: 320, w: 220, h: 16 },   // upper path over checkpoint
+      { x: 5820, y: 420, w: 200, h: 16 },   // across pit 4
+      { x: 6680, y: 260, w: 260, h: 16 },   // high secret 2
+      { x: 7620, y: 440, w: 200, h: 16 },   // across pit 5
+      { x: 7900, y: 360, w: 240, h: 16 },   // approach to arena
+    ],
+    makeEntities() {
+      droplets = [
+        ...makeDropletLine(120, 500, 4),
+        ...makeDropletArc(500, 440, 4),
+        ...makeDropletLine(970, 330, 7),
+        ...makeDropletLine(1240, 470, 5),
+        ...makeDropletLine(1740, 230, 10),   // secret
+        ...makeDropletArc(2040, 430, 4),
+        ...makeDropletLine(2220, 540, 5),
+        ...makeDropletLine(2570, 430, 6),
+        ...makeDropletLine(2800, 480, 5),
+        ...makeDropletLine(3310, 170, 14),   // big upper cache
+        ...makeDropletArc(3650, 500, 4),
+        ...makeDropletLine(3800, 560, 4),
+        ...makeDropletLine(4240, 520, 5),
+        ...makeDropletArc(4700, 420, 4),
+        ...makeDropletLine(4940, 290, 8),    // upper path reward
+        ...makeDropletLine(4820, 420, 5),
+        ...makeDropletArc(5500, 540, 4),
+        ...makeDropletLine(5850, 390, 6),
+        ...makeDropletLine(6100, 480, 5),
+        ...makeDropletLine(6700, 230, 12),
+        ...makeDropletArc(6900, 360, 4),
+        ...makeDropletLine(7080, 360, 5),
+        ...makeDropletLine(7300, 540, 5),
+        ...makeDropletLine(7660, 410, 5),
+        ...makeDropletLine(7950, 330, 6),
+        ...makeDropletLine(8250, 490, 5),
+      ].map(d => ({ ...d, collected: false }));
+
+      bugbots = [
+        { type: 'basic', x:  750, y: 410, vx: 80, dir:  1, patrolMin: 650,  patrolMax: 880,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 1500, y: 350, vx: 50, dir:  1, patrolMin: 1420, patrolMax: 1900, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2300, y: 530, vx: 90, dir: -1, patrolMin: 2170, patrolMax: 2470, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 3400, y: 310, vx: 55, dir:  1, patrolMin: 3270, patrolMax: 3520, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 4350, y: 510, vx: 85, dir:  1, patrolMin: 4220, patrolMax: 4550, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 5600, y: 530, vx: 55, dir:  1, patrolMin: 5430, patrolMax: 5770, hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 6800, y: 350, vx: 90, dir: -1, patrolMin: 6620, patrolMax: 6980, hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+      ];
+
+      springs = [
+        { x: 1350, y: 500 - 14 },   // to high secret at 1720
+        { x: 3100, y: 500 - 14 },   // to upper cache at 3280
+        { x: 6350, y: 500 - 14 },   // to high secret 2 at 6680
+      ];
+
+      hazards = [
+        { kind: 'spike', x: 2250, y: 560 - 10, w: 160, h: 10 },
+        { kind: 'spike', x: 4250, y: 540 - 10, w: 140, h: 10 },
+        { kind: 'spike', x: 7240, y: 560 - 10, w: 180, h: 10 },
+        { kind: 'saw',   x: 1250, y: 540, w: 44, h: 44, vx: 140, dir: 1, patrolMin: 1150, patrolMax: 1380, spin: 0 },
+        { kind: 'saw',   x: 3870, y: 560, w: 44, h: 44, vx: 160, dir: 1, patrolMin: 3770, patrolMax: 3980, spin: 0 },
+        { kind: 'saw',   x: 6170, y: 480, w: 44, h: 44, vx: 180, dir: 1, patrolMin: 6020, patrolMax: 6380, spin: 0 },
+      ];
+
+      zappers = [
+        { x:  280, y: 520, alive: true, cooldown: 1.8, fireInterval: 2.4 },
+        { x: 3900, y: 580, alive: true, cooldown: 1.4, fireInterval: 2.2 },
+        { x: 5500, y: 560, alive: true, cooldown: 0.9, fireInterval: 2.0 },
+        { x: 7850, y: 520, alive: true, cooldown: 1.2, fireInterval: 2.1 },
+      ];
+
+      shockbots = [
+        { x: 2400, y: 540, vx: 60, dir:  1, patrolMin: 2220, patrolMax: 2470, alive: true, electrified: false, phase: 0.0, lastZap: -1 },
+        { x: 4400, y: 520, vx: 70, dir: -1, patrolMin: 4250, patrolMax: 4550, alive: true, electrified: false, phase: 1.2, lastZap: -1 },
+        { x: 6850, y: 360, vx: 65, dir:  1, patrolMin: 6620, patrolMax: 6980, alive: true, electrified: false, phase: 0.6, lastZap: -1 },
+      ];
+
+      projectiles = [];
+
+      checkpoints = [
+        { x: 5000, y: 440, activated: false, pulseUntil: 0 },    // on mid plateau
+      ];
+
+      goal = null;  // boss act
+      boss = {
+        kind: 'slithertron',
+        x: 8900, y: 250,
+        w: 40, h: 28,
+        vx: 0, vy: 0,
+        hp: 4, maxHp: 4,
+        state: 'glide',
+        stateAt: 0,
+        phase: 0,
+        hitFlashUntil: 0,
+        defeated: false,
+        trail: [],
+        arenaLeft: 8400, arenaRight: 9480,
+      };
+    },
+  },
+];
+
+const ZONES = [
+  { id: 'lily-pond',   name: 'LILY POND',   subtitle: '— NATURE SWAMP —',  acts: ZONES_ACT_LILY_POND },
+  { id: 'cyber-swamp', name: 'CYBER SWAMP', subtitle: '— DR. SLITHER’S LAB —', acts: ZONES_ACT_CYBER_SWAMP },
+];
+
+function currentActDef() {
+  return ZONES[currentZone].acts[currentAct];
+}
+
+function loadAct(actIdx) {
+  currentAct = actIdx;
+  const L = ZONES[currentZone].acts[actIdx];
+  ground = L.ground;
+  platforms = L.platforms;
+  LEVEL_WIDTH = L.width;
+  LEVEL_HEIGHT = L.height;
+  levelPalette = L.palette;
+  // Default to empty lists; makeEntities() overwrites what it cares about.
+  hazards = [];
+  zappers = [];
+  projectiles = [];
+  shockbots = [];
+  checkpoints = [];
+  activeCheckpoint = null;
+  L.makeEntities();
   goalParticles = [];
+  // Legacy single-arena constants kept for Bogmech collision; Slithertron uses boss.arenaLeft/Right.
+  if (boss && boss.kind === 'bogmech') {
+    BOSS_ARENA_LEFT_VAL = boss.arenaLeft;
+    BOSS_ARENA_RIGHT_VAL = boss.arenaRight;
+  }
+  // Match music to zone
+  setZoneMusic(currentZone);
 }
 
 let goalParticles;
@@ -737,11 +1484,61 @@ const froggo = {
 // Scattered droplets (Sonic-style ring loss)
 let scatteredDroplets = [];
 
-let state = 'title';   // 'title' | 'play' | 'gameover' | 'win'
+let state = 'title';   // 'title' | 'zoneSelect' | 'play' | 'actClear' | 'gameover' | 'win' | 'respawn' | 'zoneIntro'
 let dropletScore = 0;
 let bugbotsKilled = 0;
 let levelStartMs = 0;
 let levelEndScore = 0;
+let actStartMs = 0;
+let totalZoneScore = 0;  // Running total across acts of current zone; submitted on zone clear
+let actTransition = null; // { startMs, ... } during the act-clear card
+let zoneIntro = null;     // { startMs, zoneIdx } during the "ZONE N" intro card between zones
+
+// ---- Zone unlock persistence ----
+const ZONE_UNLOCK_KEY = 'froggo.zonesUnlocked';
+function getUnlockedZones() {
+  try {
+    const raw = localStorage.getItem(ZONE_UNLOCK_KEY);
+    const n = Math.max(1, Math.min(ZONES.length, parseInt(raw, 10) || 1));
+    return n;
+  } catch (e) { return 1; }
+}
+function setUnlockedZones(n) {
+  try { localStorage.setItem(ZONE_UNLOCK_KEY, String(Math.max(1, Math.min(ZONES.length, n)))); } catch (e) {}
+}
+
+// ---- Zone music dispatch ----
+// Called from loadAct; just routes to startMusic once we're in a playable state.
+function setZoneMusic(zoneIdx) {
+  if (zoneIdx === 0) {
+    if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+    try { bgm2 && bgm2.pause(); } catch (e) {}
+    if (state !== 'title' && state !== 'zoneIntro' && bgm) bgm.play().catch(() => {});
+  } else {
+    if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+    try { bgm && bgm.pause(); } catch (e) {}
+    if (state !== 'title' && state !== 'zoneIntro' && bgm2) bgm2.play().catch(() => {});
+  }
+}
+
+// ---- Lives ----
+const MAX_LIVES = 3;
+const LIVES_CAP = 9;
+const DROPLETS_PER_1UP = 100;
+let lives = MAX_LIVES;
+let respawnCard = null;   // { startMs, act } — brief "x LIVES LEFT" card shown on respawn
+const RESPAWN_CARD_DURATION = 1700;
+let oneUp = null;         // { startMs } — brief "1UP!" banner when a life is earned
+const ONEUP_BANNER_DURATION = 1800;
+
+// Called after `dropletScore` has been incremented by 1. Handles the 1UP threshold.
+function onDropletPickedUp() {
+  if (dropletScore > 0 && dropletScore % DROPLETS_PER_1UP === 0 && lives < LIVES_CAP) {
+    lives += 1;
+    oneUp = { startMs: performance.now() };
+    sfxOneUp();
+  }
+}
 
 function resetLevel() {
   froggo.x = 80; froggo.y = 480;
@@ -752,11 +1549,50 @@ function resetLevel() {
   froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
   froggo.airbornSinceMs = -1;
   scatteredDroplets = [];
-  dropletScore = 0; bugbotsKilled = 0;
-  initEntities();
+  bugbotsKilled = 0;
+  // Full reset returns to Zone 1 Act 1, zeros accumulated score, refills lives.
+  dropletScore = 0;
+  totalZoneScore = 0;
+  lives = MAX_LIVES;
+  currentZone = 0;
+  loadAct(0);
+  bossArenaLocked = false;
   levelStartMs = performance.now();
+  actStartMs = performance.now();
   slitherAnim = null;
   winFx = null;
+  actTransition = null;
+  respawnCard = null;
+  zoneIntro = null;
+  oneUp = null;
+}
+
+// Load the next act without zeroing the running total (used after act clear / respawn).
+// If restoredCp is provided, Froggo spawns at that checkpoint instead of the act's start.
+function advanceToAct(actIdx, restoredCp) {
+  froggo.vx = 0; froggo.vy = 0;
+  froggo.grounded = false; froggo.rolling = false;
+  froggo.hurtUntil = 0; froggo.dead = false;
+  froggo.facing = 1; froggo.rotation = 0;
+  froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.airbornSinceMs = -1;
+  scatteredDroplets = [];
+  dropletScore = 0;
+  bugbotsKilled = 0;
+  loadAct(actIdx);
+  if (restoredCp) {
+    froggo.x = restoredCp.x;
+    froggo.y = restoredCp.y - froggo.h;
+    activeCheckpoint = { x: restoredCp.x, y: restoredCp.y };
+    if (checkpoints) {
+      for (const cp of checkpoints) {
+        if (Math.abs(cp.x - restoredCp.x) < 2 && Math.abs(cp.y - restoredCp.y) < 2) cp.activated = true;
+      }
+    }
+  } else {
+    froggo.x = 80; froggo.y = 480;
+  }
+  actStartMs = performance.now();
 }
 
 // ---------- Ground height lookup ----------
@@ -923,6 +1759,7 @@ function update(dt) {
       d.collected = true;
       dropletScore += 1;
       sfxDroplet();
+      onDropletPickedUp();
     }
   }
 
@@ -944,13 +1781,21 @@ function update(dt) {
     b.x += b.vx * b.dir * dt;
     if (b.x < b.patrolMin) { b.x = b.patrolMin; b.dir = 1; }
     if (b.x > b.patrolMax) { b.x = b.patrolMax; b.dir = -1; }
-    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, b.x - 12, b.y - 12, 24, 24)) {
+    const size = b.type === 'heavy' ? 36 : 24;
+    const half = size / 2;
+    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, b.x - half, b.y - half, size, size)) {
       const fromAbove = froggo.vy > 50 && (froggo.y + froggo.h) < b.y + 8;
       if (fromAbove || froggo.rolling) {
-        b.alive = false;
-        bugbotsKilled += 1;
+        // Skip if we already damaged this bot in the last 250ms (i-frame so heavy takes 2 distinct hits)
+        if (now - b.hitFlashUntil < 400 - 250) continue;
+        b.hp -= 1;
+        b.hitFlashUntil = now + 250;
         froggo.vy = -380; // bounce
         sfxBugbotSquish();
+        if (b.hp <= 0) {
+          b.alive = false;
+          bugbotsKilled += 1;
+        }
       } else if (now > froggo.hurtUntil) {
         if (dropletScore <= 0) {
           sfxHurt();
@@ -969,13 +1814,161 @@ function update(dt) {
     }
   }
 
-  // Goal — arch interior is a trigger volume
-  if (goal.armed && rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, goal.x + 30, goal.y + 40, goal.w - 60, goal.h - 40)) {
+  // Checkpoints (Zone 2+)
+  if (checkpoints && checkpoints.length > 0) {
+    for (const cp of checkpoints) {
+      if (cp.activated) continue;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, cp.x - 16, cp.y - 48, 32, 48)) {
+        cp.activated = true;
+        cp.pulseUntil = now + 900;
+        activeCheckpoint = { x: cp.x, y: cp.y };
+        sfxCheckpoint();
+      }
+    }
+  }
+
+  // Hazards (spikes + sawblades) — damage Froggo on contact, can't be killed
+  if (hazards && hazards.length > 0) {
+    for (const h of hazards) {
+      if (h.kind === 'saw') {
+        // patrol
+        h.x += h.vx * h.dir * dt;
+        if (h.x < h.patrolMin) { h.x = h.patrolMin; h.dir = 1; }
+        if (h.x > h.patrolMax) { h.x = h.patrolMax; h.dir = -1; }
+        h.spin += dt * 14;
+      }
+      const hw = h.w, hh = h.h;
+      const hx = h.kind === 'saw' ? h.x - hw / 2 : h.x;
+      const hy = h.kind === 'saw' ? h.y - hh / 2 : h.y;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, hx, hy, hw, hh)) {
+        if (now > froggo.hurtUntil) {
+          if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+          scatterDroplets(dropletScore);
+          dropletScore = 0;
+          froggo.hurtUntil = now + 1200;
+          froggo.vx = -froggo.facing * 250;
+          froggo.vy = -340;
+          froggo.rolling = false;
+          froggo.charging = false;
+          sfxHurt();
+        }
+      }
+    }
+  }
+
+  // Zappers (stationary turrets)
+  if (zappers && zappers.length > 0) {
+    for (const z of zappers) {
+      if (!z.alive) continue;
+      // Patrol nothing — just wind up and fire
+      z.cooldown -= dt;
+      if (z.cooldown <= 0) {
+        z.cooldown = z.fireInterval;
+        const dir = Math.sign((froggo.x + froggo.w / 2) - z.x) || 1;
+        z.lastShotFacing = dir;
+        projectiles.push({
+          x: z.x + dir * 14, y: z.y - 4,
+          vx: dir * 260, vy: 0,
+          life: 3.5,
+          kind: 'plasma',
+        });
+        sfxZap();
+      }
+      // Collide Froggo w/ zapper body (killable like bugbot)
+      const zsz = 26, zh = 34;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, z.x - zsz / 2, z.y - zh + 4, zsz, zh)) {
+        const fromAbove = froggo.vy > 50 && (froggo.y + froggo.h) < z.y - zh + 14;
+        if (fromAbove || froggo.rolling) {
+          z.alive = false;
+          froggo.vy = -380;
+          sfxBugbotSquish();
+          bugbotsKilled += 1;
+        } else if (now > froggo.hurtUntil) {
+          if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+          scatterDroplets(dropletScore);
+          dropletScore = 0;
+          froggo.hurtUntil = now + 1200;
+          froggo.vx = -froggo.facing * 260;
+          froggo.vy = -320;
+          sfxHurt();
+        }
+      }
+    }
+  }
+
+  // Projectiles (from zappers)
+  if (projectiles && projectiles.length > 0) {
+    for (const p of projectiles) {
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, p.x - 5, p.y - 5, 10, 10)) {
+        if (froggo.rolling) {
+          p.life = 0;
+        } else if (now > froggo.hurtUntil) {
+          if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+          scatterDroplets(dropletScore);
+          dropletScore = 0;
+          froggo.hurtUntil = now + 1200;
+          froggo.vx = -Math.sign(p.vx) * 260;
+          froggo.vy = -300;
+          sfxHurt();
+          p.life = 0;
+        }
+      }
+    }
+    projectiles = projectiles.filter(p => p.life > 0 && p.x > camera.x - 200 && p.x < camera.x + W + 200);
+  }
+
+  // Shockbots (patroller with periodic electric field)
+  if (shockbots && shockbots.length > 0) {
+    for (const s of shockbots) {
+      if (!s.alive) continue;
+      s.x += s.vx * s.dir * dt;
+      if (s.x < s.patrolMin) { s.x = s.patrolMin; s.dir = 1; }
+      if (s.x > s.patrolMax) { s.x = s.patrolMax; s.dir = -1; }
+      // Field cycle: 2s on, 1.5s off
+      const CYCLE = 3.5;
+      const phase = ((now / 1000) + s.phase) % CYCLE;
+      s.electrified = phase < 2.0;
+      if (s.electrified && phase < 0.08 && s.lastZap !== Math.floor((now / 1000 + s.phase) / CYCLE)) {
+        s.lastZap = Math.floor((now / 1000 + s.phase) / CYCLE);
+        sfxShock();
+      }
+      const size = 28, half = size / 2;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, s.x - half, s.y - half, size, size)) {
+        const fromAbove = froggo.vy > 50 && (froggo.y + froggo.h) < s.y + 8;
+        const safeHit = !s.electrified && (fromAbove || froggo.rolling);
+        if (safeHit) {
+          s.alive = false;
+          froggo.vy = -380;
+          sfxBugbotSquish();
+          bugbotsKilled += 1;
+        } else if (now > froggo.hurtUntil) {
+          if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+          scatterDroplets(dropletScore);
+          dropletScore = 0;
+          froggo.hurtUntil = now + 1200;
+          froggo.vx = -froggo.facing * 260;
+          froggo.vy = -320;
+          sfxHurt();
+        }
+      }
+    }
+  }
+
+  // Goal — arch interior is a trigger volume (present on non-boss acts)
+  if (goal && goal.armed && rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, goal.x + 30, goal.y + 40, goal.w - 60, goal.h - 40)) {
     goal.armed = false;
     emitGoalParticles();
     sfxGoal();
-    winLevel();
+    onActComplete();
     return;
+  }
+
+  // Boss update (final-act boss arena)
+  if (boss && !boss.defeated) {
+    updateBoss(dt, now);
   }
 
   // Track airborne start time (for jump-frame indexing)
@@ -997,26 +1990,708 @@ function update(dt) {
 }
 
 function gameOver() {
-  state = 'gameover';
-  showScreen('gameover');
+  lives -= 1;
+  if (lives > 0) {
+    // Respawn at the current act (from checkpoint if one was activated).
+    respawnCard = {
+      startMs: performance.now(),
+      zone: currentZone,
+      act: currentAct,
+      livesLeft: lives,
+      checkpoint: activeCheckpoint ? { x: activeCheckpoint.x, y: activeCheckpoint.y } : null,
+    };
+    state = 'respawn';
+    hud.classList.add('hidden');
+  } else {
+    // Out of lives — real game over. Reset lives for next attempt.
+    lives = MAX_LIVES;
+    state = 'gameover';
+    showScreen('gameover');
+  }
+}
+
+function completeRespawn() {
+  const card = respawnCard;
+  respawnCard = null;
+  if (card) {
+    currentZone = card.zone;
+    advanceToAct(card.act, card.checkpoint);
+  } else {
+    advanceToAct(currentAct);
+  }
+  bossArenaLocked = false;
+  state = 'play';
+  hud.classList.remove('hidden');
+}
+
+// ---------- Boss (Act 2 end) ----------
+let BOSS_ARENA_LEFT_VAL = 5200;
+let BOSS_ARENA_RIGHT_VAL = 6180;
+let bossArenaLocked = false;  // true once Froggo enters arena in current act
+
+function updateBoss(dt, now) {
+  if (!boss || boss.defeated) return;
+  if (boss.kind === 'slithertron') { updateSlithertron(dt, now); return; }
+
+  const arenaL = boss.arenaLeft, arenaR = boss.arenaRight;
+  // Activate arena when Froggo enters
+  if (!bossArenaLocked && froggo.x > arenaL) {
+    bossArenaLocked = true;
+    boss.stateAt = now;
+  }
+
+  boss.hoverPhase += dt;
+
+  // Phase 2: boss gets enraged once HP drops below half.
+  const enraged = boss.hp <= Math.ceil(boss.maxHp / 2);
+  const hoverMs  = enraged ? 1000 : 1800;
+  const windupMs = enraged ? 380  : 520;
+  const diveV0   = enraged ? 560  : 480;
+  const diveGrav = enraged ? 1700 : 1450;
+  const hoverSwaySpeed = enraged ? 1.5 : 1.0;
+  const hoverSwayAmp   = enraged ? 130 : 96;
+
+  if (boss.state === 'hover') {
+    boss.x = boss.hoverCenterX + Math.sin(boss.hoverPhase * hoverSwaySpeed) * hoverSwayAmp;
+    boss.y = boss.hoverCenterY + Math.sin(boss.hoverPhase * 2.0) * 14;
+    if (bossArenaLocked && now - boss.stateAt > hoverMs) {
+      boss.state = 'wind-up';
+      boss.stateAt = now;
+    }
+  } else if (boss.state === 'wind-up') {
+    // Rises to telegraph — faster + taller when enraged
+    boss.y -= (enraged ? 46 : 34) * dt;
+    if (now - boss.stateAt > windupMs) {
+      boss.state = 'dive';
+      boss.stateAt = now;
+      boss.vy = diveV0;
+      const targetX = froggo.x + froggo.w / 2;
+      // Enraged tracks the player harder and tolerates higher horizontal velocity.
+      const track = enraged ? 1.15 : 0.9;
+      const cap   = enraged ? 300  : 220;
+      boss.vx = Math.max(-cap, Math.min(cap, (targetX - boss.x) * track));
+    }
+  } else if (boss.state === 'dive') {
+    boss.vy += diveGrav * dt;
+    boss.x += boss.vx * dt;
+    boss.y += boss.vy * dt;
+    if (boss.y > 470) {
+      boss.state = 'return';
+      boss.stateAt = now;
+      boss.vy = 0;
+    }
+    if (boss.x < arenaL + 40) { boss.x = arenaL + 40; boss.vx = Math.abs(boss.vx); }
+    if (boss.x > arenaR - 40) { boss.x = arenaR - 40; boss.vx = -Math.abs(boss.vx); }
+  } else if (boss.state === 'return') {
+    const dy = boss.hoverCenterY - boss.y;
+    const dx = boss.hoverCenterX - boss.x;
+    const retSpeed = enraged ? 360 : 260;
+    const retXSpeed = enraged ? 260 : 180;
+    boss.y += Math.sign(dy) * Math.min(Math.abs(dy), retSpeed * dt);
+    boss.x += Math.sign(dx) * Math.min(Math.abs(dx), retXSpeed * dt);
+    if (Math.abs(dy) < 4 && Math.abs(dx) < 4) {
+      boss.state = 'hover';
+      boss.stateAt = now;
+    }
+  }
+
+  // --- Collision with Froggo ---
+  // Hit zones:
+  //   Top + sides = DAMAGE BOSS (safe to touch)
+  //   Bottom 14px (the stinger) = HURT FROGGO (unless rolling, which always damages boss)
+  const bx = boss.x - boss.w / 2, by = boss.y - boss.h / 2;
+  if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, bx, by, boss.w, boss.h)) {
+    const STINGER_BAND = 14;                       // bottom 14 px of boss
+    const stingerTopY = boss.y + boss.h / 2 - STINGER_BAND;
+    // Froggo is "in stinger range" only if his HEAD (top) is below the stinger top line.
+    // That means he's not above/beside the boss, just underneath.
+    const inStingerZone = froggo.y > stingerTopY;
+    const hurtsPlayer = inStingerZone && !froggo.rolling;
+
+    if (hurtsPlayer) {
+      if (now > froggo.hurtUntil) {
+        if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+        scatterDroplets(dropletScore);
+        dropletScore = 0;
+        froggo.hurtUntil = now + 1200;
+        froggo.vx = -froggo.facing * 280;
+        froggo.vy = -320;
+        sfxHurt();
+      }
+    } else {
+      // Top or side contact → damage the boss (with i-frame to prevent double-tap)
+      if (now - boss.hitFlashUntil >= 500) {
+        boss.hp -= 1;
+        boss.hitFlashUntil = now + 500;
+        // Bounce Froggo: upward if he was above, sideways if he approached from the side
+        const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
+        if (froggoAbove) {
+          froggo.vy = -520;
+        } else {
+          // Side hit — kick him away from the boss
+          const push = (froggo.x + froggo.w / 2 < boss.x) ? -340 : 340;
+          froggo.vx = push;
+          froggo.vy = -260;
+        }
+        sfxBugbotSquish();
+        if (boss.hp <= 0) {
+          boss.defeated = true;
+          onActComplete();
+          return;
+        }
+        // Boss returns to hover after being hit
+        boss.state = 'return';
+        boss.stateAt = now;
+        boss.vx = boss.vy = 0;
+      }
+    }
+  }
+
+  // Arena wall: once locked, Froggo can't go back past the entry
+  if (bossArenaLocked && froggo.x < arenaL) {
+    froggo.x = arenaL;
+    if (froggo.vx < 0) froggo.vx = 0;
+  }
+}
+
+function drawCheckpoints(now) {
+  if (!checkpoints || checkpoints.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const cp of checkpoints) {
+    // Totem pole: stone base, post, flag.
+    const baseX = cp.x - 10, baseY = cp.y - 4;
+    // Base stone
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(baseX - 4, baseY, 28, 6);
+    ctx.fillStyle = '#8a7a60';
+    ctx.fillRect(baseX - 2, baseY, 24, 2);
+    // Post
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(cp.x - 2, cp.y - 44, 4, 44);
+    ctx.fillStyle = '#6a5030';
+    ctx.fillRect(cp.x - 2, cp.y - 44, 2, 44);
+    // Flag
+    const wave = Math.sin(now / 180 + cp.x * 0.01) * 2;
+    const flagColor = cp.activated ? '#8effa6' : '#ff4466';
+    const flagShade = cp.activated ? '#2a8a44' : '#a02040';
+    // 3 segments of a flag
+    for (let i = 0; i < 3; i++) {
+      const sy = cp.y - 42 + i * 4;
+      const sx = cp.x + 2 + i * 2;
+      const sw = 16 - i * 2;
+      ctx.fillStyle = flagColor;
+      ctx.fillRect(sx, sy + wave * (i / 2), sw, 4);
+      ctx.fillStyle = flagShade;
+      ctx.fillRect(sx, sy + 3 + wave * (i / 2), sw, 1);
+    }
+    // Star emblem on flag when activated
+    if (cp.activated) {
+      ctx.fillStyle = '#ffe066';
+      ctx.fillRect(cp.x + 8, cp.y - 38, 2, 2);
+      ctx.fillRect(cp.x + 7, cp.y - 37, 4, 1);
+      ctx.fillRect(cp.x + 6, cp.y - 36, 6, 2);
+      ctx.fillRect(cp.x + 7, cp.y - 34, 4, 1);
+      ctx.fillRect(cp.x + 8, cp.y - 33, 2, 2);
+    }
+    // Pulse ring briefly on activation
+    if (cp.pulseUntil && now < cp.pulseUntil) {
+      const pulseT = 1 - (cp.pulseUntil - now) / 900;
+      ctx.strokeStyle = `rgba(142, 255, 166, ${Math.max(0, 1 - pulseT)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cp.x, cp.y - 20, 10 + pulseT * 40, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawHazards(now) {
+  if (!hazards || hazards.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const h of hazards) {
+    if (h.kind === 'spike') {
+      // Base plate
+      ctx.fillStyle = '#3a3a4a';
+      ctx.fillRect(h.x, h.y + h.h - 4, h.w, 4);
+      // Triangular teeth
+      const teeth = Math.floor(h.w / 10);
+      for (let i = 0; i < teeth; i++) {
+        const tx = h.x + i * 10;
+        ctx.fillStyle = '#c8c8d8';
+        // Pixel triangle (stepped)
+        for (let s = 0; s < 5; s++) {
+          const w = 10 - s * 2;
+          ctx.fillRect(tx + s, h.y + h.h - 4 - (s + 1) * 2, w, 2);
+        }
+        ctx.fillStyle = '#8a8aa0';
+        ctx.fillRect(tx + 4, h.y + h.h - 6, 2, 4);
+      }
+    } else if (h.kind === 'saw') {
+      const cx = Math.round(h.x), cy = Math.round(h.y);
+      const r = h.w / 2;
+      const spin = h.spin || 0;
+      // Outer teeth — 8 teeth as rotating pixel clusters
+      for (let i = 0; i < 8; i++) {
+        const a = spin + (i / 8) * Math.PI * 2;
+        const tx = cx + Math.cos(a) * r;
+        const ty = cy + Math.sin(a) * r;
+        ctx.fillStyle = '#e0e0e8';
+        ctx.fillRect(Math.round(tx - 3), Math.round(ty - 3), 6, 6);
+        ctx.fillStyle = '#8a8aa0';
+        ctx.fillRect(Math.round(tx - 1), Math.round(ty - 1), 2, 2);
+      }
+      // Body disk
+      ctx.fillStyle = '#9aa0b8';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#4a4e5c';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Hub
+      ctx.fillStyle = '#d94a4a';
+      ctx.fillRect(cx - 3, cy - 3, 6, 6);
+      // Chain/rail showing patrol
+      ctx.strokeStyle = 'rgba(60,60,80,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(h.patrolMin, cy);
+      ctx.lineTo(h.patrolMax, cy);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawZappers(now) {
+  if (!zappers || zappers.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const z of zappers) {
+    if (!z.alive) continue;
+    const cx = z.x, cy = z.y;
+    // Base (squat on ground)
+    ctx.fillStyle = '#3a2a4a';
+    ctx.fillRect(cx - 14, cy - 6, 28, 10);
+    ctx.fillStyle = '#5a3a7a';
+    ctx.fillRect(cx - 14, cy - 6, 28, 3);
+    // Turret head
+    ctx.fillStyle = '#2a1a3a';
+    ctx.fillRect(cx - 10, cy - 20, 20, 14);
+    ctx.fillStyle = '#4a2a6a';
+    ctx.fillRect(cx - 10, cy - 20, 20, 3);
+    // Red eye — pulses faster as cooldown nears 0
+    const pulse = 1 - Math.max(0, Math.min(1, z.cooldown / z.fireInterval));
+    const eyeColor = pulse > 0.85 ? '#ffffff' : (pulse > 0.6 ? '#ffa0a0' : '#ff3344');
+    ctx.fillStyle = eyeColor;
+    ctx.fillRect(cx - 6, cy - 16, 12, 4);
+    ctx.fillStyle = '#ffcccc';
+    ctx.fillRect(cx - 5, cy - 16, 3, 2);
+    // Barrel pointing at Froggo's side
+    const dir = Math.sign((froggo.x + froggo.w / 2) - cx) || 1;
+    ctx.fillStyle = '#1a0a2a';
+    ctx.fillRect(cx + (dir > 0 ? 6 : -16), cy - 12, 10, 4);
+    ctx.fillStyle = '#6a4a8a';
+    ctx.fillRect(cx + (dir > 0 ? 14 : -16), cy - 12, 2, 4);
+  }
+  ctx.restore();
+}
+
+function drawProjectiles(now) {
+  if (!projectiles || projectiles.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const p of projectiles) {
+    const cx = Math.round(p.x), cy = Math.round(p.y);
+    // Cyan plasma bolt — trail + core
+    ctx.fillStyle = 'rgba(100, 220, 255, 0.4)';
+    ctx.fillRect(cx - 7, cy - 2, 14, 4);
+    ctx.fillStyle = '#66d4ff';
+    ctx.fillRect(cx - 4, cy - 3, 8, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - 1, cy - 1, 2, 2);
+  }
+  ctx.restore();
+}
+
+function drawShockbots(now) {
+  if (!shockbots || shockbots.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const s of shockbots) {
+    if (!s.alive) continue;
+    const cx = Math.round(s.x), cy = Math.round(s.y);
+    const flashing = s.electrified && Math.floor(now / 90) % 2 === 0;
+    // Electric field aura when on
+    if (s.electrified) {
+      ctx.fillStyle = `rgba(160, 220, 255, ${0.25 + 0.2 * Math.sin(now / 70)})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+      ctx.fill();
+      // crackle arcs
+      ctx.strokeStyle = 'rgba(200, 240, 255, 0.9)';
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) {
+        const a = (now / 60 + i * Math.PI / 2) % (Math.PI * 2);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(a) * 20, cy + Math.sin(a) * 20);
+        ctx.stroke();
+      }
+    }
+    // Body (chunkier than bugbot, purple)
+    ctx.fillStyle = flashing ? '#ffffff' : '#4a2a6a';
+    ctx.fillRect(cx - 12, cy - 10, 24, 20);
+    ctx.fillStyle = flashing ? '#ffffff' : '#6a3aa0';
+    ctx.fillRect(cx - 12, cy - 10, 24, 4);
+    // Antenna sparks
+    ctx.fillStyle = '#8effa6';
+    ctx.fillRect(cx - 6, cy - 16, 2, 6);
+    ctx.fillRect(cx + 4, cy - 16, 2, 6);
+    if (s.electrified) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx - 7, cy - 18, 4, 2);
+      ctx.fillRect(cx + 3, cy - 18, 4, 2);
+    }
+    // Eye visor (yellow slit)
+    ctx.fillStyle = s.electrified ? '#ffe066' : '#ff8c00';
+    ctx.fillRect(cx - 8, cy - 4, 16, 4);
+  }
+  ctx.restore();
+}
+
+function drawBoss(now) {
+  if (!boss) return;
+  if (boss.defeated) {
+    // Smoking pile briefly — drawn nothing for simplicity post-defeat
+    return;
+  }
+  if (boss.kind === 'slithertron') { drawSlithertron(now); return; }
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  const bx = boss.x, by = boss.y;
+  const flashing = now < boss.hitFlashUntil && Math.floor(now / 70) % 2 === 0;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(bx, 520, 32, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wings (big, flapping)
+  const flap = Math.sin(now / 35) * 8;
+  ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
+  ctx.fillRect(bx - 38, by - 30 + flap, 20, 8);
+  ctx.fillRect(bx + 18, by - 30 - flap, 20, 8);
+  ctx.fillStyle = 'rgba(220, 240, 255, 0.35)';
+  ctx.fillRect(bx - 34, by - 28 + flap, 12, 4);
+  ctx.fillRect(bx + 22, by - 28 - flap, 12, 4);
+
+  const enraged = boss.hp <= Math.ceil(boss.maxHp / 2);
+
+  // Enraged aura (angry red glow when below half HP)
+  if (enraged) {
+    const pulse = (Math.sin(now / 90) + 1) / 2;
+    ctx.fillStyle = `rgba(255, 60, 80, ${0.18 + 0.12 * pulse})`;
+    ctx.fillRect(bx - 40, by - 28, 80, 56);
+  }
+
+  // Body (heavy armor)
+  if (flashing) {
+    ctx.fillStyle = '#fff';
+  } else {
+    ctx.fillStyle = enraged ? '#3a1820' : '#2f2a3a';
+  }
+  ctx.fillRect(bx - 30, by - 18, 60, 36);
+  ctx.fillStyle = flashing ? '#fff' : (enraged ? '#6a2030' : '#4a4055');
+  ctx.fillRect(bx - 30, by - 18, 60, 6);
+  ctx.fillStyle = flashing ? '#fff' : '#18141e';
+  ctx.fillRect(bx - 30, by + 14, 60, 4);
+
+  // Eye visor (wider red slit) — extra bright/pulsing when enraged
+  const eyeBase = boss.state === 'wind-up' ? '#ffcc00' : '#ff3344';
+  ctx.fillStyle = enraged && Math.floor(now / 110) % 2 === 0 ? '#ffffff' : eyeBase;
+  ctx.fillRect(bx - 16, by - 6, 32, 8);
+  ctx.fillStyle = '#ff8899';
+  ctx.fillRect(bx - 14, by - 6, 6, 4);
+
+  // Rivets
+  ctx.fillStyle = '#888';
+  for (const rx of [-26, -8, 8, 26]) ctx.fillRect(bx + rx, by - 16, 3, 3);
+  for (const rx of [-26, -8, 8, 26]) ctx.fillRect(bx + rx, by + 13, 3, 3);
+
+  // Stinger under body (points down)
+  ctx.fillStyle = '#1a1524';
+  ctx.fillRect(bx - 6, by + 18, 12, 8);
+  ctx.fillRect(bx - 3, by + 26, 6, 6);
+
+  // HP bar above
+  const hpBarW = 80, hpBarH = 6;
+  const hpX = bx - hpBarW / 2, hpY = by - 40;
+  ctx.fillStyle = '#222';
+  ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
+  ctx.fillStyle = boss.hp > 2 ? '#8effa6' : boss.hp > 1 ? '#ffe066' : '#ff4466';
+  ctx.fillRect(hpX, hpY, (hpBarW * boss.hp) / boss.maxHp, hpBarH);
+  // BOSS label
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff4466';
+  ctx.fillText('BOGMECH', bx, hpY - 4);
+  ctx.textAlign = 'start';
+
+  ctx.restore();
+}
+
+// ---------- Slithertron (Zone 2 boss) ----------
+function updateSlithertron(dt, now) {
+  const arenaL = boss.arenaLeft, arenaR = boss.arenaRight;
+  if (!bossArenaLocked && froggo.x > arenaL) {
+    bossArenaLocked = true;
+    boss.stateAt = now;
+  }
+
+  boss.phase = (boss.phase || 0) + dt;
+
+  if (boss.state === 'glide') {
+    const t = (now - boss.stateAt) / 1000;
+    const cx = (arenaL + arenaR) / 2;
+    const range = (arenaR - arenaL) / 2 - 70;
+    boss.x = cx + Math.sin(t * 0.9) * range;
+    boss.y = 250 + Math.sin(t * 2.2) * 26;
+    if (bossArenaLocked && t > 4.2) {
+      boss.state = 'wind-up';
+      boss.stateAt = now;
+    }
+  } else if (boss.state === 'wind-up') {
+    const wt = (now - boss.stateAt) / 1000;
+    boss.y -= 24 * dt;
+    boss.targetX = froggo.x + froggo.w / 2;
+    if (wt > 0.85) {
+      boss.state = 'dive';
+      boss.stateAt = now;
+      boss.vy = 380;
+      boss.vx = Math.sign(boss.targetX - boss.x) * 200;
+    }
+  } else if (boss.state === 'dive') {
+    boss.vy += 1200 * dt;
+    boss.x += boss.vx * dt;
+    boss.y += boss.vy * dt;
+    if (boss.y > 450) {
+      boss.state = 'return';
+      boss.stateAt = now;
+      boss.vy = 0;
+    }
+    if (boss.x < arenaL + 50) { boss.x = arenaL + 50; boss.vx = Math.abs(boss.vx); }
+    if (boss.x > arenaR - 50) { boss.x = arenaR - 50; boss.vx = -Math.abs(boss.vx); }
+  } else if (boss.state === 'return') {
+    const targetY = 250;
+    boss.y += Math.sign(targetY - boss.y) * Math.min(Math.abs(targetY - boss.y), 260 * dt);
+    if (Math.abs(boss.y - targetY) < 4) {
+      boss.y = targetY;
+      boss.state = 'glide';
+      boss.stateAt = now;
+    }
+  }
+
+  // Trail for body segments
+  if (!boss.trail) boss.trail = [];
+  boss.trail.unshift({ x: boss.x, y: boss.y });
+  if (boss.trail.length > 80) boss.trail.length = 80;
+
+  // Head collision (vulnerable)
+  const headHX = boss.x - 20, headHY = boss.y - 14;
+  if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, headHX, headHY, 40, 28)) {
+    if (now - boss.hitFlashUntil >= 600) {
+      boss.hp -= 1;
+      boss.hitFlashUntil = now + 600;
+      const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
+      if (froggoAbove) {
+        froggo.vy = -520;
+      } else {
+        froggo.vx = (froggo.x < boss.x ? -1 : 1) * 340;
+        froggo.vy = -260;
+      }
+      sfxBugbotSquish();
+      if (boss.hp <= 0) {
+        boss.defeated = true;
+        onActComplete();
+        return;
+      }
+      boss.state = 'return';
+      boss.stateAt = now;
+      boss.vx = boss.vy = 0;
+    }
+  }
+
+  // Body segment collisions (hurt Froggo)
+  const segCount = 4;
+  const segGap = 12;
+  for (let i = 1; i <= segCount; i++) {
+    const idx = Math.min(boss.trail.length - 1, i * segGap);
+    const seg = boss.trail[idx];
+    if (!seg) continue;
+    const bx = seg.x - 14, by = seg.y - 12;
+    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, bx, by, 28, 24)) {
+      if (froggo.rolling) continue;  // rolling = immune to body chain
+      if (now > froggo.hurtUntil) {
+        if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+        scatterDroplets(dropletScore);
+        dropletScore = 0;
+        froggo.hurtUntil = now + 1200;
+        froggo.vx = -froggo.facing * 280;
+        froggo.vy = -320;
+        sfxHurt();
+      }
+    }
+  }
+
+  if (bossArenaLocked && froggo.x < arenaL) {
+    froggo.x = arenaL;
+    if (froggo.vx < 0) froggo.vx = 0;
+  }
+}
+
+function drawSlithertron(now) {
+  if (!boss || boss.defeated) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  const flashing = now < boss.hitFlashUntil && Math.floor(now / 80) % 2 === 0;
+  const trail = boss.trail || [];
+
+  // Draw body segments (back to front so head is on top)
+  const segCount = 4;
+  const segGap = 12;
+  for (let i = segCount; i >= 1; i--) {
+    const idx = Math.min(trail.length - 1, i * segGap);
+    const s = trail[idx];
+    if (!s) continue;
+    const bx = s.x, by = s.y;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(bx - 12, 520, 24, 3);
+    // Segment body (cyan→magenta gradient)
+    const tFrac = i / segCount;
+    const coreColor = flashing ? '#ffffff' : (i % 2 === 0 ? '#4a2a6a' : '#6a2a8a');
+    ctx.fillStyle = coreColor;
+    ctx.fillRect(bx - 14, by - 12, 28, 24);
+    // Plate highlight
+    ctx.fillStyle = flashing ? '#ffffff' : (i % 2 === 0 ? '#7a4aa0' : '#9a4ac0');
+    ctx.fillRect(bx - 14, by - 12, 28, 4);
+    // Rivets
+    ctx.fillStyle = '#c0c0d8';
+    ctx.fillRect(bx - 10, by - 8, 2, 2);
+    ctx.fillRect(bx + 8,  by - 8, 2, 2);
+    ctx.fillRect(bx - 10, by + 6, 2, 2);
+    ctx.fillRect(bx + 8,  by + 6, 2, 2);
+    // Neon spine light
+    ctx.fillStyle = i % 2 === 0 ? '#66d4ff' : '#d946ef';
+    ctx.fillRect(bx - 2, by - 2, 4, 2);
+  }
+
+  // Head
+  const bx = boss.x, by = boss.y;
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(bx - 18, 520, 36, 4);
+
+  ctx.fillStyle = flashing ? '#ffffff' : '#2a0a3a';
+  ctx.fillRect(bx - 20, by - 14, 40, 28);
+  ctx.fillStyle = flashing ? '#ffffff' : '#5a2a7a';
+  ctx.fillRect(bx - 20, by - 14, 40, 5);
+  ctx.fillStyle = flashing ? '#ffffff' : '#0a0010';
+  ctx.fillRect(bx - 20, by + 10, 40, 4);
+  // Eyes (glowing cyan)
+  const eyeColor = boss.state === 'wind-up' ? '#ffe066' :
+                   boss.state === 'dive'    ? '#ff3344' :
+                                              '#66d4ff';
+  ctx.fillStyle = eyeColor;
+  ctx.fillRect(bx - 14, by - 6, 6, 5);
+  ctx.fillRect(bx + 8,  by - 6, 6, 5);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(bx - 13, by - 5, 2, 2);
+  ctx.fillRect(bx + 9,  by - 5, 2, 2);
+  // Fangs
+  ctx.fillStyle = '#e0e0e8';
+  ctx.fillRect(bx - 6, by + 8, 2, 5);
+  ctx.fillRect(bx + 4, by + 8, 2, 5);
+  // Neck seam
+  ctx.fillStyle = '#1a0622';
+  ctx.fillRect(bx - 20, by - 14, 40, 1);
+
+  // HP bar
+  const hpBarW = 100, hpBarH = 6;
+  const hpX = bx - hpBarW / 2, hpY = by - 36;
+  ctx.fillStyle = '#222';
+  ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
+  ctx.fillStyle = boss.hp > 3 ? '#66d4ff' : boss.hp > 2 ? '#8effa6' : boss.hp > 1 ? '#ffe066' : '#ff4466';
+  ctx.fillRect(hpX, hpY, (hpBarW * boss.hp) / boss.maxHp, hpBarH);
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#d946ef';
+  ctx.fillText('SLITHERTRON', bx, hpY - 4);
+  ctx.textAlign = 'start';
+
+  ctx.restore();
 }
 
 let winFx = null;
-function winLevel() {
-  state = 'win';
-  const timeSec = (performance.now() - levelStartMs) / 1000;
-  const timeBonus = Math.max(0, Math.floor((90 - timeSec) * 20));
+
+// Called when an act ends.
+// Non-final act → transition card → next act.
+// Final act of a zone → full zone-clear cinematic + leaderboard submit.
+function onActComplete() {
+  const act = currentActDef();
+  const timeSec = (performance.now() - actStartMs) / 1000;
+  const targetTime = act.targetTime || (currentAct === 0 ? 90 : 150);
+  const timeBonus = Math.max(0, Math.floor((targetTime - timeSec) * 20));
   const dropletPoints = dropletScore * 10;
   const bugbotPoints  = bugbotsKilled * 50;
-  const total = dropletPoints + timeBonus + bugbotPoints;
-  levelEndScore = total;
+  const actScore = dropletPoints + timeBonus + bugbotPoints;
+  totalZoneScore += actScore;
 
+  const isFinalActOfZone = currentAct >= ZONES[currentZone].acts.length - 1;
+  if (!isFinalActOfZone) {
+    state = 'actClear';
+    actTransition = {
+      startMs: performance.now(),
+      actScore,
+      actDroplets: dropletScore,
+      actBugbots: bugbotsKilled,
+      actTimeBonus: timeBonus,
+      nextActIdx: currentAct + 1,
+      nextZoneSubtitle: ZONES[currentZone].acts[currentAct + 1].subtitle || '',
+    };
+    hud.classList.add('hidden');
+  } else {
+    zoneCleared(actScore, timeBonus, dropletPoints, bugbotPoints);
+  }
+}
+
+function zoneCleared(actScore, timeBonus, dropletPoints, bugbotPoints) {
+  state = 'win';
+  levelEndScore = totalZoneScore;
+  const clearedZoneIdx = currentZone;
+  const nextZoneIdx = clearedZoneIdx + 1;
+  const hasNextZone = nextZoneIdx < ZONES.length;
+  // Unlock next zone
+  if (hasNextZone) {
+    const prev = getUnlockedZones();
+    if (nextZoneIdx + 1 > prev) setUnlockedZones(nextZoneIdx + 1);
+  }
   winFx = {
     startMs: performance.now(),
     timeBonus,
     dropletPoints,
     bugbotPoints,
-    total,
+    total: totalZoneScore,
     fireworks: [],
     lastFireworkAt: -999,
     shownDroplets: 0,
@@ -1025,19 +2700,51 @@ function winLevel() {
     shownTotal: 0,
     froggoLaunchY: froggo.y,
     froggoLaunchX: froggo.x,
+    clearedZoneIdx,
+    hasNextZone,
+    newlyUnlocked: hasNextZone && (nextZoneIdx + 1 === getUnlockedZones()),
+    isFinalZone: !hasNextZone,
   };
-
-  // Hide HUD, keep canvas clean for cinematic
   hud.classList.add('hidden');
-
-  // Submit to leaderboard via parent
   try {
     window.parent.postMessage(
-      { type: 'imaginex-score', gameId: 'froggo-adventure', score: total, nickname: 'Player' },
+      { type: 'imaginex-score', gameId: 'froggo-adventure', score: totalZoneScore, nickname: 'Player' },
       '*'
     );
   } catch(e) {}
 }
+
+// Start a fresh zone (used to advance from a zone-clear win screen).
+function startZone(zoneIdx) {
+  froggo.vx = 0; froggo.vy = 0;
+  froggo.grounded = false; froggo.rolling = false;
+  froggo.hurtUntil = 0; froggo.dead = false;
+  froggo.facing = 1; froggo.rotation = 0;
+  froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.airbornSinceMs = -1;
+  froggo.x = 80; froggo.y = 480;
+  scatteredDroplets = [];
+  dropletScore = 0;
+  bugbotsKilled = 0;
+  totalZoneScore = 0;
+  lives = MAX_LIVES;
+  currentZone = zoneIdx;
+  loadAct(0);
+  bossArenaLocked = false;
+  levelStartMs = performance.now();
+  actStartMs = performance.now();
+  slitherAnim = null;
+  winFx = null;
+  actTransition = null;
+  respawnCard = null;
+  // Show the zone intro card first (state handles play start after card)
+  zoneIntro = { startMs: performance.now(), zoneIdx };
+  state = 'zoneIntro';
+  hud.classList.add('hidden');
+}
+
+// Legacy alias — some code paths still call winLevel(); route to the new flow.
+function winLevel() { onActComplete(); }
 
 // --- Scattered droplets (Sonic-style ring-loss) ---
 function scatterDroplets(count) {
@@ -1093,6 +2800,7 @@ function updateScatteredDroplets(dt, now) {
       d.life = 0;
       dropletScore += 1;
       sfxDroplet();
+      onDropletPickedUp();
     }
   }
   scatteredDroplets = scatteredDroplets.filter(d => d.life > 0);
@@ -1300,13 +3008,13 @@ function drawWinSequence(now) {
     ctx.lineJoin = 'round';
     ctx.lineWidth = 10;
     ctx.strokeStyle = '#0a4d1a';
-    ctx.strokeText('STAGE CLEAR!', 0, 0);
+    ctx.strokeText(winFx && winFx.isFinalZone ? 'GAME CLEAR!' : 'ZONE CLEAR!', 0, 0);
     const grad = ctx.createLinearGradient(0, -30, 0, 30);
     grad.addColorStop(0, '#ffffff');
     grad.addColorStop(0.5, '#ffe066');
     grad.addColorStop(1, '#ff8c00');
     ctx.fillStyle = grad;
-    ctx.fillText('STAGE CLEAR!', 0, 0);
+    ctx.fillText(winFx && winFx.isFinalZone ? 'GAME CLEAR!' : 'ZONE CLEAR!', 0, 0);
     ctx.restore();
     ctx.textAlign = 'start';
     ctx.textBaseline = 'alphabetic';
@@ -1384,7 +3092,20 @@ function drawWinSequence(now) {
     ctx.restore();
   }
 
-  // --- Phase 5: PRESS R prompt (shows once total reveal is complete) ---
+  // --- Phase 4.5: Zone-unlock banner (shown once score reveal starts) ---
+  if (winFx.newlyUnlocked && t > 2200) {
+    ctx.save();
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#d946ef';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText('★  ZONE 2 UNLOCKED: CYBER SWAMP  ★', W / 2, 112);
+    ctx.restore();
+    ctx.textAlign = 'start';
+  }
+
+  // --- Phase 5: prompt (shows once total reveal is complete) ---
   const readyAt = 2000 + dropletScore * 40 + 200 + bugbotsKilled * 80 + 200 + winFx.timeBonus / 2 + 600;
   if (t > readyAt) {
     if (Math.floor(now / 400) % 2 === 0) {
@@ -1394,7 +3115,15 @@ function drawWinSequence(now) {
       ctx.fillStyle = '#ffe066';
       ctx.shadowColor = '#000';
       ctx.shadowBlur = 4;
-      ctx.fillText(isTouchDevice ? 'TAP TO PLAY AGAIN' : 'PRESS R TO PLAY AGAIN', W / 2, 560);
+      let label;
+      if (winFx.hasNextZone && !winFx.isFinalZone) {
+        label = isTouchDevice ? 'TAP TO ENTER ZONE 2' : 'PRESS R TO ENTER ZONE 2';
+      } else if (winFx.isFinalZone) {
+        label = isTouchDevice ? 'TAP TO PLAY AGAIN' : 'PRESS R TO PLAY AGAIN';
+      } else {
+        label = isTouchDevice ? 'TAP TO PLAY AGAIN' : 'PRESS R TO PLAY AGAIN';
+      }
+      ctx.fillText(label, W / 2, 560);
       ctx.restore();
       ctx.textAlign = 'start';
     }
@@ -1588,16 +3317,74 @@ function updateCamera() {
 }
 
 // ---------- Render ----------
-function drawBackground() {
-  // --- 16-bit sky: 6 stepped bands with dithered transitions ---
-  const skyBands = [
+const SKY_BANDS = {
+  day: [
     { start: 0,   end: 80,  color: '#1a5d3c' },
     { start: 80,  end: 160, color: '#26794b' },
     { start: 160, end: 240, color: '#338f5c' },
     { start: 240, end: 320, color: '#48a870' },
     { start: 320, end: 400, color: '#62c285' },
     { start: 400, end: 450, color: '#8fd9a8' },
-  ];
+  ],
+  sunset: [
+    { start: 0,   end: 80,  color: '#2a1a54' },
+    { start: 80,  end: 160, color: '#5c2a6e' },
+    { start: 160, end: 240, color: '#a03f7c' },
+    { start: 240, end: 320, color: '#d96a55' },
+    { start: 320, end: 400, color: '#e8974a' },
+    { start: 400, end: 450, color: '#f5c080' },
+  ],
+  'cyber-dawn': [
+    { start: 0,   end: 80,  color: '#0a1530' },
+    { start: 80,  end: 160, color: '#142040' },
+    { start: 160, end: 240, color: '#1e3358' },
+    { start: 240, end: 320, color: '#2a5078' },
+    { start: 320, end: 400, color: '#3d7090' },
+    { start: 400, end: 450, color: '#4fa0b0' },
+  ],
+  'cyber-core': [
+    { start: 0,   end: 80,  color: '#0a0018' },
+    { start: 80,  end: 160, color: '#1a002c' },
+    { start: 160, end: 240, color: '#3a0848' },
+    { start: 240, end: 320, color: '#5a0a68' },
+    { start: 320, end: 400, color: '#7a0c88' },
+    { start: 400, end: 450, color: '#a020b0' },
+  ],
+};
+const HILL_COLOR = { day: '#0f4520', sunset: '#1a0d26', 'cyber-dawn': '#0a1830', 'cyber-core': '#1a0028' };
+const TREE_COLOR = { day: '#0a3a16', sunset: '#0f0820', 'cyber-dawn': '#0a2038', 'cyber-core': '#2a0640' };
+const REED_COLOR = { day: '#0a2612', sunset: '#0a0618', 'cyber-dawn': '#081820', 'cyber-core': '#180028' };
+const CLOUD_COLOR = { day: '#ffffff', sunset: '#f0d0b8', 'cyber-dawn': '#a0c8e0', 'cyber-core': '#e888d0' };
+
+function isCyberPalette() { return levelPalette === 'cyber-dawn' || levelPalette === 'cyber-core'; }
+
+const GROUND_PALETTE = {
+  day: {
+    water: '#1f4a6a', waterDither: '#2e6890', waterWave: '#5fa3d0',
+    dirt: '#6d4828', dirtDark: '#4f3418', dirtPebble: '#8a6a48',
+    topMain: '#4fa83a', topHi: '#8ee86a', topUnder: '#2a6228', tuftHi: '#8ee86a',
+  },
+  sunset: {
+    water: '#1f4a6a', waterDither: '#2e6890', waterWave: '#5fa3d0',
+    dirt: '#6d4828', dirtDark: '#4f3418', dirtPebble: '#8a6a48',
+    topMain: '#4fa83a', topHi: '#8ee86a', topUnder: '#2a6228', tuftHi: '#8ee86a',
+  },
+  'cyber-dawn': {
+    water: '#28184a', waterDither: '#3a2868', waterWave: '#7a4ab0',
+    dirt: '#1c1a28', dirtDark: '#0c0a18', dirtPebble: '#3a3a58',
+    topMain: '#5a5a72', topHi: '#9aa0bc', topUnder: '#2a2a3c', tuftHi: '#66d4ff',
+  },
+  'cyber-core': {
+    water: '#2a0844', waterDither: '#4a0a6a', waterWave: '#b040d0',
+    dirt: '#180022', dirtDark: '#0a0012', dirtPebble: '#40205a',
+    topMain: '#4a3a5a', topHi: '#8a6ab0', topUnder: '#20102c', tuftHi: '#d946ef',
+  },
+};
+function groundPal() { return GROUND_PALETTE[levelPalette] || GROUND_PALETTE.day; }
+
+function drawBackground() {
+  // --- 16-bit sky: 6 stepped bands with dithered transitions ---
+  const skyBands = SKY_BANDS[levelPalette] || SKY_BANDS.day;
   for (const b of skyBands) {
     ctx.fillStyle = b.color;
     ctx.fillRect(0, b.start, W, b.end - b.start);
@@ -1613,7 +3400,8 @@ function drawBackground() {
 
   // --- Pixel clouds (chunky rectangles) ---
   const cpx = -camera.x * 0.12;
-  ctx.fillStyle = '#ffffff';
+  const cloudColor = CLOUD_COLOR[levelPalette] || '#ffffff';
+  ctx.fillStyle = cloudColor;
   const clouds = [
     { x: 100,  y: 70,  w: 64, h: 12 },
     { x: 90,   y: 82,  w: 80, h: 10 },
@@ -1630,11 +3418,36 @@ function drawBackground() {
     { x: 3800, y: 85,  w: 60, h: 12 },
     { x: 4300, y: 70,  w: 72, h: 10 },
   ];
+  const cloudShadow =
+    levelPalette === 'sunset'     ? '#b48a6e' :
+    levelPalette === 'cyber-dawn' ? '#4068a0' :
+    levelPalette === 'cyber-core' ? '#902090' :
+    '#d0e0d8';
   for (const c of clouds) {
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = cloudColor;
     ctx.fillRect(c.x + cpx, c.y, c.w, c.h);
-    ctx.fillStyle = '#d0e0d8';
+    ctx.fillStyle = cloudShadow;
     ctx.fillRect(c.x + cpx, c.y + c.h - 2, c.w, 2);
+  }
+
+  // Cyber extras: distant city lights + blinking satellite
+  if (isCyberPalette()) {
+    const twinklePx = -camera.x * 0.18;
+    for (let i = 0; i < 60; i++) {
+      const lx = ((i * 137 + 50) % 1600) + twinklePx;
+      const ly = 30 + (i * 47) % 60;
+      const on = Math.floor(performance.now() / 500 + i) % 4 !== 0;
+      if (!on) continue;
+      ctx.fillStyle = (i % 5 === 0) ? '#ff66cc' : (i % 3 === 0) ? '#66d4ff' : '#ffe066';
+      ctx.fillRect(Math.floor(lx) % W, ly, 2, 2);
+    }
+    // Satellite
+    const satX = ((performance.now() / 60) % (W + 80)) - 40;
+    ctx.fillStyle = '#c0c0d0';
+    ctx.fillRect(satX, 40, 8, 3);
+    ctx.fillRect(satX + 3, 38, 2, 7);
+    ctx.fillStyle = '#ff3344';
+    if (Math.floor(performance.now() / 400) % 2) ctx.fillRect(satX - 1, 41, 1, 1);
   }
 
   // Hills, trees, reeds all follow camera.y so they don't float when Froggo flies high
@@ -1642,54 +3455,96 @@ function drawBackground() {
   ctx.translate(0, -camera.y);
 
   // --- Distant hills: stepped silhouettes (no curves) ---
+  const hillColor = HILL_COLOR[levelPalette] || '#0f4520';
+  const hillHighlight =
+    levelPalette === 'sunset'     ? '#291337' :
+    levelPalette === 'cyber-dawn' ? '#203858' :
+    levelPalette === 'cyber-core' ? '#3a0848' :
+    '#185a2a';
   const px1 = -camera.x * 0.25;
-  ctx.fillStyle = '#0f4520';
-  const hills = [-400, 0, 400, 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4400, 4800];
+  ctx.fillStyle = hillColor;
+  const hills = [-400, 0, 400, 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4400, 4800, 5200, 5600, 6000];
   for (const hx of hills) {
     const baseX = hx + px1;
     const peakH = 120 + ((hx / 400) % 3) * 30;
     const stepH = 8;
-    // Build pyramid silhouette out of steps
+    ctx.fillStyle = hillColor;
     for (let s = 0; s < peakH; s += stepH) {
       const wAtStep = (peakH - s) * 1.6;
       ctx.fillRect(baseX + 200 - wAtStep, 440 - peakH + s, wAtStep * 2, stepH);
     }
-    // Highlight on one side
-    ctx.fillStyle = '#185a2a';
+    ctx.fillStyle = hillHighlight;
     for (let s = 0; s < peakH; s += stepH) {
       const wAtStep = (peakH - s) * 1.6;
       ctx.fillRect(baseX + 200 - wAtStep, 440 - peakH + s, 4, stepH);
     }
-    ctx.fillStyle = '#0f4520';
   }
 
   // --- Mid-distance tree silhouettes ---
+  const treeColor = TREE_COLOR[levelPalette] || '#0a3a16';
   const px15 = -camera.x * 0.35;
-  ctx.fillStyle = '#0a3a16';
-  for (let i = 0; i < 30; i++) {
+  ctx.fillStyle = treeColor;
+  for (let i = 0; i < 40; i++) {
     const tx = px15 + i * 260 + (i * 41 % 60);
     const th = 80 + (i * 23 % 40);
-    // Trunk
     ctx.fillRect(tx, 530 - th + 60, 6, th - 60);
-    // Foliage (chunky squares)
     ctx.fillRect(tx - 12, 530 - th, 30, 20);
     ctx.fillRect(tx - 8,  530 - th + 16, 24, 16);
     ctx.fillRect(tx - 4,  530 - th + 28, 16, 12);
   }
 
-  // --- Reeds ---
+  // --- Reeds / neon pipes ---
+  const reedColor = REED_COLOR[levelPalette] || '#0a2612';
+  const reedTip =
+    levelPalette === 'sunset'     ? '#8a5a4a' :
+    levelPalette === 'cyber-dawn' ? '#66d4ff' :
+    levelPalette === 'cyber-core' ? '#d946ef' :
+    '#4a7a3a';
   const px2 = -camera.x * 0.5;
-  ctx.fillStyle = '#0a2612';
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 70; i++) {
     const cx = px2 + i * 110 + 20;
     const h = 50 + ((i * 37) % 40);
+    ctx.fillStyle = reedColor;
     ctx.fillRect(cx,      520 - h, 3, h);
     ctx.fillRect(cx + 6,  525 - (h - 8), 3, h - 8);
     ctx.fillRect(cx + 11, 522 - (h - 4),  3, h - 4);
-    // Reed tip
-    ctx.fillStyle = '#4a7a3a';
+    ctx.fillStyle = reedTip;
     ctx.fillRect(cx - 1, 520 - h, 5, 3);
-    ctx.fillStyle = '#0a2612';
+    // Cyber: add a glow dot on the tallest pipe
+    if (isCyberPalette()) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx, 519 - h, 3, 1);
+    }
+  }
+
+  // --- Cyber-only: hill antenna lights + tree satellite dishes ---
+  if (isCyberPalette()) {
+    // Blinking antennae on hills (re-use px1 offsets)
+    const px1b = -camera.x * 0.25;
+    const hills2 = [-400, 0, 400, 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4400, 4800, 5200, 5600, 6000, 6400, 7000, 7600, 8200, 8800, 9400];
+    for (let k = 0; k < hills2.length; k++) {
+      const hx = hills2[k];
+      const baseX = hx + px1b + 200;
+      const peakH = 120 + ((hx / 400) % 3) * 30;
+      const topY = 440 - peakH;
+      ctx.fillStyle = '#2a2a3a';
+      ctx.fillRect(baseX - 1, topY - 18, 2, 18);  // antenna pole
+      // Blinking red
+      const blink = Math.floor(performance.now() / 450 + k) % 2 === 0;
+      ctx.fillStyle = blink ? '#ff3344' : '#551a22';
+      ctx.fillRect(baseX - 2, topY - 20, 4, 3);
+    }
+    // Antenna dishes atop the pine silhouettes (px15 shared with trees)
+    const px15b = -camera.x * 0.35;
+    for (let i = 0; i < 40; i += 3) {
+      const tx = px15b + i * 260 + (i * 41 % 60);
+      const th = 80 + (i * 23 % 40);
+      ctx.fillStyle = '#404a58';
+      ctx.fillRect(tx - 4, 530 - th - 6, 16, 4);
+      ctx.fillRect(tx,     530 - th - 10, 8, 4);
+      ctx.fillStyle = '#66d4ff';
+      ctx.fillRect(tx + 3, 530 - th - 12, 2, 2);
+    }
   }
   ctx.restore();
 }
@@ -1698,20 +3553,22 @@ function drawGround() {
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
 
+  const gp = groundPal();
+
   // --- Water (16-bit style: dithered bands) ---
   const waterTop = DEATH_Y - 20;
   const waterStartX = Math.max(0, camera.x - 10);
   const waterEndX   = Math.min(LEVEL_WIDTH, camera.x + W + 10);
-  ctx.fillStyle = '#1f4a6a';
+  ctx.fillStyle = gp.water;
   ctx.fillRect(waterStartX, waterTop, waterEndX - waterStartX, 200);
   // Lighter dithered band near surface
-  ctx.fillStyle = '#2e6890';
+  ctx.fillStyle = gp.waterDither;
   for (let x = Math.floor(waterStartX / 4) * 4; x < waterEndX; x += 4) {
     ctx.fillRect(x, waterTop + 4, 2, 2);
     ctx.fillRect(x + 2, waterTop + 6, 2, 2);
   }
   // Wave highlights
-  ctx.fillStyle = '#5fa3d0';
+  ctx.fillStyle = gp.waterWave;
   for (let x = Math.floor(waterStartX / 24) * 24; x < waterEndX; x += 24) {
     ctx.fillRect(x, waterTop, 12, 2);
   }
@@ -1726,7 +3583,7 @@ function drawGround() {
     const drawStart = Math.max(seg.x1, Math.floor(viewLeft / 4) * 4);
     const drawEnd   = Math.min(seg.x2, viewRight);
     // Base dirt fill (drawn first, whole polygon)
-    ctx.fillStyle = '#6d4828';
+    ctx.fillStyle = gp.dirt;
     ctx.beginPath();
     ctx.moveTo(seg.x1, seg.y1);
     ctx.lineTo(seg.x2, seg.y2);
@@ -1736,7 +3593,7 @@ function drawGround() {
     ctx.fill();
 
     // Darker dirt dither pattern
-    ctx.fillStyle = '#4f3418';
+    ctx.fillStyle = gp.dirtDark;
     for (let x = Math.max(Math.floor(drawStart / 8) * 8, seg.x1); x < drawEnd; x += 8) {
       const yTop = seg.y1 + segSlope * (x - seg.x1);
       for (let y = yTop + 20; y < LEVEL_HEIGHT; y += 16) {
@@ -1744,74 +3601,110 @@ function drawGround() {
         ctx.fillRect(x + 4, y + 8, 2, 2);
       }
     }
-    // Scattered pebbles
-    ctx.fillStyle = '#8a6a48';
+    // Scattered pebbles / rivets
+    ctx.fillStyle = gp.dirtPebble;
     for (let x = Math.max(Math.floor(drawStart / 80) * 80, seg.x1); x < drawEnd; x += 80) {
       const yTop = seg.y1 + segSlope * (x - seg.x1);
       ctx.fillRect(x + 30, yTop + 40, 3, 3);
       ctx.fillRect(x + 55, yTop + 70, 2, 2);
     }
 
-    // --- Grass top layer (tile-stepped, hard edges) ---
+    // --- Top layer: grass in nature, metal plate in cyber ---
     const stepW = 4;
-    ctx.fillStyle = '#4fa83a';
+    ctx.fillStyle = gp.topMain;
     for (let x = drawStart; x < drawEnd; x += stepW) {
       const y = seg.y1 + segSlope * (x - seg.x1);
       ctx.fillRect(x, y, stepW, 6);
     }
-    // Lighter grass highlight
-    ctx.fillStyle = '#8ee86a';
+    ctx.fillStyle = gp.topHi;
     for (let x = drawStart; x < drawEnd; x += stepW) {
       const y = seg.y1 + segSlope * (x - seg.x1);
       ctx.fillRect(x, y, stepW, 2);
     }
-    // Dark grass underline
-    ctx.fillStyle = '#2a6228';
+    ctx.fillStyle = gp.topUnder;
     for (let x = drawStart; x < drawEnd; x += stepW) {
       const y = seg.y1 + segSlope * (x - seg.x1);
       ctx.fillRect(x, y + 6, stepW, 2);
     }
-    // Grass tufts every ~32px
-    ctx.fillStyle = '#8ee86a';
-    for (let x = Math.max(Math.floor(drawStart / 32) * 32, seg.x1); x < drawEnd; x += 32) {
-      const y = seg.y1 + segSlope * (x - seg.x1);
-      ctx.fillRect(x + 4, y - 3, 2, 3);
-      ctx.fillRect(x + 8, y - 4, 2, 4);
-      ctx.fillRect(x + 12, y - 2, 2, 2);
+    if (!isCyberPalette()) {
+      // Grass tufts every ~32px
+      ctx.fillStyle = gp.tuftHi;
+      for (let x = Math.max(Math.floor(drawStart / 32) * 32, seg.x1); x < drawEnd; x += 32) {
+        const y = seg.y1 + segSlope * (x - seg.x1);
+        ctx.fillRect(x + 4, y - 3, 2, 3);
+        ctx.fillRect(x + 8, y - 4, 2, 4);
+        ctx.fillRect(x + 12, y - 2, 2, 2);
+      }
+    } else {
+      // Cyber: rivets + seam lines every 32px, neon glow strip in the seam
+      for (let x = Math.max(Math.floor(drawStart / 32) * 32, seg.x1); x < drawEnd; x += 32) {
+        const y = seg.y1 + segSlope * (x - seg.x1);
+        ctx.fillStyle = '#1a1828';
+        ctx.fillRect(x, y + 2, 1, 4);
+        ctx.fillStyle = '#c0c0d8';
+        ctx.fillRect(x + 2, y + 1, 2, 2);
+        ctx.fillStyle = gp.tuftHi;
+        ctx.fillRect(x + 10, y + 4, 6, 1);  // neon strip
+      }
     }
   }
 
-  // --- Floating platforms (16-bit lily pads) ---
+  // --- Floating platforms ---
   for (const p of platforms) {
-    // Pad top — hard-edged diamond-ish shape built from rectangles
-    const midX = p.x + p.w / 2;
-    // Top highlight layer
-    ctx.fillStyle = '#6ed882';
-    ctx.fillRect(p.x + 4, p.y,       p.w - 8, 4);
-    ctx.fillRect(p.x + 2, p.y + 4,   p.w - 4, 4);
-    ctx.fillStyle = '#4ebf68';
-    ctx.fillRect(p.x,     p.y + 8,   p.w,     4);
-    // Shadow layer
-    ctx.fillStyle = '#2f8840';
-    ctx.fillRect(p.x + 2, p.y + 12,  p.w - 4, 4);
-    ctx.fillStyle = '#1f5b2c';
-    ctx.fillRect(p.x + 6, p.y + 16,  p.w - 12, 2);
-    // Vein pattern
-    ctx.fillStyle = '#2f8840';
-    ctx.fillRect(midX - 1, p.y + 2, 2, 12);
-    ctx.fillRect(p.x + 14, p.y + 6, 20, 2);
-    ctx.fillRect(p.x + p.w - 34, p.y + 6, 20, 2);
-    // Pink lily flower (pixel-art)
-    const fx = p.x + p.w - 22, fy = p.y + 2;
-    ctx.fillStyle = '#ffb4d4';
-    ctx.fillRect(fx - 2, fy - 4, 4, 2);
-    ctx.fillRect(fx - 4, fy - 2, 8, 2);
-    ctx.fillRect(fx - 4, fy,     8, 2);
-    ctx.fillRect(fx - 2, fy + 2, 4, 2);
-    ctx.fillStyle = '#ffd4e5';
-    ctx.fillRect(fx - 2, fy,     2, 2);
-    ctx.fillStyle = '#ffe066';
-    ctx.fillRect(fx - 1, fy - 1, 2, 2);
+    if (isCyberPalette()) {
+      // Metal plate with rivets + neon underglow
+      const midX = p.x + p.w / 2;
+      ctx.fillStyle = '#8a8aa8';
+      ctx.fillRect(p.x,     p.y,       p.w,     3);
+      ctx.fillStyle = '#5a5a74';
+      ctx.fillRect(p.x,     p.y + 3,   p.w,     6);
+      ctx.fillStyle = '#2a2a40';
+      ctx.fillRect(p.x,     p.y + 9,   p.w,     4);
+      ctx.fillStyle = '#11101c';
+      ctx.fillRect(p.x,     p.y + 13,  p.w,     3);
+      // Rivets
+      ctx.fillStyle = '#c0c0d8';
+      for (let rx = p.x + 4; rx < p.x + p.w - 3; rx += 16) {
+        ctx.fillRect(rx, p.y + 1, 2, 2);
+      }
+      ctx.fillStyle = '#3a3a50';
+      for (let rx = p.x + 4; rx < p.x + p.w - 3; rx += 16) {
+        ctx.fillRect(rx + 1, p.y + 2, 1, 1);
+      }
+      // Neon status light, blinking
+      const blink = Math.floor(performance.now() / 600) % 2 === 0;
+      ctx.fillStyle = blink ? '#66d4ff' : '#1a3a4a';
+      ctx.fillRect(midX - 1, p.y + 10, 3, 2);
+      // Subtle glow strip
+      ctx.fillStyle = 'rgba(102, 212, 255, 0.35)';
+      ctx.fillRect(p.x + 8, p.y + 15, p.w - 16, 1);
+    } else {
+      // Lily pad (16-bit)
+      const midX = p.x + p.w / 2;
+      ctx.fillStyle = '#6ed882';
+      ctx.fillRect(p.x + 4, p.y,       p.w - 8, 4);
+      ctx.fillRect(p.x + 2, p.y + 4,   p.w - 4, 4);
+      ctx.fillStyle = '#4ebf68';
+      ctx.fillRect(p.x,     p.y + 8,   p.w,     4);
+      ctx.fillStyle = '#2f8840';
+      ctx.fillRect(p.x + 2, p.y + 12,  p.w - 4, 4);
+      ctx.fillStyle = '#1f5b2c';
+      ctx.fillRect(p.x + 6, p.y + 16,  p.w - 12, 2);
+      ctx.fillStyle = '#2f8840';
+      ctx.fillRect(midX - 1, p.y + 2, 2, 12);
+      ctx.fillRect(p.x + 14, p.y + 6, 20, 2);
+      ctx.fillRect(p.x + p.w - 34, p.y + 6, 20, 2);
+      const fx = p.x + p.w - 22, fy = p.y + 2;
+      ctx.fillStyle = '#ffb4d4';
+      ctx.fillRect(fx - 2, fy - 4, 4, 2);
+      ctx.fillRect(fx - 4, fy - 2, 8, 2);
+      ctx.fillRect(fx - 4, fy,     8, 2);
+      ctx.fillRect(fx - 2, fy + 2, 4, 2);
+      ctx.fillStyle = '#ffd4e5';
+      ctx.fillRect(fx - 2, fy,     2, 2);
+      ctx.fillStyle = '#ffe066';
+      ctx.fillRect(fx - 1, fy - 1, 2, 2);
+    }
   }
 
   ctx.restore();
@@ -1881,46 +3774,85 @@ function drawBugbots(now) {
   ctx.translate(-camera.x, -camera.y);
   for (const b of bugbots) {
     if (!b.alive) continue;
+    const isHeavy = b.type === 'heavy';
+    const flashing = now < b.hitFlashUntil && Math.floor(now / 60) % 2 === 0;
     const bob = Math.floor(Math.sin(now / 200 + b.x * 0.02) * 3);
     const bx = Math.round(b.x), by = Math.round(b.y + bob);
-    // Wings — chunky rectangle flap
-    const wingFlap = Math.floor(Math.sin(now / 40) * 3);
-    ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
-    ctx.fillRect(bx - 12, by - 12 + wingFlap, 10, 4);
-    ctx.fillRect(bx + 2,  by - 12 - wingFlap, 10, 4);
-    ctx.fillStyle = 'rgba(220, 240, 255, 0.35)';
-    ctx.fillRect(bx - 10, by - 11 + wingFlap, 6, 2);
-    ctx.fillRect(bx + 4,  by - 11 - wingFlap, 6, 2);
-    // Body — pixel-art chunky metal bug
-    ctx.fillStyle = '#3a3a45';
-    ctx.fillRect(bx - 10, by - 6, 20, 14);
-    ctx.fillStyle = '#4a4a55';
-    ctx.fillRect(bx - 10, by - 6, 20, 2);  // top highlight
-    ctx.fillStyle = '#1e1e26';
-    ctx.fillRect(bx - 10, by + 6, 20, 2);  // bottom shadow
-    // Eye visor (pixelated)
-    ctx.fillStyle = '#ff3344';
-    const eyeX = b.dir > 0 ? bx + 2 : bx - 6;
-    ctx.fillRect(eyeX, by - 3, 4, 4);
-    ctx.fillStyle = '#ff8899';
-    ctx.fillRect(eyeX, by - 3, 2, 2);
-    // Rivets
-    ctx.fillStyle = '#888';
-    ctx.fillRect(bx - 9, by - 5, 2, 2);
-    ctx.fillRect(bx + 7, by - 5, 2, 2);
-    ctx.fillRect(bx - 9, by + 4, 2, 2);
-    ctx.fillRect(bx + 7, by + 4, 2, 2);
-    // Stinger (pixel step, no triangle path)
-    ctx.fillStyle = '#1a1a22';
-    const sd = b.dir;
-    ctx.fillRect(bx + sd * 10,      by - 1, sd * 2, 4);
-    ctx.fillRect(bx + sd * 12,      by,     sd * 2, 2);
-    ctx.fillRect(bx + sd * 14,      by + 1, sd * 2, 1);
+
+    if (isHeavy) {
+      // Bigger, redder, armored Bugbot — 36x36 footprint
+      const wingFlap = Math.floor(Math.sin(now / 55) * 4);
+      ctx.fillStyle = 'rgba(255, 180, 180, 0.55)';
+      ctx.fillRect(bx - 18, by - 18 + wingFlap, 14, 5);
+      ctx.fillRect(bx + 4,  by - 18 - wingFlap, 14, 5);
+      // Body
+      ctx.fillStyle = flashing ? '#fff' : '#6b2432';
+      ctx.fillRect(bx - 15, by - 10, 30, 22);
+      ctx.fillStyle = flashing ? '#fff' : '#8a2a3f';
+      ctx.fillRect(bx - 15, by - 10, 30, 3);  // top
+      ctx.fillStyle = flashing ? '#fff' : '#3a1018';
+      ctx.fillRect(bx - 15, by + 10, 30, 2);  // bottom
+      // Eye
+      ctx.fillStyle = '#ffcc00';
+      const eyeX = b.dir > 0 ? bx + 3 : bx - 11;
+      ctx.fillRect(eyeX, by - 4, 8, 6);
+      ctx.fillStyle = '#fff2b8';
+      ctx.fillRect(eyeX, by - 4, 3, 2);
+      // Armor plates
+      ctx.fillStyle = flashing ? '#fff' : '#4a1a28';
+      ctx.fillRect(bx - 13, by - 6, 6, 4);
+      ctx.fillRect(bx + 7,  by - 6, 6, 4);
+      // Rivets
+      ctx.fillStyle = '#c8a060';
+      for (const rx of [-13, -6, 6, 13]) ctx.fillRect(bx + rx, by - 9, 2, 2);
+      for (const rx of [-13, -6, 6, 13]) ctx.fillRect(bx + rx, by + 9,  2, 2);
+      // HP pip (above, 2 dots)
+      for (let h = 0; h < b.maxHp; h++) {
+        ctx.fillStyle = h < b.hp ? '#8effa6' : '#333';
+        ctx.fillRect(bx - 5 + h * 6, by - 22, 4, 3);
+      }
+      // Stinger
+      ctx.fillStyle = '#1a0a10';
+      const sd = b.dir;
+      ctx.fillRect(bx + sd * 15, by - 2, sd * 3, 6);
+      ctx.fillRect(bx + sd * 18, by,     sd * 3, 3);
+    } else {
+      // Basic Bugbot (original)
+      const wingFlap = Math.floor(Math.sin(now / 40) * 3);
+      ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
+      ctx.fillRect(bx - 12, by - 12 + wingFlap, 10, 4);
+      ctx.fillRect(bx + 2,  by - 12 - wingFlap, 10, 4);
+      ctx.fillStyle = 'rgba(220, 240, 255, 0.35)';
+      ctx.fillRect(bx - 10, by - 11 + wingFlap, 6, 2);
+      ctx.fillRect(bx + 4,  by - 11 - wingFlap, 6, 2);
+      ctx.fillStyle = flashing ? '#fff' : '#3a3a45';
+      ctx.fillRect(bx - 10, by - 6, 20, 14);
+      ctx.fillStyle = flashing ? '#fff' : '#4a4a55';
+      ctx.fillRect(bx - 10, by - 6, 20, 2);
+      ctx.fillStyle = flashing ? '#fff' : '#1e1e26';
+      ctx.fillRect(bx - 10, by + 6, 20, 2);
+      ctx.fillStyle = '#ff3344';
+      const eyeX = b.dir > 0 ? bx + 2 : bx - 6;
+      ctx.fillRect(eyeX, by - 3, 4, 4);
+      ctx.fillStyle = '#ff8899';
+      ctx.fillRect(eyeX, by - 3, 2, 2);
+      ctx.fillStyle = '#888';
+      ctx.fillRect(bx - 9, by - 5, 2, 2);
+      ctx.fillRect(bx + 7, by - 5, 2, 2);
+      ctx.fillRect(bx - 9, by + 4, 2, 2);
+      ctx.fillRect(bx + 7, by + 4, 2, 2);
+      ctx.fillStyle = '#1a1a22';
+      const sd = b.dir;
+      ctx.fillRect(bx + sd * 10, by - 1, sd * 2, 4);
+      ctx.fillRect(bx + sd * 12, by,     sd * 2, 2);
+      ctx.fillRect(bx + sd * 14, by + 1, sd * 2, 1);
+    }
   }
   ctx.restore();
 }
 
 function drawGoal(now) {
+  if (!goal) return;  // Act 2 has no goal arch (boss fight instead)
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
 
@@ -2420,12 +4352,15 @@ const hud = document.getElementById('hud');
 const dropletCountEl = document.getElementById('dropletCount');
 const timerEl = document.getElementById('timer');
 const scoreLiveEl = document.getElementById('scoreLive');
+const livesCountEl = document.getElementById('livesCount');
 function updateHUD() {
   if (state !== 'play') return;
   dropletCountEl.textContent = dropletScore;
-  const tSec = (performance.now() - levelStartMs) / 1000;
+  const tSec = (performance.now() - actStartMs) / 1000;
   timerEl.textContent = tSec.toFixed(1);
-  scoreLiveEl.textContent = dropletScore * 10 + bugbotsKilled * 50;
+  const thisActScore = dropletScore * 10 + bugbotsKilled * 50;
+  scoreLiveEl.textContent = `A${currentAct + 1}:${thisActScore}${totalZoneScore > 0 ? `  Σ:${totalZoneScore + thisActScore}` : ''}`;
+  if (livesCountEl) livesCountEl.textContent = lives > 3 ? `♥×${lives}` : '♥ '.repeat(lives).trim();
   if (dropletScore === 0) dropletCountEl.classList.add('flash');
   else dropletCountEl.classList.remove('flash');
 }
@@ -2479,23 +4414,263 @@ function frameBody(t) {
 
   drawBackground();
   drawGround();
+  drawHazards(t);
+  drawCheckpoints(t);
   drawDroplets(t);
   drawScatteredDroplets(t);
   drawSprings();
   drawBugbots(t);
+  drawZappers(t);
+  drawProjectiles(t);
+  drawShockbots(t);
   drawGoal(t);
+  drawBoss(t);
   drawFroggo(t);
   drawGoalParticles();
 
   if (shakeApplied) ctx.restore();
 
   if (state === 'win') drawWinSequence(t);
+  if (state === 'actClear') {
+    stepActTransition(t);
+    drawActTransition(t);
+  }
+  if (state === 'zoneIntro') {
+    stepZoneIntro(t);
+    drawZoneIntro(t);
+  }
+  if (state === 'respawn') {
+    stepRespawnCard(t);
+    drawRespawnCard(t);
+  }
+  if (oneUp) drawOneUpBanner(t);
 
   updateHUD();
 }
 
+// --------- 1UP banner (shown briefly after earning a life) ---------
+function drawOneUpBanner(now) {
+  if (!oneUp) return;
+  const t = now - oneUp.startMs;
+  if (t >= ONEUP_BANNER_DURATION) { oneUp = null; return; }
+  const fadeIn = Math.min(1, t / 150);
+  const fadeOut = Math.min(1, (ONEUP_BANNER_DURATION - t) / 350);
+  const alpha = Math.min(fadeIn, fadeOut);
+  // Gentle upward float
+  const floatY = 80 - Math.min(20, t / 40);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Bouncy scale in
+  const bounce = t < 250 ? 1 + Math.sin((t / 250) * Math.PI) * 0.22 : 1;
+  ctx.translate(W / 2, floatY);
+  ctx.scale(bounce, bounce);
+  ctx.font = 'bold 34px "Press Start 2P", monospace';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#0a4d1a';
+  ctx.strokeText('1 UP!', 0, 0);
+  const grad = ctx.createLinearGradient(0, -20, 0, 20);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.5, '#8effa6');
+  grad.addColorStop(1, '#4ebf68');
+  ctx.fillStyle = grad;
+  ctx.fillText('1 UP!', 0, 0);
+  ctx.restore();
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// --------- Zone intro card (shown at start of each zone) ---------
+const ZONE_INTRO_DURATION = 3000;
+function stepZoneIntro(now) {
+  if (!zoneIntro) return;
+  if (now - zoneIntro.startMs >= ZONE_INTRO_DURATION) {
+    zoneIntro = null;
+    state = 'play';
+    hud.classList.remove('hidden');
+    startMusic();
+  }
+}
+function drawZoneIntro(now) {
+  if (!zoneIntro) return;
+  const t = now - zoneIntro.startMs;
+  const fadeIn  = Math.min(1, t / 400);
+  const fadeOut = Math.min(1, Math.max(0, (ZONE_INTRO_DURATION - t) / 400));
+  const alpha = Math.min(fadeIn, fadeOut);
+  const zone = ZONES[zoneIntro.zoneIdx];
+  ctx.save();
+  ctx.fillStyle = `rgba(3, 10, 24, ${0.92 * alpha})`;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.globalAlpha = alpha;
+
+  // Big title slam
+  let scale;
+  if (t < 350) scale = 2.6 - (t / 350) * 1.6;
+  else scale = 1 + Math.sin(Math.min(1, (t - 350) / 700) * Math.PI) * 0.08;
+  ctx.save();
+  ctx.translate(W / 2, H / 2 - 30);
+  ctx.scale(scale, scale);
+  ctx.font = 'bold 52px "Press Start 2P", monospace';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = zoneIntro.zoneIdx === 1 ? '#2a003a' : '#0a4d1a';
+  const grad = ctx.createLinearGradient(0, -40, 0, 40);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.5, zoneIntro.zoneIdx === 1 ? '#66d4ff' : '#ffe066');
+  grad.addColorStop(1, zoneIntro.zoneIdx === 1 ? '#d946ef' : '#ff8c00');
+  ctx.fillStyle = grad;
+  ctx.strokeText(`ZONE ${zoneIntro.zoneIdx + 1}`, 0, 0);
+  ctx.fillText(`ZONE ${zoneIntro.zoneIdx + 1}`, 0, 0);
+  ctx.restore();
+
+  ctx.font = '16px "Press Start 2P", monospace';
+  ctx.fillStyle = zoneIntro.zoneIdx === 1 ? '#66d4ff' : '#8effa6';
+  ctx.fillText(zone.name, W / 2, H / 2 + 40);
+
+  ctx.font = '11px "Press Start 2P", monospace';
+  ctx.fillStyle = '#ffe066';
+  ctx.fillText(zone.subtitle || '', W / 2, H / 2 + 70);
+
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// --------- Respawn card (life lost, still have lives) ---------
+function stepRespawnCard(now) {
+  if (!respawnCard) return;
+  if (now - respawnCard.startMs >= RESPAWN_CARD_DURATION) {
+    completeRespawn();
+  }
+}
+function drawRespawnCard(now) {
+  if (!respawnCard) return;
+  const t = now - respawnCard.startMs;
+  const fade = Math.min(1, Math.min(t / 250, (RESPAWN_CARD_DURATION - t) / 250));
+  ctx.save();
+  ctx.fillStyle = `rgba(3, 16, 8, ${0.85 * fade})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = fade;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = 'bold 36px "Press Start 2P", monospace';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#3a0a14';
+  ctx.strokeText('OUCH!', W / 2, H / 2 - 40);
+  ctx.fillStyle = '#ff4466';
+  ctx.fillText('OUCH!', W / 2, H / 2 - 40);
+
+  ctx.font = '14px "Press Start 2P", monospace';
+  ctx.fillStyle = '#ffe066';
+  const label = `LIVES LEFT:  ${'♥ '.repeat(respawnCard.livesLeft).trim()}`;
+  ctx.fillText(label, W / 2, H / 2 + 10);
+
+  ctx.font = '11px "Press Start 2P", monospace';
+  ctx.fillStyle = '#8effa6';
+  ctx.fillText(`RESTARTING ACT ${respawnCard.act + 1}...`, W / 2, H / 2 + 50);
+
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+// --------- Act → Act transition card ---------
+const ACT_CARD_DURATION = 4200;  // total ms for the card sequence
+function stepActTransition(now) {
+  if (!actTransition) return;
+  const t = now - actTransition.startMs;
+  if (t >= ACT_CARD_DURATION) {
+    advanceToAct(actTransition.nextActIdx);
+    bossArenaLocked = false;
+    actTransition = null;
+    state = 'play';
+    hud.classList.remove('hidden');
+  }
+}
+
+function drawActTransition(now) {
+  if (!actTransition) return;
+  const t = now - actTransition.startMs;
+  // Fade in backdrop over 300ms, hold, fade out last 300ms
+  const fadeIn  = Math.min(1, t / 300);
+  const fadeOut = Math.min(1, Math.max(0, (ACT_CARD_DURATION - t) / 300));
+  const alpha = Math.min(fadeIn, fadeOut);
+  ctx.save();
+  ctx.fillStyle = `rgba(3, 16, 8, ${0.88 * alpha})`;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Phase 1 (0-1800ms): "ACT N CLEAR" + score
+  const clearedActNum = actTransition.nextActIdx;   // we just finished (nextActIdx - 1)... keep label by nextActIdx name below
+  const clearedLabel = `ACT ${actTransition.nextActIdx} CLEAR!`;
+  const nextActLabel = `ACT ${actTransition.nextActIdx + 1}`;
+  if (t < 1800) {
+    ctx.globalAlpha = Math.min(1, t / 300) * fadeOut;
+    ctx.font = 'bold 40px "Press Start 2P", monospace';
+    ctx.fillStyle = '#8effa6';
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#0a4d1a';
+    ctx.strokeText(clearedLabel, W / 2, H / 2 - 60);
+    ctx.fillText(clearedLabel, W / 2, H / 2 - 60);
+
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(`DROPLETS  ${actTransition.actDroplets}  ×10 = ${actTransition.actDroplets * 10}`, W / 2, H / 2 + 10);
+    ctx.fillText(`BUGBOTS   ${actTransition.actBugbots}  ×50 = ${actTransition.actBugbots * 50}`, W / 2, H / 2 + 36);
+    ctx.fillText(`TIME BONUS      ${actTransition.actTimeBonus}`, W / 2, H / 2 + 62);
+
+    ctx.font = 'bold 18px "Press Start 2P", monospace';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(`ACT SCORE: ${actTransition.actScore}`, W / 2, H / 2 + 100);
+  }
+  // Phase 2 (1800-4200ms): next-act title slam
+  else {
+    const phaseT = t - 1800;
+    let scale;
+    if (phaseT < 350) {
+      scale = 2.4 - (phaseT / 350) * 1.4;
+    } else {
+      scale = 1 + Math.sin(Math.min(1, (phaseT - 350) / 500) * Math.PI) * 0.1;
+    }
+    ctx.globalAlpha = Math.min(1, phaseT / 200) * fadeOut;
+    ctx.save();
+    ctx.translate(W / 2, H / 2 - 40);
+    ctx.scale(scale, scale);
+    ctx.font = 'bold 56px "Press Start 2P", monospace';
+    ctx.strokeStyle = '#0a4d1a';
+    ctx.lineWidth = 10;
+    const grad = ctx.createLinearGradient(0, -40, 0, 40);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.5, '#ffe066');
+    grad.addColorStop(1, '#ff8c00');
+    ctx.strokeText(nextActLabel, 0, 0);
+    ctx.fillStyle = grad;
+    ctx.fillText(nextActLabel, 0, 0);
+    ctx.restore();
+
+    ctx.globalAlpha = Math.min(1, phaseT / 400) * fadeOut;
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillStyle = '#8effa6';
+    ctx.fillText(actTransition.nextZoneSubtitle || '', W / 2, H / 2 + 30);
+    ctx.fillText(`TOTAL SCORE: ${totalZoneScore}`, W / 2, H / 2 + 60);
+  }
+
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
 // ---------- Boot ----------
-initEntities();
+loadAct(0);
 requestAnimationFrame((t) => { lastTime = t; frame(t); });
 
 })();

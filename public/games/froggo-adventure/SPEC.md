@@ -1,8 +1,8 @@
 # Froggo Adventure — Design Spec
 
 **Game ID:** `froggo-adventure`
-**Version:** 0.2
-**Last updated:** 2026-04-19
+**Version:** 0.5
+**Last updated:** 2026-04-20
 **Platform:** ImagineX Console (web, iframe-embedded). Works on desktop (keyboard) and mobile (on-screen touch controls).
 
 ## Premise
@@ -17,7 +17,12 @@ The play feel target: momentum-driven platforming where speed is earned, jumps a
 |---|---|---|
 | Hero | **Froggo** | Pixel frog, yellow belly, red sneakers. Rendered from `froggo.png`. |
 | Enemy grunt | **Bugbot** | Small hovering mosquito-robot. One hit from a rolling/jumping Froggo kills it; a ground-contact with Froggo costs the player droplets. |
-| Villain | **Dr. Slither** | Cyber-snake mastermind. Not yet appearing in Act 1 — reserved for later levels / boss fight. |
+| Heavy enemy | **Heavy Bugbot** | Armored, 2 HP, requires two hits with a 250 ms i-frame between. Red/armored visor. |
+| Turret | **Zapper** (Zone 2) | Stationary purple turret. Fires a cyan plasma bolt at Froggo's side every ~2.2 s. Killable by stomp or roll; rolling Froggo cancels incoming projectiles. |
+| Electrified patroller | **Shockbot** (Zone 2) | Purple bot with antennae. Cycles between electrified (2.0 s) and dormant (1.5 s). Hittable only while dormant; any contact while electrified hurts Froggo. |
+| Boss (Zone 1) | **Bogmech** | 3 HP hover-dive boss in a locked arena at the end of Lily Pond Act 2. |
+| Boss (Zone 2) | **Slithertron** | 4 HP cyber-snake boss with a 4-segment trailing body. Head is vulnerable; body segments damage Froggo on contact (roll makes body contact safe). |
+| Villain | **Dr. Slither** | Cyber-snake mastermind. Slithertron is his prototype; the full Dr. Slither fight is still reserved for a later zone. |
 
 ## Controls
 
@@ -59,10 +64,12 @@ Frame-rate independent, tuned for feel, not realism.
 ## Entities
 
 - **Froggo** — hitbox `24×32 px`. Render 48×48 sprite centered on hitbox, squashed/rotated based on state.
-- **Bugbot** — `24×24 px` hitbox. Hover-patrol within a platform's bounds. Dies when Froggo's velocity Y > 0 (falling onto it) OR while rolling. Contact otherwise costs 1+ droplet.
+- **Bugbot (basic)** — `24×24 px` hitbox, 1 HP. Hover-patrol within a patrol range. Killed by a single stomp (downward) or roll. Contact otherwise costs droplets.
+- **Bugbot (heavy)** — `36×36 px` hitbox, **2 HP**, slower speed, dark-red armored body with yellow visor. Requires two hits (with ~250 ms i-frame between hits so a single stomp can't consume both HP). Appears only in Act 2.
+- **Bogmech (boss)** — `60×48 px` hitbox, 3 HP. Hovers in an arena at the end of Act 2, periodically winds up and dives toward Froggo's position. Damaged by stomp/roll; contact otherwise hurts Froggo. HP bar + "BOGMECH" label rendered above. Arena locks behind Froggo once he enters.
 - **Droplet** — `16×16 px` pixel-art golden teardrop. Worth +10 score. Player starts with 0 droplets. Getting hit scatters up to 16 droplets in an upward arc; they bounce with gravity on the ground and can be recollected within ~4.5 s (blink in the final ~1.5 s before disappearing). Any droplets beyond 16 at the time of hit are lost, matching Sonic ring-loss behavior.
 - **Spring** — `32×16 px` pad. On contact, gives -1600 px/s vertical velocity (~711 px launch height). Camera pans upward to keep Froggo visible during flight.
-- **Goal flag** — triggers win state. White flash, screen shake, rainbow ring burst, fireworks, "STAGE CLEAR!" slam-in text, then the animated score tally panel.
+- **Goal arch** (Act 1 only) — triggers end-of-act transition, not the full win cinematic. Shows "ACT 1 CLEAR!" card followed by the "ACT 2" title slam.
 
 ## Damage & death
 
@@ -77,7 +84,42 @@ Frame-rate independent, tuned for feel, not realism.
 - Releasing `↓` launches Froggo in the facing direction at speed `SPINDASH_BASE + chargeLevel * SPINDASH_PER_REV` (420–720 px/s), enters the rolling state, and plays a launch whoosh.
 - Launching while airborne or moving is impossible — entry requires `|vx| < 30` and `grounded`.
 
-## Level 1 — "Lily Pond"
+## Zones and acts
+
+Zones contain multiple **Acts** played back-to-back. Beating the final act of a zone triggers the full zone-clear cinematic and submits the combined score to the leaderboard. Beating a non-final zone unlocks the next zone — the clear screen prompts the player to advance directly, and the title screen exposes a **zone picker** once more than one zone is unlocked (also accessible via number keys `1` / `2`). Zone unlock progress is persisted in `localStorage` under `froggo.zonesUnlocked`.
+
+### Zone 1 — Lily Pond Zone
+
+| Act | Theme | Width | Key features |
+|---|---|---|---|
+| 1 | Morning swamp | 4800 px | Two springs, 4 basic Bugbots, secret caches. Ends at a stone goal arch. |
+| 2 | Sunset swamp | 6200 px | Longer level, trickier platforming, 3 Heavy Bugbots, 4 basic Bugbots, 3 springs, boss arena at the end. Palette shifts to purple/orange. Ends with **Bogmech boss** (3 HP, hover + dive pattern). |
+
+### Zone 2 — Cyber Swamp Zone
+
+Dr. Slither's industrial outpost carved into the poisoned swamp. Metal-plate ground, neon seams, distant antenna cities, oil-slick water. New hazards: **spike strips** and **sawblades** (environmental, can't be killed), plus the **Zapper** and **Shockbot** enemies. Every act includes exactly **one mid-level checkpoint totem** — touching it stores a respawn point; losing a life respawns at the last activated checkpoint instead of the act start. Checkpoint state resets on act transition.
+
+| Act | Theme | Width | Key features |
+|---|---|---|---|
+| 1 | Cyber Swamp, Dawn | 7500 px | Deep teal/purple palette, cyan neon seams. 5 basic Bugbots, 3 Zappers, 2 spike strips, 2 sawblades, 3 springs, 1 checkpoint at `x ≈ 3340`. Ends at a goal arch. Target time: 120 s. |
+| 2 | Cyber Swamp, Core | 9500 px | Magenta/ultraviolet palette. 4 basic + 3 Heavy Bugbots, 4 Zappers, 3 Shockbots, 3 spike strips, 3 sawblades, 4 springs, 1 checkpoint at `x ≈ 5000`. Boss arena locks at `x > 8400` for the **Slithertron** fight (4 HP, serpent body chain). Target time: 180 s. |
+
+### Zone music
+
+- **Zone 1:** `audio/Froggo_Act1.mp3`, looped via an `<audio id="bgm">` element at volume `0.6`.
+- **Zone 2:** `audio/Froggo_Act2_Cyber_Swamp.mp3`, looped via a second `<audio id="bgm2">` element at volume `0.6`.
+- Switching zones pauses one `<audio>` element and plays the other via `setZoneMusic(zoneIdx)` / `startMusic()`.
+- A WebAudio-synthesized chiptune loop (126 BPM, C minor, saw bass + square lead + synth drums) remains in the code as an automatic **fallback** — it only kicks in if `bgm2.play()` fails at runtime. It does not play when the MP3 is present and loads successfully.
+
+### Between-act transition
+
+On Act 1 goal: dim backdrop → "ACT 1 CLEAR!" with per-stat breakdown and act score (~1.8s) → slam-in "ACT 2" title card + total-so-far (~2.4s) → Act 2 loads with fresh Froggo position and the sunset palette. HUD shows `A1:nnn Σ:nnn` (this act's score, running total).
+
+### Zone clear
+
+Beating the Bogmech in Act 2 triggers the full zone-clear cinematic (white flash → rainbow ring → fireworks → "ZONE CLEAR!" slam → score tally with `totalZoneScore`). Leaderboard submission fires only at this point — no submission after Act 1.
+
+## Level 1 — "Lily Pond Zone Act 1"
 
 - Width: ~4800 px (≈6 screens), height: 720 px.
 - Starts on solid ground. Gentle slopes, then **Spring 1** at `x=800` on the first plateau (launches onto the 500-px-wide floating secret platform at `y=300`), a Bugbot patrol, a droplet stash, a gap with a static lily pad stepping stone, a second Bugbot, an upper plateau with **Spring 2** at `x=2860` (launches onto the 620-px-wide upper secret platform at `y=240`), a downhill roll, and the **goal arch**.
@@ -147,12 +189,16 @@ ImagineX parent forwards to `POST /api/leaderboard`. Requires adding `'froggo-ad
 
 ```
 public/games/froggo-adventure/
-├── SPEC.md                 # This file
-├── index.html              # Game (single file, self-contained)
-├── froggo.png              # Hero sprite (1024×1024 RGBA, transparent bg)
-├── cover.png               # Cartridge cover (1024×1536)
+├── SPEC.md                       # This file
+├── index.html                    # Game (single file, self-contained)
+├── froggo.png                    # Hero sprite (1024×1024 RGBA, transparent bg)
+├── froggo-run-{1..4}.png         # Run-cycle frames
+├── froggo-jump-{1..7}.png        # Jump-cycle frames
+├── title.png                     # Title-screen background art
+├── cover.png                     # Cartridge cover (1024×1536)
 └── audio/
-    └── Froggo_Act1.mp3     # Looped background music
+    ├── Froggo_Act1.mp3           # Zone 1 looped background music
+    └── Froggo_Act2_Cyber_Swamp.mp3  # Zone 2 looped background music
 ```
 
 ## Already implemented (cumulative)
@@ -168,21 +214,36 @@ public/games/froggo-adventure/
 - [x] Mobile/touch controls + responsive canvas
 - [x] Vertical camera follow for tall spring launches
 - [x] Cinematic win sequence (flash, rainbow ring, fireworks, slam-in text, tallying score panel)
+- [x] Two-act zone structure (Act 1 + Act 2 with transition card)
+- [x] Heavy Bugbot variant with 2 HP
+- [x] Sunset palette for Act 2 (sky bands, hills, clouds, reeds)
+- [x] End-of-zone boss (Bogmech: hover + dive, 3 HP)
+- [x] Boss arena locking, leaderboard submission gated to zone clear
+- [x] **Zone 2 — Cyber Swamp** (two acts, longer + harder than Zone 1)
+- [x] **Cyber palettes** (`cyber-dawn`, `cyber-core`): dark sky bands, magenta/cyan neon, blinking city lights, satellite, metal-plate ground with rivets, neon platform status lights, antenna-tipped hills, satellite-dish trees
+- [x] **New hazards**: spike strips (static) and rotating sawblades (patrolling)
+- [x] **Zapper enemy** with cyan plasma projectiles (killable by stomp/roll; roll also cancels projectiles)
+- [x] **Shockbot enemy** with periodic electric field (vulnerable only when dormant)
+- [x] **Slithertron boss** — 4 HP, 4-segment serpent body trailing the head. Head vulnerable, body deals damage
+- [x] **Checkpoint totems** — one mid-level per Zone 2 act, persistent respawn across lives within an act
+- [x] **Zone progression** — Zone 1 clear unlocks Zone 2, `localStorage`-persisted, title screen zone picker, post-clear prompt advances directly to next zone
+- [x] **Zone intro card** — "ZONE N" slam-in between zones
+- [x] **Zone 2 music** — `Froggo_Act2_Cyber_Swamp.mp3` looped via a dedicated `<audio id="bgm2">` element, with a WebAudio-synthesized chiptune loop retained as an automatic fallback if the MP3 fails to load
 
 ## Out of scope for now
 
-- Multiple zones / levels beyond Lily Pond
-- Boss fight with Dr. Slither
-- Checkpoints mid-level
+- Zones beyond Cyber Swamp
+- Full Dr. Slither boss fight (Slithertron is the prototype)
 - Multi-frame sprite animation (idle blink, run cycle, jump pose) — currently procedural transforms on single PNG
 - Shield / power-up items
 - Second playable character
 - Chaos-emerald-style bonus stages
+- Cyber-themed goal-arch variant (Zone 2 Act 1 still uses the nature-green arch visuals)
 
 ## Next candidates (ordered)
 
-1. Second level — "Cyber Swamp" with new hazards and Bugbot variants.
-2. Proper multi-frame run-cycle animation (request 3 extra Froggo pose PNGs).
-3. Dr. Slither boss fight at end of level 2 or 3.
-4. Power-up: shield droplet (one-hit protection).
-5. Checkpoint totems mid-level.
+1. Zone 3 — new biome (ice cavern? factory interior?) with unique enemies and boss.
+2. Dr. Slither full boss fight.
+3. Power-up: shield droplet (one-hit protection).
+4. Cyber-themed goal-arch visuals for Zone 2 Act 1.
+5. Additional checkpoints on longer acts / tuning pass on Zone 2 difficulty.
