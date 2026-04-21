@@ -38,4 +38,17 @@ export const games: Game[] = [
     cartridgeLabelColor: "#ff8a65",
     status: "available",
   },
+  {
+    id: "froggo-adventure",
+    title: "Froggo Adventure",
+    description:
+      "A 16-bit-style swamp platformer! Run, jump, and roll as Froggo, collect golden droplets, smash Bugbots, and stop Dr. Slither.",
+    genre: "Platformer / Action",
+    cover: "/games/froggo-adventure/cover.png",
+    url: "/games/froggo-adventure/index.html",
+    color: "#4ebf68",
+    cartridgeColor: "#1e6e3a",
+    cartridgeLabelColor: "#ffe066",
+    status: "available",
+  },
 ];

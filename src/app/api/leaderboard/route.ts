@@ -6,7 +6,7 @@ export const runtime = "edge";
 
 const redis = Redis.fromEnv();
 
-const KNOWN_GAMES = new Set(["tennis-world", "bloot"]);
+const KNOWN_GAMES = new Set(["tennis-world", "bloot", "froggo-adventure"]);
 const MAX_SCORE = 1_000_000;
 const KEEP_TOP = 100;
 

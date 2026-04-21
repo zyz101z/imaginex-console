@@ -1,0 +1,2504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Froggo Adventure</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #000;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #wrap {
+    position: relative;
+    /* 4:3 aspect, fit viewport, max 800x600 for desktop */
+    width: min(100vw, calc(100vh * 4 / 3), 800px);
+    height: min(100vh, calc(100vw * 3 / 4), 600px);
+    box-shadow: 0 0 60px rgba(80, 255, 120, 0.15);
+    border: 4px solid #0b3;
+    background: #000;
+    box-sizing: border-box;
+    aspect-ratio: 4 / 3;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    touch-action: none;
+  }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: 24px;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .overlay.active { pointer-events: all; }
+  .title-bg {
+    background: #031008 url('title.png') center top / contain no-repeat;
+    image-rendering: pixelated;
+    justify-content: flex-end;
+    padding-bottom: 12px;
+  }
+  .title-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 55%, rgba(3,16,8,0.75) 78%, rgba(3,16,8,0.95) 100%);
+    pointer-events: none;
+  }
+  .title-bg > * { position: relative; z-index: 1; }
+  .big-title {
+    font-size: 40px;
+    color: #ffe066;
+    text-shadow: 4px 4px 0 #0a4d1a, 8px 8px 0 rgba(0,0,0,0.6);
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+  }
+  .sub {
+    font-size: 11px;
+    color: #8effa6;
+    margin-bottom: 14px;
+    line-height: 1.7;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .blink {
+    font-size: 14px;
+    color: #ffe066;
+    animation: blink 1.2s infinite;
+    text-shadow: 2px 2px 0 #000;
+  }
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+  .hidden { display: none !important; }
+  .hud {
+    position: absolute; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between;
+    font-size: 14px;
+    color: #ffe066;
+    text-shadow: 2px 2px 0 #000;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .hud span { color: #fff; }
+  .flash { color: #ff4466 !important; animation: flash 0.3s infinite; }
+  @keyframes flash { 50% { opacity: 0.4; } }
+
+  /* --- Touch controls --- */
+  #touchControls {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+  }
+  .tc-group {
+    position: absolute;
+    bottom: 2.5%;
+    display: flex;
+    gap: 2.5%;
+    pointer-events: none;
+  }
+  .tc-left  { left: 2.5%; }
+  .tc-right { right: 2.5%; align-items: flex-end; }
+  .tc-btn {
+    width: 11vmin;
+    height: 11vmin;
+    min-width: 56px;
+    min-height: 56px;
+    max-width: 88px;
+    max-height: 88px;
+    border-radius: 50%;
+    background: rgba(20, 30, 25, 0.55);
+    color: #ffe066;
+    border: 3px solid rgba(255, 224, 102, 0.8);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: auto;
+    padding: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .tc-btn.pressed {
+    background: rgba(255, 224, 102, 0.35);
+    transform: scale(0.92);
+  }
+  .tc-jump {
+    width: 14vmin; height: 14vmin;
+    min-width: 72px; min-height: 72px;
+    max-width: 110px; max-height: 110px;
+    background: rgba(78, 191, 104, 0.45);
+    border-color: rgba(142, 255, 166, 0.9);
+    color: #fff;
+    font-size: 12px;
+  }
+  .tc-roll {
+    background: rgba(143, 63, 217, 0.35);
+    border-color: rgba(168, 118, 232, 0.85);
+    color: #fff;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="800" height="600"></canvas>
+  <audio id="bgm" src="audio/Froggo_Act1.mp3" loop preload="auto"></audio>
+  <div class="hud hidden" id="hud">
+    <div>DROPLETS <span id="dropletCount">0</span></div>
+    <div>TIME <span id="timer">0.0</span></div>
+    <div>SCORE <span id="scoreLive">0</span></div>
+  </div>
+
+  <div class="overlay title-bg active" id="titleScreen">
+    <div class="sub">
+      ← → MOVE &nbsp;&nbsp; ↑ / SPACE JUMP<br>
+      ↓ ROLL &nbsp;&nbsp; HOLD ↓ + TAP JUMP = SPIN DASH<br>
+      COLLECT DROPLETS &nbsp;&nbsp; CRUSH BUGBOTS
+    </div>
+    <div class="blink">PRESS ENTER TO START</div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverScreen">
+    <div class="big-title" style="color:#ff4466">GAME<br>OVER</div>
+    <div class="sub">Dr. Slither cackles from the shadows.</div>
+    <div class="blink">PRESS R TO TRY AGAIN</div>
+  </div>
+
+  <div class="overlay hidden" id="winScreen">
+    <div class="big-title" style="color:#8effa6">LEVEL<br>CLEAR!</div>
+    <div class="sub">
+      DROPLETS: <span id="winDroplets">0</span> &times; 10<br>
+      BUGBOTS: <span id="winBugbots">0</span> &times; 50<br>
+      TIME BONUS: <span id="winTime">0</span><br>
+      <br>
+      SCORE: <span id="winScore" style="color:#ffe066">0</span>
+    </div>
+    <div class="blink">PRESS R TO PLAY AGAIN</div>
+  </div>
+
+  <div id="touchControls" class="hidden">
+    <div class="tc-group tc-left">
+      <button class="tc-btn" data-touchkey="left"  aria-label="Move Left">◀</button>
+      <button class="tc-btn" data-touchkey="right" aria-label="Move Right">▶</button>
+    </div>
+    <div class="tc-group tc-right">
+      <button class="tc-btn tc-roll" data-touchkey="roll" aria-label="Roll">ROLL</button>
+      <button class="tc-btn tc-jump" data-touchkey="jump" aria-label="Jump">JUMP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- Constants ----------
+const W = 800, H = 600;
+const GRAVITY = 1800;
+const WALK_ACCEL = 1500;
+const AIR_ACCEL = 400;
+const MAX_RUN = 360;
+const MAX_ROLL = 640;
+const SPINDASH_BASE = 420;
+const SPINDASH_PER_REV = 50;
+const SPINDASH_MAX_REVS = 6;
+const SCATTER_MAX = 16;
+const SCATTER_LIFE = 4.5;
+const SCATTER_GRACE = 0.4;
+const GROUND_FRICTION = 1200;
+const ROLL_FRICTION = 400;
+const JUMP_V = -680;
+const JUMP_CUT = 0.5;
+const COYOTE_MS = 80;
+const JUMP_BUFFER_MS = 100;
+const SPRING_V = -1600;
+const DEATH_Y = 680;
+
+// ---------- Canvas ----------
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// ---------- Asset load ----------
+const froggoImg = new Image();
+froggoImg.src = 'froggo.png';
+let froggoReady = false;
+froggoImg.onload = () => { froggoReady = true; };
+
+// Run-cycle frames (facing east / right). Flipped horizontally when facing left.
+const runFrames = [1, 2, 3, 4].map((i) => {
+  const img = new Image();
+  img.src = `froggo-run-${i}.png`;
+  return img;
+});
+let runFramesReady = 0;
+runFrames.forEach((img) => {
+  img.onload = () => { runFramesReady++; };
+});
+
+// Jump-cycle frames (7 poses, plays once through while airborne)
+const jumpFrames = [1, 2, 3, 4, 5, 6, 7].map((i) => {
+  const img = new Image();
+  img.src = `froggo-jump-${i}.png`;
+  return img;
+});
+let jumpFramesReady = 0;
+jumpFrames.forEach((img) => {
+  img.onload = () => { jumpFramesReady++; };
+});
+
+// ---------- Audio ----------
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function sfxJump() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(220, ctx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(560, ctx.currentTime + 0.09);
+  g.gain.setValueAtTime(0.22, ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+  o.connect(g).connect(ctx.destination);
+  o.start(); o.stop(ctx.currentTime + 0.15);
+}
+
+function sfxDroplet() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  // Two-tone ting: 1200 Hz + 1800 Hz, fast decay
+  for (const [f, v, d] of [[1200, 0.14, 0.12], [1800, 0.1, 0.14]]) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, now);
+    g.gain.setValueAtTime(v, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + d);
+    o.connect(g).connect(ctx.destination);
+    o.start(now); o.stop(now + d);
+  }
+}
+
+function sfxSpring() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'square';
+  // Cartoon boing: up-sweep then down-sweep
+  o.frequency.setValueAtTime(300, now);
+  o.frequency.linearRampToValueAtTime(900, now + 0.08);
+  o.frequency.linearRampToValueAtTime(400, now + 0.22);
+  g.gain.setValueAtTime(0.18, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.3);
+}
+
+function sfxBugbotSquish() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  // Noise burst + low thump
+  const bufSize = ctx.sampleRate * 0.12;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1;
+  const ng = ctx.createGain(); ng.gain.value = 0.25;
+  src.connect(bp).connect(ng).connect(ctx.destination);
+  src.start(now);
+  // Low thump
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(140, now);
+  o.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+  g.gain.setValueAtTime(0.22, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.17);
+}
+
+function sfxHurt() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(420, now);
+  o.frequency.linearRampToValueAtTime(180, now + 0.22);
+  g.gain.setValueAtTime(0.2, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.3);
+}
+
+function sfxGoal() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  // C major arpeggio C5-E5-G5-C6 (523, 659, 784, 1047)
+  const notes = [523.25, 659.25, 783.99, 1046.5];
+  notes.forEach((f, i) => {
+    const t = now + i * 0.08;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    o.connect(g).connect(ctx.destination);
+    o.start(t); o.stop(t + 0.4);
+  });
+}
+
+// Background music
+const bgm = document.getElementById('bgm');
+if (bgm) bgm.volume = 0.6;
+function startMusic() {
+  if (!bgm) return;
+  bgm.play().catch(() => {});
+}
+
+function sfxTick() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(2200, now);
+  g.gain.setValueAtTime(0.08, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.05);
+}
+
+function sfxRev(level) {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  const base = 160 + level * 40;
+  o.frequency.setValueAtTime(base, now);
+  o.frequency.exponentialRampToValueAtTime(base * 1.5, now + 0.06);
+  g.gain.setValueAtTime(0.12, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  o.connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.11);
+}
+
+function sfxLaunch() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(140, now);
+  o.frequency.exponentialRampToValueAtTime(520, now + 0.14);
+  g.gain.setValueAtTime(0.22, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 120;
+  o.connect(hp).connect(g).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.26);
+}
+
+function sfxFirework() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const bufSize = ctx.sampleRate * 0.3;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSize, 2);
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 400;
+  const g = ctx.createGain(); g.gain.value = 0.18;
+  src.connect(hp).connect(g).connect(ctx.destination);
+  src.start(now);
+  // Low boom accent
+  const o = ctx.createOscillator(), og = ctx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(110, now);
+  o.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+  og.gain.setValueAtTime(0.18, now);
+  og.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  o.connect(og).connect(ctx.destination);
+  o.start(now); o.stop(now + 0.26);
+}
+
+// ---------- Input ----------
+const keys = {};
+let jumpBufferAt = -1;
+window.addEventListener('keydown', (e) => {
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space',' '].includes(e.key) || e.code === 'Space') e.preventDefault();
+  keys[e.key.toLowerCase()] = true;
+  if (e.code === 'Space') keys[' '] = true;
+  if (e.key === 'Enter') keys['enter'] = true;
+  if ((e.key === 'ArrowUp' || e.key === 'w' || e.code === 'Space') && state === 'play' && !e.repeat) {
+    if (froggo.charging) {
+      froggo.chargeLevel = Math.min(SPINDASH_MAX_REVS, froggo.chargeLevel + 1);
+      sfxRev(froggo.chargeLevel);
+    } else {
+      jumpBufferAt = performance.now();
+    }
+  }
+  if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'win' || state === 'play')) {
+    resetLevel();
+    state = 'play';
+    showScreen('hud');
+    startMusic();
+  }
+  if (e.key === 'Enter' && state === 'title') {
+    state = 'play';
+    showScreen('hud');
+    ensureAudio();
+    startMusic();
+  }
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
+  if (e.code === 'Space') keys[' '] = false;
+});
+function left()  { return keys['arrowleft']  || keys['a'] || touchKeys.left; }
+function right() { return keys['arrowright'] || keys['d'] || touchKeys.right; }
+function jumpHeld() { return keys['arrowup'] || keys['w'] || keys[' '] || touchKeys.jump; }
+function downHeld() { return keys['arrowdown'] || keys['s'] || touchKeys.roll; }
+
+// ---------- Touch input ----------
+const touchKeys = { left: false, right: false, jump: false, roll: false };
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const touchControlsEl = document.getElementById('touchControls');
+if (isTouchDevice) touchControlsEl.classList.remove('hidden');
+
+function startGameFromInput() {
+  if (state === 'title') {
+    state = 'play';
+    showScreen('hud');
+    ensureAudio();
+    startMusic();
+  } else if (state === 'gameover' || state === 'win') {
+    resetLevel();
+    state = 'play';
+    showScreen('hud');
+    startMusic();
+  }
+}
+
+document.querySelectorAll('.tc-btn').forEach(btn => {
+  const k = btn.dataset.touchkey;
+  const press = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    touchKeys[k] = true;
+    btn.classList.add('pressed');
+    if (k === 'jump' && state === 'play') {
+      if (froggo.charging) {
+        froggo.chargeLevel = Math.min(SPINDASH_MAX_REVS, froggo.chargeLevel + 1);
+        sfxRev(froggo.chargeLevel);
+      } else {
+        jumpBufferAt = performance.now();
+      }
+    }
+    if (state === 'title' || state === 'gameover' || state === 'win') {
+      startGameFromInput();
+    }
+  };
+  const release = (e) => {
+    if (e) e.preventDefault();
+    touchKeys[k] = false;
+    btn.classList.remove('pressed');
+  };
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  // Prevent context menu on long-press
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+
+// Tap title / gameover / win to start
+const wrapEl = document.getElementById('wrap');
+wrapEl.addEventListener('touchstart', (e) => {
+  if (e.target.closest('.tc-btn')) return;
+  if (state === 'title') {
+    e.preventDefault();
+    startGameFromInput();
+  } else if (state === 'gameover') {
+    e.preventDefault();
+    startGameFromInput();
+  } else if (state === 'win') {
+    const elapsed = winFx ? (performance.now() - winFx.startMs) : 0;
+    if (elapsed > 3500) {
+      e.preventDefault();
+      startGameFromInput();
+    }
+  }
+}, { passive: false });
+// Mouse click fallback (desktop without touch)
+document.getElementById('titleScreen').addEventListener('click', () => {
+  if (state === 'title') startGameFromInput();
+});
+document.getElementById('gameOverScreen').addEventListener('click', () => {
+  if (state === 'gameover') startGameFromInput();
+});
+wrapEl.addEventListener('click', (e) => {
+  if (e.target.closest('.tc-btn')) return;
+  if (state === 'win') {
+    const elapsed = winFx ? (performance.now() - winFx.startMs) : 0;
+    if (elapsed > 3500) startGameFromInput();
+  }
+});
+
+// Swap title screen instructions based on input type
+if (isTouchDevice) {
+  const sub = document.querySelector('#titleScreen .sub');
+  if (sub) {
+    sub.innerHTML =
+      'TAP ◀ ▶ TO MOVE &nbsp;&nbsp; JUMP TO HOP<br>' +
+      'HOLD ROLL + TAP JUMP = SPIN DASH<br>' +
+      'COLLECT DROPLETS &nbsp;&nbsp; CRUSH BUGBOTS';
+  }
+  const blink = document.querySelector('#titleScreen .blink');
+  if (blink) blink.textContent = 'TAP TO START';
+  const goBlink = document.querySelector('#gameOverScreen .blink');
+  if (goBlink) goBlink.textContent = 'TAP TO TRY AGAIN';
+}
+
+// ---------- Level data ----------
+// Ground surface: segments with top-line endpoints. Fills downward.
+const ground = [
+  { x1:    0, x2:  500, y1: 520, y2: 520 },
+  { x1:  500, x2:  700, y1: 520, y2: 440 },
+  { x1:  700, x2: 1100, y1: 440, y2: 440 },
+  { x1: 1100, x2: 1260, y1: 440, y2: 540 },
+  { x1: 1260, x2: 1700, y1: 540, y2: 540 },
+  // pit 1700-1900 (water)
+  { x1: 1900, x2: 2400, y1: 500, y2: 500 },
+  { x1: 2400, x2: 2700, y1: 500, y2: 380 },
+  { x1: 2700, x2: 3100, y1: 380, y2: 380 },
+  { x1: 3100, x2: 3300, y1: 380, y2: 580 },
+  { x1: 3300, x2: 3800, y1: 580, y2: 580 },
+  { x1: 3800, x2: 4100, y1: 580, y2: 520 },
+  { x1: 4100, x2: 4800, y1: 520, y2: 520 },
+];
+const LEVEL_WIDTH  = 4800;
+const LEVEL_HEIGHT = 720;
+
+// Floating rectangular platforms (AABB, top-only collision).
+// Widths tuned so a full-speed spring arc actually lands on them.
+const platforms = [
+  { x: 900,  y: 300, w: 500, h: 16 },  // secret cache platform (spring 1 target)
+  { x: 1720, y: 440, w: 200, h: 16 },  // mid-pit lily pad (jump stepping-stone)
+  { x: 2880, y: 240, w: 620, h: 16 },  // upper plateau secret (spring 2 target)
+];
+
+let droplets, bugbots, springs, goal;
+function initEntities() {
+  droplets = [
+    // Early cluster
+    ...makeDropletArc(260, 480, 5),
+    ...makeDropletLine(740, 400, 4),
+    ...makeDropletLine(920, 270, 9),   // on secret platform (spring 1 payoff)
+    // Low ground
+    ...makeDropletLine(1350, 500, 5),
+    ...makeDropletArc(1800, 400, 4),   // above lily pad
+    // Mid
+    ...makeDropletLine(2100, 460, 5),
+    ...makeDropletArc(2300, 440, 4),
+    // Upper plateau
+    ...makeDropletLine(2740, 340, 6),
+    ...makeDropletLine(2920, 210, 12), // secret upper (spring 2 payoff)
+    // Final stretch
+    ...makeDropletLine(3400, 540, 5),
+    ...makeDropletArc(3950, 460, 4),
+    ...makeDropletLine(4200, 480, 5),
+  ].map(d => ({ ...d, collected: false }));
+
+  bugbots = [
+    { x: 800,  y: 410, vx:  60, dir:  1, patrolMin: 720, patrolMax: 1080, alive: true },
+    { x: 1400, y: 510, vx:  50, dir: -1, patrolMin: 1300, patrolMax: 1650, alive: true },
+    { x: 2200, y: 470, vx:  70, dir:  1, patrolMin: 2000, patrolMax: 2380, alive: true },
+    { x: 3500, y: 550, vx:  55, dir: -1, patrolMin: 3320, patrolMax: 3780, alive: true },
+  ];
+
+  springs = [
+    { x: 800,  y: 440 - 14 },  // on flat plateau, launches to cache platform
+    { x: 2860, y: 380 - 14 },  // on upper plateau, launches to secret
+  ];
+
+  // Goal zone: a grand arch. Collision box spans the archway interior.
+  goal = { x: 4560, y: 520 - 180, w: 140, h: 180, armed: true };
+  goalParticles = [];
+}
+
+let goalParticles;
+function emitGoalParticles() {
+  const cx = goal.x + goal.w / 2;
+  const cy = goal.y + goal.h * 0.4;
+  for (let i = 0; i < 80; i++) {
+    const angle = (i / 80) * Math.PI * 2 + Math.random() * 0.2;
+    const speed = 150 + Math.random() * 350;
+    goalParticles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 100,
+      life: 1.2 + Math.random() * 0.8,
+      age: 0,
+      size: 4 + Math.random() * 4,
+      hue: Math.random() < 0.7 ? '#ffd700' : (Math.random() < 0.5 ? '#fff7c0' : '#8effa6'),
+    });
+  }
+}
+function updateGoalParticles(dt) {
+  for (const p of goalParticles) {
+    p.age += dt;
+    p.vy += 600 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+  goalParticles = goalParticles.filter(p => p.age < p.life);
+}
+function drawGoalParticles() {
+  if (!goalParticles || goalParticles.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const p of goalParticles) {
+    const a = 1 - p.age / p.life;
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.fillStyle = p.hue;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function makeDropletLine(startX, y, count) {
+  const arr = [];
+  for (let i = 0; i < count; i++) arr.push({ x: startX + i * 28, y });
+  return arr;
+}
+function makeDropletArc(centerX, baseY, count) {
+  const arr = [];
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count;
+    const x = centerX - 50 + t * 100;
+    const y = baseY - Math.sin(t * Math.PI) * 60;
+    arr.push({ x, y });
+  }
+  return arr;
+}
+
+// ---------- Froggo ----------
+const froggo = {
+  x: 80, y: 500,
+  vx: 0, vy: 0,
+  w: 24, h: 32,
+  grounded: false,
+  groundedAt: -9999,
+  rolling: false,
+  jumping: false,
+  hurtUntil: 0,
+  dead: false,
+  facing: 1,
+  rotation: 0,
+  landSquashUntil: 0,
+  airbornSinceMs: -1,
+  // Spin dash
+  charging: false,
+  chargeLevel: 0,
+  chargeSpinAngle: 0,
+};
+
+// Scattered droplets (Sonic-style ring loss)
+let scatteredDroplets = [];
+
+let state = 'title';   // 'title' | 'play' | 'gameover' | 'win'
+let dropletScore = 0;
+let bugbotsKilled = 0;
+let levelStartMs = 0;
+let levelEndScore = 0;
+
+function resetLevel() {
+  froggo.x = 80; froggo.y = 480;
+  froggo.vx = 0; froggo.vy = 0;
+  froggo.grounded = false; froggo.rolling = false;
+  froggo.hurtUntil = 0; froggo.dead = false;
+  froggo.facing = 1; froggo.rotation = 0;
+  froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.airbornSinceMs = -1;
+  scatteredDroplets = [];
+  dropletScore = 0; bugbotsKilled = 0;
+  initEntities();
+  levelStartMs = performance.now();
+  slitherAnim = null;
+  winFx = null;
+}
+
+// ---------- Ground height lookup ----------
+function groundAt(x) {
+  for (const seg of ground) {
+    if (x >= seg.x1 && x <= seg.x2) {
+      const t = (x - seg.x1) / (seg.x2 - seg.x1);
+      return seg.y1 + (seg.y2 - seg.y1) * t;
+    }
+  }
+  return Infinity;
+}
+
+// ---------- Collision helpers ----------
+function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+// ---------- Update ----------
+let lastTime = 0;
+function update(dt) {
+  if (state !== 'play') return;
+
+  const now = performance.now();
+
+  // Intent
+  const lx = left(), rx = right();
+  const inputDir = (rx ? 1 : 0) - (lx ? 1 : 0);
+
+  // Horizontal accel
+  if (froggo.grounded) {
+    if (froggo.rolling) {
+      // Rolling: no accel, only friction-slowdown and max cap, plus slope boost
+      froggo.vx -= Math.sign(froggo.vx) * ROLL_FRICTION * dt;
+      if (Math.abs(froggo.vx) < 5) froggo.vx = 0;
+      const capR = MAX_ROLL;
+      if (froggo.vx >  capR) froggo.vx =  capR;
+      if (froggo.vx < -capR) froggo.vx = -capR;
+    } else if (inputDir !== 0) {
+      froggo.vx += inputDir * WALK_ACCEL * dt;
+      if (froggo.vx >  MAX_RUN) froggo.vx =  MAX_RUN;
+      if (froggo.vx < -MAX_RUN) froggo.vx = -MAX_RUN;
+      froggo.facing = inputDir;
+    } else {
+      const decel = GROUND_FRICTION * dt;
+      if (Math.abs(froggo.vx) <= decel) froggo.vx = 0;
+      else froggo.vx -= Math.sign(froggo.vx) * decel;
+    }
+  } else {
+    if (inputDir !== 0) {
+      froggo.vx += inputDir * AIR_ACCEL * dt;
+      if (froggo.vx >  MAX_RUN) froggo.vx =  MAX_RUN;
+      if (froggo.vx < -MAX_RUN) froggo.vx = -MAX_RUN;
+      if (!froggo.rolling) froggo.facing = inputDir;
+    }
+  }
+
+  // Roll entry / exit
+  if (froggo.grounded && downHeld() && Math.abs(froggo.vx) > 40) {
+    froggo.rolling = true;
+  }
+  if (froggo.rolling && (!downHeld() || Math.abs(froggo.vx) < 20) && froggo.grounded) {
+    froggo.rolling = false;
+  }
+
+  // Spin-dash charge / launch
+  // Enter: grounded, holding down, nearly stationary, not already rolling.
+  if (froggo.grounded && downHeld() && Math.abs(froggo.vx) < 30 && !froggo.rolling) {
+    if (!froggo.charging) {
+      froggo.charging = true;
+      froggo.chargeLevel = 0;
+      froggo.chargeSpinAngle = 0;
+    }
+    froggo.vx = 0;  // lock in place while charging
+    froggo.chargeSpinAngle += (3 + froggo.chargeLevel) * dt * 14;
+    // Decay charge level slowly if no new revs (so holding forever doesn't stay maxed)
+    // (Keep simple for MVP — no decay)
+  }
+  // Release: was charging, down is no longer held → launch!
+  if (froggo.charging && !downHeld()) {
+    const launchSpeed = SPINDASH_BASE + froggo.chargeLevel * SPINDASH_PER_REV;
+    froggo.vx = launchSpeed * froggo.facing;
+    if (froggo.vx >  MAX_ROLL) froggo.vx =  MAX_ROLL;
+    if (froggo.vx < -MAX_ROLL) froggo.vx = -MAX_ROLL;
+    froggo.rolling = true;
+    froggo.charging = false;
+    froggo.chargeLevel = 0;
+    sfxLaunch();
+  }
+  // If airborne somehow while charging (shouldn't happen), cancel.
+  if (froggo.charging && !froggo.grounded) {
+    froggo.charging = false;
+    froggo.chargeLevel = 0;
+  }
+
+  // Gravity
+  froggo.vy += GRAVITY * dt;
+
+  // Jump buffer / coyote
+  const canCoyote = (now - froggo.groundedAt) <= COYOTE_MS;
+  if ((froggo.grounded || canCoyote) && jumpBufferAt > 0 && (now - jumpBufferAt) <= JUMP_BUFFER_MS) {
+    froggo.vy = JUMP_V;
+    froggo.grounded = false;
+    froggo.jumping = true;
+    jumpBufferAt = -1;
+    sfxJump();
+  }
+  // Jump cut
+  if (froggo.jumping && !jumpHeld() && froggo.vy < 0) {
+    froggo.vy *= JUMP_CUT;
+    froggo.jumping = false;
+  }
+  if (froggo.vy >= 0) froggo.jumping = false;
+
+  // Integrate position
+  froggo.x += froggo.vx * dt;
+  froggo.y += froggo.vy * dt;
+
+  // Clamp to level bounds
+  if (froggo.x < 0) { froggo.x = 0; froggo.vx = 0; }
+  if (froggo.x > LEVEL_WIDTH - froggo.w) { froggo.x = LEVEL_WIDTH - froggo.w; froggo.vx = 0; }
+
+  // Ground collision (height-map + floating platforms)
+  froggo.grounded = false;
+  const footX = froggo.x + froggo.w / 2;
+  const groundY = groundAt(footX);
+  const footBottom = froggo.y + froggo.h;
+
+  // Top of floating platforms
+  let landOn = null;
+  for (const p of platforms) {
+    if (footBottom >= p.y && footBottom - froggo.vy * dt <= p.y + 6 &&
+        footX + 12 > p.x && footX - 12 < p.x + p.w &&
+        froggo.vy >= 0) {
+      landOn = p.y;
+    }
+  }
+
+  if (landOn !== null) {
+    if (!froggo.grounded && froggo.vy > 200) froggo.landSquashUntil = now + 120;
+    froggo.y = landOn - froggo.h;
+    froggo.vy = 0;
+    froggo.grounded = true;
+    froggo.groundedAt = now;
+  } else if (footBottom >= groundY) {
+    if (!froggo.grounded && froggo.vy > 200) froggo.landSquashUntil = now + 120;
+    froggo.y = groundY - froggo.h;
+    froggo.vy = 0;
+    froggo.grounded = true;
+    froggo.groundedAt = now;
+  }
+
+  // Death pit
+  if (froggo.y > DEATH_Y) {
+    sfxHurt();
+    gameOver();
+    return;
+  }
+
+  // Droplet collection
+  for (const d of droplets) {
+    if (d.collected) continue;
+    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, d.x - 8, d.y - 8, 16, 16)) {
+      d.collected = true;
+      dropletScore += 1;
+      sfxDroplet();
+    }
+  }
+
+  // Spring
+  for (const s of springs) {
+    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, s.x - 16, s.y, 32, 14)) {
+      if (froggo.vy >= -50) {
+        froggo.vy = SPRING_V;
+        froggo.grounded = false;
+        froggo.jumping = true;
+        sfxSpring();
+      }
+    }
+  }
+
+  // Bugbots
+  for (const b of bugbots) {
+    if (!b.alive) continue;
+    b.x += b.vx * b.dir * dt;
+    if (b.x < b.patrolMin) { b.x = b.patrolMin; b.dir = 1; }
+    if (b.x > b.patrolMax) { b.x = b.patrolMax; b.dir = -1; }
+    if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, b.x - 12, b.y - 12, 24, 24)) {
+      const fromAbove = froggo.vy > 50 && (froggo.y + froggo.h) < b.y + 8;
+      if (fromAbove || froggo.rolling) {
+        b.alive = false;
+        bugbotsKilled += 1;
+        froggo.vy = -380; // bounce
+        sfxBugbotSquish();
+      } else if (now > froggo.hurtUntil) {
+        if (dropletScore <= 0) {
+          sfxHurt();
+          gameOver();
+          return;
+        }
+        scatterDroplets(dropletScore);
+        dropletScore = 0;
+        froggo.hurtUntil = now + 1200;
+        froggo.vx = -froggo.facing * 250;
+        froggo.vy = -300;
+        froggo.rolling = false;
+        froggo.charging = false;
+        sfxHurt();
+      }
+    }
+  }
+
+  // Goal — arch interior is a trigger volume
+  if (goal.armed && rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, goal.x + 30, goal.y + 40, goal.w - 60, goal.h - 40)) {
+    goal.armed = false;
+    emitGoalParticles();
+    sfxGoal();
+    winLevel();
+    return;
+  }
+
+  // Track airborne start time (for jump-frame indexing)
+  if (!froggo.grounded) {
+    if (froggo.airbornSinceMs < 0) froggo.airbornSinceMs = now;
+  } else {
+    froggo.airbornSinceMs = -1;
+  }
+
+  // Rotation: full spin only while rolling. Normal jump uses the jump-frame sequence so no spin.
+  if (froggo.rolling) {
+    froggo.rotation += (froggo.vx / 60) * dt;
+  } else if (!froggo.grounded) {
+    froggo.rotation = 0;
+  } else {
+    const tilt = (froggo.vx / MAX_RUN) * 0.12;
+    froggo.rotation = tilt;
+  }
+}
+
+function gameOver() {
+  state = 'gameover';
+  showScreen('gameover');
+}
+
+let winFx = null;
+function winLevel() {
+  state = 'win';
+  const timeSec = (performance.now() - levelStartMs) / 1000;
+  const timeBonus = Math.max(0, Math.floor((90 - timeSec) * 20));
+  const dropletPoints = dropletScore * 10;
+  const bugbotPoints  = bugbotsKilled * 50;
+  const total = dropletPoints + timeBonus + bugbotPoints;
+  levelEndScore = total;
+
+  winFx = {
+    startMs: performance.now(),
+    timeBonus,
+    dropletPoints,
+    bugbotPoints,
+    total,
+    fireworks: [],
+    lastFireworkAt: -999,
+    shownDroplets: 0,
+    shownBugbots: 0,
+    shownTime: 0,
+    shownTotal: 0,
+    froggoLaunchY: froggo.y,
+    froggoLaunchX: froggo.x,
+  };
+
+  // Hide HUD, keep canvas clean for cinematic
+  hud.classList.add('hidden');
+
+  // Submit to leaderboard via parent
+  try {
+    window.parent.postMessage(
+      { type: 'imaginex-score', gameId: 'froggo-adventure', score: total, nickname: 'Player' },
+      '*'
+    );
+  } catch(e) {}
+}
+
+// --- Scattered droplets (Sonic-style ring-loss) ---
+function scatterDroplets(count) {
+  const N = Math.min(count, SCATTER_MAX);
+  const cx = froggo.x + froggo.w / 2;
+  const cy = froggo.y + froggo.h / 2;
+  for (let i = 0; i < N; i++) {
+    // Spread across a 180° arc aimed generally upward
+    const base = -Math.PI / 2;
+    const spread = Math.PI * 0.95;
+    const angle = base + (i / Math.max(1, N - 1) - 0.5) * spread + (Math.random() - 0.5) * 0.12;
+    const speed = 220 + Math.random() * 140;
+    scatteredDroplets.push({
+      x: cx,
+      y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 80,
+      life: SCATTER_LIFE,
+      grounded: false,
+      pickableAfter: SCATTER_GRACE,
+    });
+  }
+}
+
+function updateScatteredDroplets(dt, now) {
+  if (scatteredDroplets.length === 0) return;
+  for (const d of scatteredDroplets) {
+    d.life -= dt;
+    if (d.pickableAfter > 0) d.pickableAfter -= dt;
+    if (!d.grounded) {
+      d.vy += 1500 * dt;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      const gy = groundAt(d.x);
+      if (d.y >= gy - 4) {
+        d.y = gy - 4;
+        if (d.vy > 80) {
+          d.vy = -d.vy * 0.45;
+          d.vx *= 0.72;
+          if (Math.abs(d.vx) < 30) d.vx = 0;
+        } else {
+          d.vy = 0;
+          if (Math.abs(d.vx) < 30) { d.vx = 0; d.grounded = true; }
+        }
+      }
+      // Kill if fell into water
+      if (d.y > DEATH_Y + 40) d.life = 0;
+    }
+    // Pickup check (after grace)
+    if (d.pickableAfter <= 0 &&
+        rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, d.x - 7, d.y - 7, 14, 14) &&
+        (performance.now() > froggo.hurtUntil - 500)) {
+      d.life = 0;
+      dropletScore += 1;
+      sfxDroplet();
+    }
+  }
+  scatteredDroplets = scatteredDroplets.filter(d => d.life > 0);
+}
+
+function drawScatteredDroplets(now) {
+  if (scatteredDroplets.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const d of scatteredDroplets) {
+    // Blink in final ~1.5s of life, accelerating near end
+    const lifeFrac = d.life / SCATTER_LIFE;
+    if (lifeFrac < 0.33) {
+      const blinkRate = lifeFrac < 0.15 ? 60 : 120;
+      if (Math.floor(now / blinkRate) % 2 === 0) continue;
+    }
+    // Pixel-art droplet (hard-edged, no anti-alias)
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(d.x - 3, d.y - 6, 6, 2);
+    ctx.fillRect(d.x - 4, d.y - 4, 8, 2);
+    ctx.fillRect(d.x - 5, d.y - 2, 10, 4);
+    ctx.fillRect(d.x - 4, d.y + 2, 8, 2);
+    ctx.fillRect(d.x - 3, d.y + 4, 6, 2);
+    ctx.fillStyle = '#fff7c0';
+    ctx.fillRect(d.x - 3, d.y - 3, 2, 2);
+    ctx.fillStyle = '#c89800';
+    ctx.fillRect(d.x + 1, d.y + 3, 2, 1);
+  }
+  ctx.restore();
+}
+
+// Fireworks helper
+function spawnFirework() {
+  if (!winFx) return;
+  const fx = 80 + Math.random() * (W - 160);
+  const peakY = 90 + Math.random() * 200;
+  winFx.fireworks.push({
+    x: fx, y: H + 20,
+    vy: -Math.sqrt(2 * 800 * (H + 20 - peakY)),
+    exploded: false,
+    age: 0,
+    particles: [],
+    color: ['#ff4466','#ff8c00','#ffd700','#8effa6','#4fc3f7','#d946ef','#ff69b4'][Math.floor(Math.random() * 7)],
+  });
+}
+function updateWinFx(dt, now) {
+  if (!winFx) return;
+  const elapsed = now - winFx.startMs;
+
+  // Spawn fireworks from 500ms onward
+  if (elapsed > 500 && now - winFx.lastFireworkAt > 260) {
+    spawnFirework();
+    if (Math.random() < 0.4) spawnFirework();
+    winFx.lastFireworkAt = now;
+  }
+
+  for (const f of winFx.fireworks) {
+    f.age += dt;
+    if (!f.exploded) {
+      f.vy += 800 * dt;
+      f.y += f.vy * dt;
+      if (f.vy >= 0) {
+        f.exploded = true;
+        sfxFirework();
+        for (let i = 0; i < 48; i++) {
+          const a = (i / 48) * Math.PI * 2 + Math.random() * 0.1;
+          const spd = 140 + Math.random() * 100;
+          f.particles.push({
+            x: f.x, y: f.y,
+            vx: Math.cos(a) * spd,
+            vy: Math.sin(a) * spd,
+            age: 0,
+            life: 1.0 + Math.random() * 0.6,
+          });
+        }
+      }
+    } else {
+      for (const p of f.particles) {
+        p.age += dt;
+        p.vy += 180 * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+      f.particles = f.particles.filter(p => p.age < p.life);
+    }
+  }
+  winFx.fireworks = winFx.fireworks.filter(f => !f.exploded || f.particles.length > 0);
+
+  // Score tally tick sounds at phase thresholds
+  if (elapsed > 2000) {
+    const tgt = Math.min(dropletScore, Math.floor((elapsed - 2000) / 40));
+    if (tgt > winFx.shownDroplets) {
+      winFx.shownDroplets = tgt;
+      if (tgt % 2 === 0) sfxTick();
+    }
+  }
+  if (elapsed > 2000 + dropletScore * 40 + 200) {
+    const base = 2000 + dropletScore * 40 + 200;
+    const tgt = Math.min(bugbotsKilled, Math.floor((elapsed - base) / 80));
+    if (tgt > winFx.shownBugbots) {
+      winFx.shownBugbots = tgt;
+      sfxTick();
+    }
+  }
+  const timePhaseStart = 2000 + dropletScore * 40 + 200 + bugbotsKilled * 80 + 200;
+  if (elapsed > timePhaseStart) {
+    const tgt = Math.min(winFx.timeBonus, Math.floor((elapsed - timePhaseStart) * 2));
+    if (tgt > winFx.shownTime) {
+      if (Math.floor(tgt / 50) > Math.floor(winFx.shownTime / 50)) sfxTick();
+      winFx.shownTime = tgt;
+    }
+  }
+  const totalPhaseStart = timePhaseStart + winFx.timeBonus / 2 + 400;
+  if (elapsed > totalPhaseStart) {
+    winFx.shownTotal = winFx.total;
+  }
+}
+
+function drawFireworks() {
+  if (!winFx) return;
+  ctx.save();
+  for (const f of winFx.fireworks) {
+    if (!f.exploded) {
+      // Rising trail
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = f.color;
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(f.x, f.y);
+      ctx.lineTo(f.x, f.y + 24);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else {
+      for (const p of f.particles) {
+        const a = 1 - p.age / p.life;
+        ctx.globalAlpha = Math.max(0, a);
+        ctx.fillStyle = f.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawWinSequence(now) {
+  if (!winFx) return;
+  const t = now - winFx.startMs;
+
+  // --- Phase 1: White flash (0-400ms) ---
+  if (t < 400) {
+    const a = Math.pow(1 - t / 400, 1.5);
+    ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // --- Phase 2: Rainbow ring explosion (150-1400ms) ---
+  if (t > 150 && t < 1400) {
+    const rp = (t - 150) / 1250;
+    const radius = rp * 900;
+    const alpha = Math.pow(1 - rp, 1.3);
+    const colors = ['#ff4466','#ff8c00','#ffd700','#8effa6','#4fc3f7','#d946ef'];
+    const centerX = W / 2;
+    const centerY = H / 2 - 40;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    for (let i = 0; i < colors.length; i++) {
+      ctx.strokeStyle = colors[i];
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, Math.max(0, radius - i * 16), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // --- Fireworks (drawn under text) ---
+  drawFireworks();
+
+  // --- Phase 3: STAGE CLEAR slam-in (700ms-) ---
+  if (t > 700) {
+    const textT = Math.min(1, (t - 700) / 500);
+    // Bounce: overshoot then settle
+    let scale;
+    if (textT < 0.6) {
+      scale = 2.5 - textT / 0.6 * 1.5;  // 2.5 -> 1.0
+    } else {
+      const bT = (textT - 0.6) / 0.4;
+      scale = 1.0 + Math.sin(bT * Math.PI) * 0.12;
+    }
+    const rot = (1 - textT) * 0.2;
+    ctx.save();
+    ctx.translate(W / 2, 140);
+    ctx.scale(scale, scale);
+    ctx.rotate(rot);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 44px "Press Start 2P", monospace';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#0a4d1a';
+    ctx.strokeText('STAGE CLEAR!', 0, 0);
+    const grad = ctx.createLinearGradient(0, -30, 0, 30);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.5, '#ffe066');
+    grad.addColorStop(1, '#ff8c00');
+    ctx.fillStyle = grad;
+    ctx.fillText('STAGE CLEAR!', 0, 0);
+    ctx.restore();
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // --- Phase 4: Score tally panel (1800ms-) ---
+  if (t > 1800) {
+    const slideT = Math.min(1, (t - 1800) / 400);
+    const panelY = H - 230 + (1 - slideT) * 240;  // slide up from bottom
+    ctx.save();
+    // Panel background
+    ctx.fillStyle = 'rgba(10, 26, 14, 0.92)';
+    const padX = 120;
+    ctx.fillRect(padX, panelY, W - padX * 2, 180);
+    ctx.strokeStyle = '#ffe066';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(padX, panelY, W - padX * 2, 180);
+    // Inner gold trim
+    ctx.strokeStyle = '#8effa6';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(padX + 6, panelY + 6, W - padX * 2 - 12, 168);
+
+    ctx.font = '14px "Press Start 2P", monospace';
+    const col1 = padX + 32;
+    const col2 = W - padX - 32;
+    ctx.textBaseline = 'middle';
+
+    // Droplets row
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'left';
+    ctx.fillText('DROPLETS × 10', col1, panelY + 34);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(winFx.shownDroplets * 10).padStart(5, ' '), col2, panelY + 34);
+
+    // Bugbots
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'left';
+    ctx.fillText('BUGBOTS × 50', col1, panelY + 66);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(winFx.shownBugbots * 50).padStart(5, ' '), col2, panelY + 66);
+
+    // Time bonus
+    ctx.fillStyle = '#ffd700';
+    ctx.textAlign = 'left';
+    ctx.fillText('TIME BONUS', col1, panelY + 98);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(winFx.shownTime).padStart(5, ' '), col2, panelY + 98);
+
+    // Divider
+    ctx.strokeStyle = '#555';
+    ctx.beginPath();
+    ctx.moveTo(col1, panelY + 120);
+    ctx.lineTo(col2, panelY + 120);
+    ctx.stroke();
+
+    // Total
+    ctx.font = 'bold 20px "Press Start 2P", monospace';
+    const totalPulse = winFx.shownTotal > 0 ? 1 + Math.sin(now / 180) * 0.05 : 1;
+    ctx.save();
+    ctx.translate(W / 2, panelY + 150);
+    ctx.scale(totalPulse, totalPulse);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = winFx.shownTotal > 0 ? '#ffe066' : '#666';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#000';
+    ctx.strokeText('TOTAL  ' + String(winFx.shownTotal).padStart(5, ' '), 0, 0);
+    ctx.fillText('TOTAL  ' + String(winFx.shownTotal).padStart(5, ' '), 0, 0);
+    ctx.restore();
+
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  }
+
+  // --- Phase 5: PRESS R prompt (shows once total reveal is complete) ---
+  const readyAt = 2000 + dropletScore * 40 + 200 + bugbotsKilled * 80 + 200 + winFx.timeBonus / 2 + 600;
+  if (t > readyAt) {
+    if (Math.floor(now / 400) % 2 === 0) {
+      ctx.save();
+      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffe066';
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 4;
+      ctx.fillText(isTouchDevice ? 'TAP TO PLAY AGAIN' : 'PRESS R TO PLAY AGAIN', W / 2, 560);
+      ctx.restore();
+      ctx.textAlign = 'start';
+    }
+  }
+}
+
+// Dr. Slither (rewritten to accept a local sequence time)
+function drawSlitherTaunt(localT, now) {
+  const bannerTopY = 340;
+  // Smoke puff (0-700ms)
+  if (localT < 1400) {
+    const puffP = Math.min(1, localT / 700);
+    ctx.save();
+    for (let i = 0; i < 12; i++) {
+      const r = 14 + puffP * 50 + i * 3;
+      const ox = (i * 53 % 100) - 50;
+      const oy = (i * 37 % 80) - 40;
+      ctx.fillStyle = `rgba(138, 63, 217, ${Math.max(0, (1 - puffP) * 0.55)})`;
+      ctx.beginPath();
+      ctx.arc(W / 2 + ox, bannerTopY + 100 + oy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Slither + throne (reveals from 400ms)
+  if (localT > 400) {
+    const appear = Math.min(1, (localT - 400) / 500);
+    const tx = W / 2;
+    const hover = Math.sin(now / 300) * 3;
+    const ty = bannerTopY + 100 + hover;
+
+    ctx.save();
+    ctx.globalAlpha = appear;
+    ctx.translate(tx, ty);
+
+    // Jet flames
+    const flameT = now / 80;
+    ctx.fillStyle = '#6f3fd9';
+    for (const jx of [-40, 40]) {
+      const fh = 18 + Math.sin(flameT + jx) * 4;
+      ctx.beginPath();
+      ctx.moveTo(jx - 6, 38); ctx.lineTo(jx, 38 + fh); ctx.lineTo(jx + 6, 38);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#ffe066';
+    for (const jx of [-40, 40]) {
+      const fh = 10 + Math.sin(flameT + jx) * 3;
+      ctx.beginPath();
+      ctx.moveTo(jx - 3, 38); ctx.lineTo(jx, 38 + fh); ctx.lineTo(jx + 3, 38);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // Throne
+    ctx.fillStyle = '#3a3045'; ctx.fillRect(-60, 20, 120, 20);
+    ctx.fillStyle = '#5a4d6e'; ctx.fillRect(-60, 18, 120, 4);
+    ctx.fillStyle = '#2a2030'; ctx.fillRect(-48, 32, 14, 8); ctx.fillRect(34, 32, 14, 8);
+    ctx.fillStyle = '#ffd700'; ctx.fillRect(-60, 38, 120, 3);
+    ctx.fillStyle = '#3a3045';
+    ctx.beginPath();
+    ctx.moveTo(-55, 20); ctx.lineTo(-55, -40);
+    ctx.quadraticCurveTo(-55, -60, -35, -60);
+    ctx.lineTo(35, -60);
+    ctx.quadraticCurveTo(55, -60, 55, -40);
+    ctx.lineTo(55, 20); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath(); ctx.arc(0, -40, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8effa6';
+    ctx.beginPath(); ctx.arc(-30, -20, 3, 0, Math.PI * 2);
+                      ctx.arc(30, -20, 3, 0, Math.PI * 2); ctx.fill();
+
+    // Slither body
+    ctx.strokeStyle = '#6f3fd9'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-40, 20);
+    ctx.bezierCurveTo(-20, 10, 20, 30, 40, 18);
+    ctx.stroke();
+    ctx.strokeStyle = '#a876e8'; ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(-40, 22);
+    ctx.bezierCurveTo(-20, 12, 20, 32, 40, 20);
+    ctx.stroke();
+    const sway = Math.sin(now / 250) * 6;
+    ctx.strokeStyle = '#6f3fd9'; ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(0, 10);
+    ctx.bezierCurveTo(sway, -10, -sway, -30, sway * 0.6, -50);
+    ctx.stroke();
+
+    // Head
+    const headX = sway * 0.6, headY = -55;
+    ctx.fillStyle = '#6f3fd9';
+    ctx.beginPath(); ctx.ellipse(headX, headY, 22, 18, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#a876e8';
+    ctx.beginPath(); ctx.ellipse(headX - 4, headY - 6, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+    // Crown
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.moveTo(headX - 16, headY - 14); ctx.lineTo(headX - 16, headY - 22);
+    ctx.lineTo(headX - 8, headY - 16); ctx.lineTo(headX, headY - 26);
+    ctx.lineTo(headX + 8, headY - 16); ctx.lineTo(headX + 16, headY - 22);
+    ctx.lineTo(headX + 16, headY - 14); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath(); ctx.arc(headX, headY - 18, 2, 0, Math.PI * 2); ctx.fill();
+    // Eyes
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.ellipse(headX - 7, headY - 3, 5, 4, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(headX + 7, headY - 3, 5, 4,  0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(headX - 7, headY - 3, 1.2, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(headX + 7, headY - 3, 1.2, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a1540'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(headX - 13, headY - 10); ctx.lineTo(headX - 2, headY - 7);
+    ctx.moveTo(headX + 13, headY - 10); ctx.lineTo(headX + 2, headY - 7);
+    ctx.stroke();
+    // Fangs
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(headX - 5, headY + 8); ctx.lineTo(headX - 3, headY + 16); ctx.lineTo(headX - 1, headY + 8); ctx.closePath();
+    ctx.moveTo(headX + 1, headY + 8); ctx.lineTo(headX + 3, headY + 16); ctx.lineTo(headX + 5, headY + 8); ctx.closePath();
+    ctx.fill();
+    // Tongue
+    if (Math.floor(now / 300) % 2 === 0) {
+      ctx.strokeStyle = '#ff4466'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(headX, headY + 12);
+      ctx.lineTo(headX + 2, headY + 22);
+      ctx.moveTo(headX + 2, headY + 22); ctx.lineTo(headX + 5, headY + 26);
+      ctx.moveTo(headX + 2, headY + 22); ctx.lineTo(headX - 1, headY + 26);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // Speech
+    if (localT > 900 && localT < 3400) {
+      const bx = 90, by = bannerTopY - 20, bw = 260, bh = 56;
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 10); else ctx.rect(bx, by, bw, bh);
+      ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 10); else ctx.rect(bx, by, bw, bh);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(bx + bw - 30, by + bh);
+      ctx.lineTo(bx + bw + 20, by + bh + 20);
+      ctx.lineTo(bx + bw - 10, by + bh);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(bx + bw - 30, by + bh);
+      ctx.lineTo(bx + bw + 20, by + bh + 20);
+      ctx.lineTo(bx + bw - 10, by + bh); ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = '10px "Press Start 2P", monospace';
+      ctx.fillText("You won thisss round,", bx + 12, by + 20);
+      ctx.fillText("Froggo... but not", bx + 12, by + 34);
+      ctx.fillText("the next one!", bx + 12, by + 48);
+      ctx.restore();
+    }
+  }
+}
+
+// ---------- Camera ----------
+const camera = { x: 0, y: 0 };
+function updateCamera() {
+  const targetX = froggo.x + froggo.w / 2 - W / 2;
+  camera.x += (targetX - camera.x) * 0.15;
+  if (camera.x < 0) camera.x = 0;
+  if (camera.x > LEVEL_WIDTH - W) camera.x = LEVEL_WIDTH - W;
+
+  // Vertical: pan camera up when Froggo goes high (e.g., off a spring)
+  const highThreshold = 180;
+  const maxCamUp = -360;
+  let targetY = 0;
+  if (froggo.y < highThreshold) {
+    targetY = Math.max(maxCamUp, froggo.y - highThreshold);
+  }
+  camera.y += (targetY - camera.y) * 0.12;
+  if (camera.y > 0) camera.y = 0;
+  if (camera.y < maxCamUp) camera.y = maxCamUp;
+}
+
+// ---------- Render ----------
+function drawBackground() {
+  // --- 16-bit sky: 6 stepped bands with dithered transitions ---
+  const skyBands = [
+    { start: 0,   end: 80,  color: '#1a5d3c' },
+    { start: 80,  end: 160, color: '#26794b' },
+    { start: 160, end: 240, color: '#338f5c' },
+    { start: 240, end: 320, color: '#48a870' },
+    { start: 320, end: 400, color: '#62c285' },
+    { start: 400, end: 450, color: '#8fd9a8' },
+  ];
+  for (const b of skyBands) {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(0, b.start, W, b.end - b.start);
+  }
+  // Dither between bands (2px checkerboard)
+  for (let i = 0; i < skyBands.length - 1; i++) {
+    const y = skyBands[i].end - 4;
+    ctx.fillStyle = skyBands[i + 1].color;
+    for (let x = 0; x < W; x += 4) ctx.fillRect(x, y, 2, 2);
+    ctx.fillStyle = skyBands[i].color;
+    for (let x = 2; x < W; x += 4) ctx.fillRect(x, y + 2, 2, 2);
+  }
+
+  // --- Pixel clouds (chunky rectangles) ---
+  const cpx = -camera.x * 0.12;
+  ctx.fillStyle = '#ffffff';
+  const clouds = [
+    { x: 100,  y: 70,  w: 64, h: 12 },
+    { x: 90,   y: 82,  w: 80, h: 10 },
+    { x: 380,  y: 50,  w: 48, h: 10 },
+    { x: 400,  y: 60,  w: 64, h: 10 },
+    { x: 660,  y: 90,  w: 56, h: 10 },
+    { x: 1200, y: 60,  w: 72, h: 10 },
+    { x: 1230, y: 70,  w: 52, h: 10 },
+    { x: 1700, y: 95,  w: 60, h: 12 },
+    { x: 2100, y: 55,  w: 80, h: 10 },
+    { x: 2500, y: 80,  w: 64, h: 10 },
+    { x: 2900, y: 65,  w: 70, h: 12 },
+    { x: 3400, y: 50,  w: 48, h: 10 },
+    { x: 3800, y: 85,  w: 60, h: 12 },
+    { x: 4300, y: 70,  w: 72, h: 10 },
+  ];
+  for (const c of clouds) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(c.x + cpx, c.y, c.w, c.h);
+    ctx.fillStyle = '#d0e0d8';
+    ctx.fillRect(c.x + cpx, c.y + c.h - 2, c.w, 2);
+  }
+
+  // Hills, trees, reeds all follow camera.y so they don't float when Froggo flies high
+  ctx.save();
+  ctx.translate(0, -camera.y);
+
+  // --- Distant hills: stepped silhouettes (no curves) ---
+  const px1 = -camera.x * 0.25;
+  ctx.fillStyle = '#0f4520';
+  const hills = [-400, 0, 400, 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000, 4400, 4800];
+  for (const hx of hills) {
+    const baseX = hx + px1;
+    const peakH = 120 + ((hx / 400) % 3) * 30;
+    const stepH = 8;
+    // Build pyramid silhouette out of steps
+    for (let s = 0; s < peakH; s += stepH) {
+      const wAtStep = (peakH - s) * 1.6;
+      ctx.fillRect(baseX + 200 - wAtStep, 440 - peakH + s, wAtStep * 2, stepH);
+    }
+    // Highlight on one side
+    ctx.fillStyle = '#185a2a';
+    for (let s = 0; s < peakH; s += stepH) {
+      const wAtStep = (peakH - s) * 1.6;
+      ctx.fillRect(baseX + 200 - wAtStep, 440 - peakH + s, 4, stepH);
+    }
+    ctx.fillStyle = '#0f4520';
+  }
+
+  // --- Mid-distance tree silhouettes ---
+  const px15 = -camera.x * 0.35;
+  ctx.fillStyle = '#0a3a16';
+  for (let i = 0; i < 30; i++) {
+    const tx = px15 + i * 260 + (i * 41 % 60);
+    const th = 80 + (i * 23 % 40);
+    // Trunk
+    ctx.fillRect(tx, 530 - th + 60, 6, th - 60);
+    // Foliage (chunky squares)
+    ctx.fillRect(tx - 12, 530 - th, 30, 20);
+    ctx.fillRect(tx - 8,  530 - th + 16, 24, 16);
+    ctx.fillRect(tx - 4,  530 - th + 28, 16, 12);
+  }
+
+  // --- Reeds ---
+  const px2 = -camera.x * 0.5;
+  ctx.fillStyle = '#0a2612';
+  for (let i = 0; i < 50; i++) {
+    const cx = px2 + i * 110 + 20;
+    const h = 50 + ((i * 37) % 40);
+    ctx.fillRect(cx,      520 - h, 3, h);
+    ctx.fillRect(cx + 6,  525 - (h - 8), 3, h - 8);
+    ctx.fillRect(cx + 11, 522 - (h - 4),  3, h - 4);
+    // Reed tip
+    ctx.fillStyle = '#4a7a3a';
+    ctx.fillRect(cx - 1, 520 - h, 5, 3);
+    ctx.fillStyle = '#0a2612';
+  }
+  ctx.restore();
+}
+
+function drawGround() {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  // --- Water (16-bit style: dithered bands) ---
+  const waterTop = DEATH_Y - 20;
+  const waterStartX = Math.max(0, camera.x - 10);
+  const waterEndX   = Math.min(LEVEL_WIDTH, camera.x + W + 10);
+  ctx.fillStyle = '#1f4a6a';
+  ctx.fillRect(waterStartX, waterTop, waterEndX - waterStartX, 200);
+  // Lighter dithered band near surface
+  ctx.fillStyle = '#2e6890';
+  for (let x = Math.floor(waterStartX / 4) * 4; x < waterEndX; x += 4) {
+    ctx.fillRect(x, waterTop + 4, 2, 2);
+    ctx.fillRect(x + 2, waterTop + 6, 2, 2);
+  }
+  // Wave highlights
+  ctx.fillStyle = '#5fa3d0';
+  for (let x = Math.floor(waterStartX / 24) * 24; x < waterEndX; x += 24) {
+    ctx.fillRect(x, waterTop, 12, 2);
+  }
+
+  // --- Ground: tile-based grass top + dirt fill (culled to camera view) ---
+  const TILE = 16;
+  const viewLeft  = camera.x - 20;
+  const viewRight = camera.x + W + 20;
+  for (const seg of ground) {
+    if (seg.x2 < viewLeft || seg.x1 > viewRight) continue;
+    const segSlope = (seg.y2 - seg.y1) / (seg.x2 - seg.x1);
+    const drawStart = Math.max(seg.x1, Math.floor(viewLeft / 4) * 4);
+    const drawEnd   = Math.min(seg.x2, viewRight);
+    // Base dirt fill (drawn first, whole polygon)
+    ctx.fillStyle = '#6d4828';
+    ctx.beginPath();
+    ctx.moveTo(seg.x1, seg.y1);
+    ctx.lineTo(seg.x2, seg.y2);
+    ctx.lineTo(seg.x2, LEVEL_HEIGHT);
+    ctx.lineTo(seg.x1, LEVEL_HEIGHT);
+    ctx.closePath();
+    ctx.fill();
+
+    // Darker dirt dither pattern
+    ctx.fillStyle = '#4f3418';
+    for (let x = Math.max(Math.floor(drawStart / 8) * 8, seg.x1); x < drawEnd; x += 8) {
+      const yTop = seg.y1 + segSlope * (x - seg.x1);
+      for (let y = yTop + 20; y < LEVEL_HEIGHT; y += 16) {
+        ctx.fillRect(x + (y % 16 === 0 ? 0 : 4), y, 2, 2);
+        ctx.fillRect(x + 4, y + 8, 2, 2);
+      }
+    }
+    // Scattered pebbles
+    ctx.fillStyle = '#8a6a48';
+    for (let x = Math.max(Math.floor(drawStart / 80) * 80, seg.x1); x < drawEnd; x += 80) {
+      const yTop = seg.y1 + segSlope * (x - seg.x1);
+      ctx.fillRect(x + 30, yTop + 40, 3, 3);
+      ctx.fillRect(x + 55, yTop + 70, 2, 2);
+    }
+
+    // --- Grass top layer (tile-stepped, hard edges) ---
+    const stepW = 4;
+    ctx.fillStyle = '#4fa83a';
+    for (let x = drawStart; x < drawEnd; x += stepW) {
+      const y = seg.y1 + segSlope * (x - seg.x1);
+      ctx.fillRect(x, y, stepW, 6);
+    }
+    // Lighter grass highlight
+    ctx.fillStyle = '#8ee86a';
+    for (let x = drawStart; x < drawEnd; x += stepW) {
+      const y = seg.y1 + segSlope * (x - seg.x1);
+      ctx.fillRect(x, y, stepW, 2);
+    }
+    // Dark grass underline
+    ctx.fillStyle = '#2a6228';
+    for (let x = drawStart; x < drawEnd; x += stepW) {
+      const y = seg.y1 + segSlope * (x - seg.x1);
+      ctx.fillRect(x, y + 6, stepW, 2);
+    }
+    // Grass tufts every ~32px
+    ctx.fillStyle = '#8ee86a';
+    for (let x = Math.max(Math.floor(drawStart / 32) * 32, seg.x1); x < drawEnd; x += 32) {
+      const y = seg.y1 + segSlope * (x - seg.x1);
+      ctx.fillRect(x + 4, y - 3, 2, 3);
+      ctx.fillRect(x + 8, y - 4, 2, 4);
+      ctx.fillRect(x + 12, y - 2, 2, 2);
+    }
+  }
+
+  // --- Floating platforms (16-bit lily pads) ---
+  for (const p of platforms) {
+    // Pad top — hard-edged diamond-ish shape built from rectangles
+    const midX = p.x + p.w / 2;
+    // Top highlight layer
+    ctx.fillStyle = '#6ed882';
+    ctx.fillRect(p.x + 4, p.y,       p.w - 8, 4);
+    ctx.fillRect(p.x + 2, p.y + 4,   p.w - 4, 4);
+    ctx.fillStyle = '#4ebf68';
+    ctx.fillRect(p.x,     p.y + 8,   p.w,     4);
+    // Shadow layer
+    ctx.fillStyle = '#2f8840';
+    ctx.fillRect(p.x + 2, p.y + 12,  p.w - 4, 4);
+    ctx.fillStyle = '#1f5b2c';
+    ctx.fillRect(p.x + 6, p.y + 16,  p.w - 12, 2);
+    // Vein pattern
+    ctx.fillStyle = '#2f8840';
+    ctx.fillRect(midX - 1, p.y + 2, 2, 12);
+    ctx.fillRect(p.x + 14, p.y + 6, 20, 2);
+    ctx.fillRect(p.x + p.w - 34, p.y + 6, 20, 2);
+    // Pink lily flower (pixel-art)
+    const fx = p.x + p.w - 22, fy = p.y + 2;
+    ctx.fillStyle = '#ffb4d4';
+    ctx.fillRect(fx - 2, fy - 4, 4, 2);
+    ctx.fillRect(fx - 4, fy - 2, 8, 2);
+    ctx.fillRect(fx - 4, fy,     8, 2);
+    ctx.fillRect(fx - 2, fy + 2, 4, 2);
+    ctx.fillStyle = '#ffd4e5';
+    ctx.fillRect(fx - 2, fy,     2, 2);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillRect(fx - 1, fy - 1, 2, 2);
+  }
+
+  ctx.restore();
+}
+
+function drawDroplets(now) {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const d of droplets) {
+    if (d.collected) continue;
+    const bob = Math.floor(Math.sin(now / 300 + d.x * 0.01) * 3);
+    const cx = Math.round(d.x), cy = Math.round(d.y + bob);
+    // Pixel-art teardrop (stepped)
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(cx - 1, cy - 7, 2, 2);   // tip
+    ctx.fillRect(cx - 2, cy - 5, 4, 2);
+    ctx.fillRect(cx - 3, cy - 3, 6, 2);
+    ctx.fillRect(cx - 4, cy - 1, 8, 4);   // widest
+    ctx.fillRect(cx - 3, cy + 3, 6, 2);
+    ctx.fillRect(cx - 2, cy + 5, 4, 2);
+    // Highlight
+    ctx.fillStyle = '#fff7c0';
+    ctx.fillRect(cx - 2, cy - 3, 2, 2);
+    ctx.fillRect(cx - 3, cy - 1, 2, 2);
+    // Shadow dot
+    ctx.fillStyle = '#c89800';
+    ctx.fillRect(cx + 1, cy + 3, 2, 2);
+    // Sparkle (cross) periodically
+    if (Math.floor(now / 1200 + d.x * 0.007) % 5 === 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(cx + 5, cy - 6, 2, 2);
+      ctx.fillRect(cx + 4, cy - 5, 4, 1);
+      ctx.fillRect(cx + 5, cy - 4, 2, 1);
+    }
+  }
+  ctx.restore();
+}
+
+function drawSprings() {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const s of springs) {
+    // Base
+    ctx.fillStyle = '#b33';
+    ctx.fillRect(s.x - 18, s.y + 8, 36, 8);
+    // Coils
+    ctx.strokeStyle = '#e66';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const yy = s.y + 8 - i * 3;
+      ctx.moveTo(s.x - 14, yy);
+      ctx.lineTo(s.x + 14, yy);
+    }
+    ctx.stroke();
+    // Top pad
+    ctx.fillStyle = '#f88';
+    ctx.fillRect(s.x - 18, s.y - 4, 36, 6);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(s.x - 14, s.y - 3, 4, 2);
+  }
+  ctx.restore();
+}
+
+function drawBugbots(now) {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const b of bugbots) {
+    if (!b.alive) continue;
+    const bob = Math.floor(Math.sin(now / 200 + b.x * 0.02) * 3);
+    const bx = Math.round(b.x), by = Math.round(b.y + bob);
+    // Wings — chunky rectangle flap
+    const wingFlap = Math.floor(Math.sin(now / 40) * 3);
+    ctx.fillStyle = 'rgba(200, 220, 255, 0.55)';
+    ctx.fillRect(bx - 12, by - 12 + wingFlap, 10, 4);
+    ctx.fillRect(bx + 2,  by - 12 - wingFlap, 10, 4);
+    ctx.fillStyle = 'rgba(220, 240, 255, 0.35)';
+    ctx.fillRect(bx - 10, by - 11 + wingFlap, 6, 2);
+    ctx.fillRect(bx + 4,  by - 11 - wingFlap, 6, 2);
+    // Body — pixel-art chunky metal bug
+    ctx.fillStyle = '#3a3a45';
+    ctx.fillRect(bx - 10, by - 6, 20, 14);
+    ctx.fillStyle = '#4a4a55';
+    ctx.fillRect(bx - 10, by - 6, 20, 2);  // top highlight
+    ctx.fillStyle = '#1e1e26';
+    ctx.fillRect(bx - 10, by + 6, 20, 2);  // bottom shadow
+    // Eye visor (pixelated)
+    ctx.fillStyle = '#ff3344';
+    const eyeX = b.dir > 0 ? bx + 2 : bx - 6;
+    ctx.fillRect(eyeX, by - 3, 4, 4);
+    ctx.fillStyle = '#ff8899';
+    ctx.fillRect(eyeX, by - 3, 2, 2);
+    // Rivets
+    ctx.fillStyle = '#888';
+    ctx.fillRect(bx - 9, by - 5, 2, 2);
+    ctx.fillRect(bx + 7, by - 5, 2, 2);
+    ctx.fillRect(bx - 9, by + 4, 2, 2);
+    ctx.fillRect(bx + 7, by + 4, 2, 2);
+    // Stinger (pixel step, no triangle path)
+    ctx.fillStyle = '#1a1a22';
+    const sd = b.dir;
+    ctx.fillRect(bx + sd * 10,      by - 1, sd * 2, 4);
+    ctx.fillRect(bx + sd * 12,      by,     sd * 2, 2);
+    ctx.fillRect(bx + sd * 14,      by + 1, sd * 2, 1);
+  }
+  ctx.restore();
+}
+
+function drawGoal(now) {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  const ax = goal.x;                      // arch left
+  const ay = goal.y;                      // arch top
+  const aw = goal.w;                      // arch width
+  const ah = goal.h;                      // arch height
+  const cx = ax + aw / 2;                 // arch center X
+  const pulseT = now / 400;
+  const pulse = (Math.sin(pulseT) + 1) / 2;
+
+  // --- Portal glow (behind everything) ---
+  const glow = ctx.createRadialGradient(cx, ay + ah * 0.55, 10, cx, ay + ah * 0.55, 90 + pulse * 20);
+  glow.addColorStop(0, 'rgba(255, 224, 102, 0.55)');
+  glow.addColorStop(0.6, 'rgba(142, 255, 166, 0.25)');
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(ax - 40, ay, aw + 80, ah + 20);
+
+  // --- Swirling portal disk inside the arch ---
+  ctx.save();
+  ctx.translate(cx, ay + ah * 0.55);
+  ctx.rotate(now / 600);
+  for (let i = 0; i < 8; i++) {
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = `rgba(142, 255, 166, ${0.08 + i * 0.02})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 50, 12 + i, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // --- Stone pillars (left + right) ---
+  const pillarW = 24;
+  const pillarH = ah;
+  for (const px of [ax, ax + aw - pillarW]) {
+    // Main column
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(px, ay + 20, pillarW, pillarH - 20);
+    // Column highlight
+    ctx.fillStyle = '#8a93a1';
+    ctx.fillRect(px + 2, ay + 20, 4, pillarH - 20);
+    // Column shadow
+    ctx.fillStyle = '#444b55';
+    ctx.fillRect(px + pillarW - 4, ay + 20, 4, pillarH - 20);
+    // Stone blocks (horizontal grout)
+    ctx.fillStyle = '#3c424b';
+    for (let y = ay + 40; y < ay + pillarH; y += 28) {
+      ctx.fillRect(px, y, pillarW, 2);
+    }
+    // Base
+    ctx.fillStyle = '#555c66';
+    ctx.fillRect(px - 4, ay + pillarH - 12, pillarW + 8, 12);
+    // Capital
+    ctx.fillStyle = '#8a93a1';
+    ctx.fillRect(px - 6, ay + 12, pillarW + 12, 10);
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(px - 4, ay + 22, pillarW + 8, 4);
+  }
+
+  // --- Arch top (curved crossbar) ---
+  ctx.fillStyle = '#6b7280';
+  ctx.beginPath();
+  ctx.moveTo(ax, ay + 22);
+  ctx.lineTo(ax + aw, ay + 22);
+  ctx.lineTo(ax + aw, ay + 10);
+  ctx.quadraticCurveTo(cx, ay - 20, ax, ay + 10);
+  ctx.closePath();
+  ctx.fill();
+  // Arch highlight line
+  ctx.strokeStyle = '#8a93a1';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay + 6);
+  ctx.quadraticCurveTo(cx, ay - 16, ax + aw, ay + 6);
+  ctx.stroke();
+
+  // --- Vines winding up the pillars ---
+  ctx.strokeStyle = '#2f8840';
+  ctx.lineWidth = 3;
+  for (const px of [ax + pillarW / 2, ax + aw - pillarW / 2]) {
+    ctx.beginPath();
+    for (let t = 0; t <= 1; t += 0.05) {
+      const vy = ay + 22 + t * (pillarH - 30);
+      const vx = px + Math.sin(t * Math.PI * 5) * 14;
+      if (t === 0) ctx.moveTo(vx, vy);
+      else ctx.lineTo(vx, vy);
+    }
+    ctx.stroke();
+    // Leaves
+    ctx.fillStyle = '#4ebf68';
+    for (let t = 0.1; t < 1; t += 0.18) {
+      const vy = ay + 22 + t * (pillarH - 30);
+      const vx = px + Math.sin(t * Math.PI * 5) * 14;
+      ctx.beginPath();
+      ctx.ellipse(vx + 8, vy, 5, 3, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Pink lily flowers
+  ctx.fillStyle = '#ffd4e5';
+  ctx.beginPath();
+  ctx.arc(ax + pillarW / 2 + 10, ay + 50, 5, 0, Math.PI * 2);
+  ctx.arc(ax + aw - pillarW / 2 - 10, ay + pillarH - 40, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- Crown banner on top ---
+  const bannerY = ay - 16 + Math.sin(now / 500) * 2;
+  ctx.fillStyle = '#ffd700';
+  // Crown shape (5 points)
+  ctx.beginPath();
+  const crownW = 60;
+  ctx.moveTo(cx - crownW / 2, bannerY);
+  ctx.lineTo(cx - crownW / 2, bannerY - 10);
+  ctx.lineTo(cx - crownW / 4, bannerY - 2);
+  ctx.lineTo(cx - crownW / 8, bannerY - 14);
+  ctx.lineTo(cx, bannerY - 2);
+  ctx.lineTo(cx + crownW / 8, bannerY - 14);
+  ctx.lineTo(cx + crownW / 4, bannerY - 2);
+  ctx.lineTo(cx + crownW / 2, bannerY - 10);
+  ctx.lineTo(cx + crownW / 2, bannerY);
+  ctx.closePath();
+  ctx.fill();
+  // Gems
+  ctx.fillStyle = '#ff4466';
+  ctx.beginPath(); ctx.arc(cx, bannerY - 4, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8effa6';
+  ctx.beginPath(); ctx.arc(cx - crownW / 4, bannerY - 4, 2, 0, Math.PI * 2);
+                    ctx.arc(cx + crownW / 4, bannerY - 4, 2, 0, Math.PI * 2); ctx.fill();
+
+  // --- Sparkle stars inside arch ---
+  for (let i = 0; i < 4; i++) {
+    const t = (now / 1500 + i / 4) % 1;
+    const sx = ax + 30 + t * (aw - 60);
+    const sy = ay + 60 + Math.sin(t * Math.PI * 2 + i) * 30;
+    const s = 3 + Math.sin(now / 200 + i) * 1.5;
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - s);
+    ctx.lineTo(sx + s * 0.4, sy - s * 0.4);
+    ctx.lineTo(sx + s, sy);
+    ctx.lineTo(sx + s * 0.4, sy + s * 0.4);
+    ctx.lineTo(sx, sy + s);
+    ctx.lineTo(sx - s * 0.4, sy + s * 0.4);
+    ctx.lineTo(sx - s, sy);
+    ctx.lineTo(sx - s * 0.4, sy - s * 0.4);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // --- "GOAL" banner on the arch ---
+  ctx.fillStyle = '#0a4d1a';
+  ctx.fillRect(cx - 36, ay + 8, 72, 16);
+  ctx.strokeStyle = '#ffe066';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 36, ay + 8, 72, 16);
+  ctx.fillStyle = '#ffe066';
+  ctx.font = 'bold 12px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('GOAL', cx, ay + 17);
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.restore();
+}
+
+function drawFroggo(now) {
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  const cx = froggo.x + froggo.w / 2;
+  const cy = froggo.y + froggo.h / 2;
+
+  // Hurt flashing
+  if (now < froggo.hurtUntil && Math.floor(now / 80) % 2 === 0) {
+    ctx.globalAlpha = 0.4;
+  }
+
+  // Spin-dash dust cloud + charge bar (before sprite)
+  if (froggo.charging) {
+    // Dust puffs behind Froggo
+    const dustCount = 4 + froggo.chargeLevel;
+    for (let i = 0; i < dustCount; i++) {
+      const phase = now / 80 + i * 1.7;
+      const dx = -froggo.facing * (10 + Math.sin(phase) * 6);
+      const dy = 8 + Math.cos(phase) * 4;
+      const r = 2 + (i % 3);
+      ctx.fillStyle = `rgba(200, 180, 120, ${0.45 - i * 0.04})`;
+      ctx.fillRect(cx + dx - r, cy + dy - r, r * 2, r * 2);
+    }
+    // Charge bar
+    const barW = 40, barH = 4;
+    const barX = cx - barW / 2;
+    const barY = cy - 36;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(barX, barY, barW, barH);
+    const fillColor = froggo.chargeLevel >= SPINDASH_MAX_REVS ? '#ff4466' : '#ffe066';
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(barX, barY, (barW * froggo.chargeLevel) / SPINDASH_MAX_REVS, barH);
+  }
+
+  ctx.translate(cx, cy);
+  ctx.rotate(froggo.rotation);
+
+  let sx = froggo.facing;
+  let sy = 1;
+  // Land squash
+  if (now < froggo.landSquashUntil) {
+    sx *= 1.2; sy *= 0.75;
+  }
+  // Running bob
+  if (froggo.grounded && !froggo.rolling && Math.abs(froggo.vx) > 40) {
+    sy *= 1 + Math.sin(now / 60) * 0.03;
+  }
+  ctx.scale(sx, sy);
+
+  // Pick sprite based on state. Priority: airborne > running > idle.
+  // Rolling & spin-dash stay on idle sprite + rotate (ball form).
+  let imgToDraw = froggoImg;
+  const isAirborne = !froggo.grounded && !froggo.rolling;
+  const isRunning  = froggo.grounded && !froggo.rolling && !froggo.charging
+                     && Math.abs(froggo.vx) > 40;
+
+  if (isAirborne && jumpFramesReady >= 7 && froggo.airbornSinceMs > 0) {
+    // 7-frame jump sequence plays once through. Frame 1 starts at launch,
+    // advances every ~70 ms, then holds on the final frame until landing.
+    const airTime = Math.max(0, now - froggo.airbornSinceMs);
+    const frameDur = 70;
+    const rawIdx = Math.floor(airTime / frameDur);
+    const frameIdx = Math.max(0, Math.min(6, rawIdx));
+    const candidate = jumpFrames[frameIdx];
+    if (candidate && candidate.complete && candidate.naturalWidth > 0) {
+      imgToDraw = candidate;
+    }
+  } else if (isRunning && runFramesReady >= 4) {
+    const frameDur = Math.max(60, 200 - Math.abs(froggo.vx) * 0.3);
+    const frameIdx = Math.max(0, Math.min(3, Math.floor(now / frameDur) % 4));
+    const candidate = runFrames[frameIdx];
+    if (candidate && candidate.complete && candidate.naturalWidth > 0) {
+      imgToDraw = candidate;
+    }
+  }
+
+  const imgUsable = imgToDraw && imgToDraw.complete && imgToDraw.naturalWidth > 0;
+  if (imgUsable) {
+    ctx.drawImage(imgToDraw, -24, -24, 48, 48);
+  } else {
+    // Fallback circle
+    ctx.fillStyle = '#4ebf68';
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Legacy slither-in-win — kept for reference, not called
+let slitherAnim = null;
+function _unused_drawSlitherWin(now) {
+  if (!slitherAnim) return;
+  slitherAnim.t += 16;
+  const t = slitherAnim.t;
+
+  // Banner (vignette dim)
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, 330, W, 220);
+
+  // --- Purple smoke puff entrance (first 700ms) ---
+  if (t < 1500) {
+    const puffP = Math.min(1, t / 700);
+    for (let i = 0; i < 10; i++) {
+      const a = (1 - puffP) * 0.5;
+      const r = 10 + puffP * 60 + i * 4;
+      const ox = (i * 53 % 100) - 50;
+      const oy = (i * 37 % 80) - 40;
+      ctx.fillStyle = `rgba(138, 63, 217, ${a})`;
+      ctx.beginPath();
+      ctx.arc(W / 2 + ox, 440 + oy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // --- Hover throne + Slither (appears after 500ms) ---
+  if (t > 500) {
+    const appear = Math.min(1, (t - 500) / 600);
+    const tx = W / 2;
+    const hover = Math.sin(now / 300) * 3;
+    const ty = 440 + hover;
+
+    ctx.save();
+    ctx.globalAlpha = appear;
+    ctx.translate(tx, ty);
+
+    // --- Jet exhaust flames (below throne) ---
+    const flameT = now / 80;
+    ctx.fillStyle = '#6f3fd9';
+    for (const jx of [-40, 40]) {
+      const fh = 18 + Math.sin(flameT + jx) * 4;
+      ctx.beginPath();
+      ctx.moveTo(jx - 6, 38);
+      ctx.lineTo(jx, 38 + fh);
+      ctx.lineTo(jx + 6, 38);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffe066';
+    for (const jx of [-40, 40]) {
+      const fh = 10 + Math.sin(flameT + jx) * 3;
+      ctx.beginPath();
+      ctx.moveTo(jx - 3, 38);
+      ctx.lineTo(jx, 38 + fh);
+      ctx.lineTo(jx + 3, 38);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // --- Throne base ---
+    ctx.fillStyle = '#3a3045';
+    ctx.fillRect(-60, 20, 120, 20);
+    ctx.fillStyle = '#5a4d6e';
+    ctx.fillRect(-60, 18, 120, 4);
+    // Throne legs/jets
+    ctx.fillStyle = '#2a2030';
+    ctx.fillRect(-48, 32, 14, 8);
+    ctx.fillRect(34, 32, 14, 8);
+    // Gold trim
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(-60, 38, 120, 3);
+
+    // --- Throne backrest (behind Slither) ---
+    ctx.fillStyle = '#3a3045';
+    ctx.beginPath();
+    ctx.moveTo(-55, 20);
+    ctx.lineTo(-55, -40);
+    ctx.quadraticCurveTo(-55, -60, -35, -60);
+    ctx.lineTo(35, -60);
+    ctx.quadraticCurveTo(55, -60, 55, -40);
+    ctx.lineTo(55, 20);
+    ctx.closePath();
+    ctx.fill();
+    // Backrest gems
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath(); ctx.arc(0, -40, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8effa6';
+    ctx.beginPath(); ctx.arc(-30, -20, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(30, -20, 3, 0, Math.PI * 2); ctx.fill();
+
+    // --- Dr. Slither (coiled snake body + head) ---
+    // Coiled tail winding on the throne seat
+    ctx.strokeStyle = '#6f3fd9';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-40, 20);
+    ctx.bezierCurveTo(-20, 10, 20, 30, 40, 18);
+    ctx.stroke();
+    // Underbelly
+    ctx.strokeStyle = '#a876e8';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(-40, 22);
+    ctx.bezierCurveTo(-20, 12, 20, 32, 40, 20);
+    ctx.stroke();
+
+    // Body rising up
+    const sway = Math.sin(now / 250) * 6;
+    ctx.strokeStyle = '#6f3fd9';
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(0, 10);
+    ctx.bezierCurveTo(sway, -10, -sway, -30, sway * 0.6, -50);
+    ctx.stroke();
+
+    // Head
+    const headX = sway * 0.6;
+    const headY = -55;
+    ctx.fillStyle = '#6f3fd9';
+    ctx.beginPath();
+    ctx.ellipse(headX, headY, 22, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Head top shine
+    ctx.fillStyle = '#a876e8';
+    ctx.beginPath();
+    ctx.ellipse(headX - 4, headY - 6, 10, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crown on head
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.moveTo(headX - 16, headY - 14);
+    ctx.lineTo(headX - 16, headY - 22);
+    ctx.lineTo(headX - 8, headY - 16);
+    ctx.lineTo(headX, headY - 26);
+    ctx.lineTo(headX + 8, headY - 16);
+    ctx.lineTo(headX + 16, headY - 22);
+    ctx.lineTo(headX + 16, headY - 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath(); ctx.arc(headX, headY - 18, 2, 0, Math.PI * 2); ctx.fill();
+
+    // Eyes (angry, slanted)
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.ellipse(headX - 7, headY - 3, 5, 4, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(headX + 7, headY - 3, 5, 4,  0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // Pupils (vertical slit)
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(headX - 7, headY - 3, 1.2, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(headX + 7, headY - 3, 1.2, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Angry eyebrows
+    ctx.strokeStyle = '#2a1540';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(headX - 13, headY - 10);
+    ctx.lineTo(headX - 2, headY - 7);
+    ctx.moveTo(headX + 13, headY - 10);
+    ctx.lineTo(headX + 2, headY - 7);
+    ctx.stroke();
+
+    // Fangs
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(headX - 5, headY + 8);
+    ctx.lineTo(headX - 3, headY + 16);
+    ctx.lineTo(headX - 1, headY + 8);
+    ctx.closePath();
+    ctx.moveTo(headX + 1, headY + 8);
+    ctx.lineTo(headX + 3, headY + 16);
+    ctx.lineTo(headX + 5, headY + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Forked tongue flicking
+    if (Math.floor(now / 300) % 2 === 0) {
+      ctx.strokeStyle = '#ff4466';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(headX, headY + 12);
+      ctx.lineTo(headX + 2, headY + 22);
+      ctx.moveTo(headX + 2, headY + 22);
+      ctx.lineTo(headX + 5, headY + 26);
+      ctx.moveTo(headX + 2, headY + 22);
+      ctx.lineTo(headX - 1, headY + 26);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  // --- Speech bubble (after 1s) ---
+  if (t > 1000 && t < 3500) {
+    const bx = 120, by = 360, bw = 220, bh = 56;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 10) : ctx.rect(bx, by, bw, bh);
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 10) : ctx.rect(bx, by, bw, bh);
+    ctx.stroke();
+    // Tail pointing to Slither
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(bx + bw - 30, by + bh);
+    ctx.lineTo(bx + bw + 20, by + bh + 20);
+    ctx.lineTo(bx + bw - 10, by + bh);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.beginPath();
+    ctx.moveTo(bx + bw - 30, by + bh);
+    ctx.lineTo(bx + bw + 20, by + bh + 20);
+    ctx.lineTo(bx + bw - 10, by + bh);
+    ctx.stroke();
+    // Text
+    ctx.fillStyle = '#000';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText("You won thisss round,", bx + 12, by + 20);
+    ctx.fillText("Froggo... but not", bx + 12, by + 34);
+    ctx.fillText("the next one!", bx + 12, by + 48);
+  }
+
+  ctx.restore();
+}
+
+// ---------- HUD ----------
+const hud = document.getElementById('hud');
+const dropletCountEl = document.getElementById('dropletCount');
+const timerEl = document.getElementById('timer');
+const scoreLiveEl = document.getElementById('scoreLive');
+function updateHUD() {
+  if (state !== 'play') return;
+  dropletCountEl.textContent = dropletScore;
+  const tSec = (performance.now() - levelStartMs) / 1000;
+  timerEl.textContent = tSec.toFixed(1);
+  scoreLiveEl.textContent = dropletScore * 10 + bugbotsKilled * 50;
+  if (dropletScore === 0) dropletCountEl.classList.add('flash');
+  else dropletCountEl.classList.remove('flash');
+}
+
+// ---------- Screen management ----------
+function showScreen(which) {
+  document.getElementById('titleScreen').classList.toggle('active', which === 'title');
+  document.getElementById('titleScreen').classList.toggle('hidden', which !== 'title');
+  document.getElementById('gameOverScreen').classList.toggle('active', which === 'gameover');
+  document.getElementById('gameOverScreen').classList.toggle('hidden', which !== 'gameover');
+  document.getElementById('winScreen').classList.toggle('active', which === 'win');
+  document.getElementById('winScreen').classList.toggle('hidden', which !== 'win');
+  hud.classList.toggle('hidden', which !== 'hud');
+}
+
+// ---------- Main loop ----------
+function frame(t) {
+  try {
+    frameBody(t);
+  } catch (e) {
+    console.error('frame error:', e);
+  }
+  requestAnimationFrame(frame);
+}
+
+function frameBody(t) {
+  const dt = Math.min(0.033, (t - lastTime) / 1000 || 0);
+  lastTime = t;
+
+  update(dt);
+  if (goalParticles) updateGoalParticles(dt);
+  updateScatteredDroplets(dt, t);
+  updateWinFx(dt, t);
+  updateCamera();
+
+  // Render
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Screen shake on win impact
+  let shakeApplied = false;
+  if (winFx) {
+    const elapsed = t - winFx.startMs;
+    const shakeStrength = Math.max(0, 18 - elapsed / 50);
+    if (shakeStrength > 0.1) {
+      ctx.save();
+      ctx.translate((Math.random() - 0.5) * shakeStrength, (Math.random() - 0.5) * shakeStrength);
+      shakeApplied = true;
+    }
+  }
+
+  drawBackground();
+  drawGround();
+  drawDroplets(t);
+  drawScatteredDroplets(t);
+  drawSprings();
+  drawBugbots(t);
+  drawGoal(t);
+  drawFroggo(t);
+  drawGoalParticles();
+
+  if (shakeApplied) ctx.restore();
+
+  if (state === 'win') drawWinSequence(t);
+
+  updateHUD();
+}
+
+// ---------- Boot ----------
+initEntities();
+requestAnimationFrame((t) => { lastTime = t; frame(t); });
+
+})();
+</script>
+</body>
+</html>
