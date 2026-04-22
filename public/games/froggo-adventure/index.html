@@ -1057,7 +1057,7 @@ const ZONES_ACT_LILY_POND = [
         ...makeDropletArc(2200, 480, 5),
         ...makeDropletLine(2460, 450, 6),
         ...makeDropletLine(2620, 350, 5),
-        ...makeDropletLine(3060, 460, 6),
+        ...makeDropletLine(3060, 430, 6),   // above descending slope (was buried at y=460)
         ...makeDropletLine(3420, 210, 12),  // big upper cache
         ...makeDropletArc(3800, 420, 4),
         ...makeDropletLine(3970, 450, 5),
@@ -1164,7 +1164,7 @@ const ZONES_ACT_CYBER_SWAMP = [
         ...makeDropletLine(2490, 430, 5),
         ...makeDropletLine(2720, 480, 5),
         ...makeDropletLine(3260, 190, 10),  // big secret
-        ...makeDropletArc(3600, 500, 4),
+        ...makeDropletArc(3600, 440, 4),
         ...makeDropletLine(3730, 560, 4),
         ...makeDropletLine(4140, 520, 5),
         ...makeDropletArc(4600, 480, 4),
@@ -1285,7 +1285,7 @@ const ZONES_ACT_CYBER_SWAMP = [
         ...makeDropletLine(2570, 430, 6),
         ...makeDropletLine(2800, 480, 5),
         ...makeDropletLine(3310, 170, 14),   // big upper cache
-        ...makeDropletArc(3650, 500, 4),
+        ...makeDropletArc(3650, 420, 4),
         ...makeDropletLine(3800, 560, 4),
         ...makeDropletLine(4240, 520, 5),
         ...makeDropletArc(4700, 420, 4),
@@ -1300,7 +1300,7 @@ const ZONES_ACT_CYBER_SWAMP = [
         ...makeDropletLine(7300, 540, 5),
         ...makeDropletLine(7660, 410, 5),
         ...makeDropletLine(7950, 330, 6),
-        ...makeDropletLine(8250, 490, 5),
+        ...makeDropletLine(8250, 470, 5),
       ].map(d => ({ ...d, collected: false }));
 
       bugbots = [
