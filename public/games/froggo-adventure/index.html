@@ -2463,27 +2463,38 @@ function updateSlithertron(dt, now) {
     const t = (now - boss.stateAt) / 1000;
     const cx = (arenaL + arenaR) / 2;
     const range = (arenaR - arenaL) / 2 - 70;
-    boss.x = cx + Math.sin(t * 0.9) * range;
-    boss.y = 250 + Math.sin(t * 2.2) * 26;
-    if (bossArenaLocked && t > 4.2) {
+    // Glide biases toward Froggo so wind-ups start above him more often.
+    const playerBias = Math.max(-range * 0.6, Math.min(range * 0.6, (froggo.x - cx) * 0.5));
+    boss.x = cx + playerBias + Math.sin(t * 1.4) * range * 0.55;
+    boss.y = 240 + Math.sin(t * 2.6) * 28;
+    if (bossArenaLocked && t > 2.4) {
       boss.state = 'wind-up';
       boss.stateAt = now;
     }
   } else if (boss.state === 'wind-up') {
     const wt = (now - boss.stateAt) / 1000;
-    boss.y -= 24 * dt;
+    boss.y -= 20 * dt;
+    // Track Froggo continuously during wind-up and slide toward him.
     boss.targetX = froggo.x + froggo.w / 2;
-    if (wt > 0.85) {
+    const wdx = boss.targetX - boss.x;
+    boss.x += Math.sign(wdx) * Math.min(Math.abs(wdx), 180 * dt);
+    if (wt > 0.55) {
       boss.state = 'dive';
       boss.stateAt = now;
-      boss.vy = 380;
-      boss.vx = Math.sign(boss.targetX - boss.x) * 200;
+      boss.vy = 420;
+      boss.vx = Math.sign(boss.targetX - boss.x) * 280;
     }
   } else if (boss.state === 'dive') {
-    boss.vy += 1200 * dt;
+    boss.vy += 1300 * dt;
+    // Homing: accelerate horizontally toward Froggo's current x during the dive.
+    const homingTarget = froggo.x + froggo.w / 2;
+    const DIVE_HOMING_ACCEL = 420;
+    const DIVE_VX_CAP = 400;
+    if (homingTarget > boss.x) boss.vx = Math.min(boss.vx + DIVE_HOMING_ACCEL * dt, DIVE_VX_CAP);
+    else                       boss.vx = Math.max(boss.vx - DIVE_HOMING_ACCEL * dt, -DIVE_VX_CAP);
     boss.x += boss.vx * dt;
     boss.y += boss.vy * dt;
-    if (boss.y > 450) {
+    if (boss.y > 455) {
       boss.state = 'return';
       boss.stateAt = now;
       boss.vy = 0;
