@@ -1,8 +1,8 @@
 # Froggo Adventure — Design Spec
 
 **Game ID:** `froggo-adventure`
-**Version:** 0.6
-**Last updated:** 2026-04-20
+**Version:** 0.7
+**Last updated:** 2026-04-23
 **Platform:** ImagineX Console (web, iframe-embedded). Works on desktop (keyboard) and mobile (on-screen touch controls).
 
 ## Premise
@@ -21,8 +21,10 @@ The play feel target: momentum-driven platforming where speed is earned, jumps a
 | Turret | **Zapper** (Zone 2) | Stationary purple turret. Fires a cyan plasma bolt at Froggo's side every ~2.2 s. Killable by stomp or roll; rolling Froggo cancels incoming projectiles. |
 | Electrified patroller | **Shockbot** (Zone 2) | Purple bot with antennae. Cycles between electrified (2.0 s) and dormant (1.5 s). Hittable only while dormant; any contact while electrified hurts Froggo. |
 | Boss (Zone 1) | **Bogmech** | 4 HP hover-dive boss in a locked arena at the end of Lily Pond Act 2. Drops into an **enraged phase** at ≤ half HP: red pulsing aura, darker armor, white-flashing eye, shorter hover/wind-up windows, faster and more aggressive player-tracking dives. |
-| Boss (Zone 2) | **Slithertron** | 4 HP cyber-snake boss with a 4-segment trailing body. Head is vulnerable; body segments damage Froggo on contact (roll makes body contact safe). |
-| Villain | **Dr. Slither** | Cyber-snake mastermind. Slithertron is his prototype; the full Dr. Slither fight is still reserved for a later zone. |
+| Boss (Zone 2) | **Slithertron** | 4 HP cyber-snake boss with a 4-segment trailing body. Head is vulnerable; body segments damage Froggo on contact (roll makes body contact safe). Aggressive attack pattern: glides 2.4s biased toward Froggo's x, winds up 0.55s with continuous target re-lock, then dives with homing acceleration (up to 400 px/s lateral) so the dive adjusts mid-air instead of following a fixed arc. |
+| Boss (Zone 3, planned) | **Yeti Mech** | 5 HP bipedal mech boss at the end of Crazy Mountain Zone Act 2 (temple). Planned attacks: ground-pound shockwave (jump to dodge), ice-boulder lob (side-step), horizontal charge (climb a wall to escape — ties the climb mechanic into the boss fight). Enraged phase at ≤ half HP. Not yet implemented. |
+| Villain | **Dr. Slither** | Cyber-snake mastermind. Slithertron is his prototype; the full Dr. Slither fight is reserved for the final zone (Zone 6). |
+| Enemy (Zone 3, planned) | **Snowroller** | Rolling snowball enemy for Crazy Mountain Act 1. Rolls along the ground and accelerates on downhill slopes. 1 HP, killed by stomp/roll from above. Not yet implemented — Zone 3 Act 1 currently uses Bugbots as placeholder enemies. |
 
 ## Controls
 
@@ -32,9 +34,14 @@ The play feel target: momentum-driven platforming where speed is earned, jumps a
 | `Space` or `↑` or `W` | Jump (variable height — longer hold = higher jump) |
 | `↓` or `S` while moving | Roll (tuck into spin; damages Bugbots, accelerates on downhills) |
 | `↓` (held) + tap `Space`/`↑` while stationary | **Spin Dash** — rev up then release `↓` to launch |
+| `→` or `←` into a climb wall while airborne | **Cling** — Froggo grabs the wall (Zone 3+) |
+| While clinging: default | Auto-ascend up the wall |
+| While clinging: `↓`/`S` (or ROLL on mobile) | Descend the wall |
+| While clinging: `Space` (or JUMP on mobile) | Wall-jump — releases with horizontal kick away from wall |
+| While clinging: press away from wall | Release and fall |
 | `R` | Restart level. After a zone-clear screen, `R` advances to the next zone if one is unlocked. |
 | `Enter` on title screen | Start Zone 1 |
-| `1` / `2` on title screen | Jump directly into Zone 1 / Zone 2 (only shown once a zone is unlocked) |
+| `1` / `2` / `3` on title screen | Jump directly into a zone (only shown once unlocked) |
 
 **Mobile/touch:** On-screen controls shown automatically on touch devices. Bottom-left: ◀ / ▶ movement buttons. Bottom-right: ROLL and JUMP buttons. Title/game-over/win screens accept any tap to start or restart. Canvas scales to fit the viewport while preserving the 4:3 aspect ratio (max 800×600 on desktop).
 
@@ -46,8 +53,8 @@ Frame-rate independent, tuned for feel, not realism.
 |---|---|---|
 | Gravity | `1800 px/s²` | Pulls Froggo down |
 | Walk accel | `1500 px/s²` | Ground accel when input held |
-| Air accel | `400 px/s²` | Reduced control mid-air — stationary jumps don't drift far; running jumps keep full momentum |
-| Max run speed | `360 px/s` | Terminal horizontal ground speed |
+| Air accel | `650 px/s²` | Mid-air control (tuned up 2026-04-23 so the player can actively steer jumps — previously 400) |
+| Max run speed | `320 px/s` | Terminal horizontal ground speed (tuned down from 360 on 2026-04-23 to tighten jump arcs while still clearing every 200 px gap with margin) |
 | Max roll speed | `640 px/s` | Faster cap while rolling / spin-dashing |
 | Spin dash base | `420 px/s` | Launch speed at 0 revs |
 | Spin dash per-rev | `+50 px/s` | Each charge-rev adds this much (cap 6 revs) |
@@ -68,9 +75,10 @@ Frame-rate independent, tuned for feel, not realism.
 - **Bugbot (basic)** — `24×24 px` hitbox, 1 HP. Hover-patrol within a patrol range. Killed by a single stomp (downward) or roll. Contact otherwise costs droplets.
 - **Bugbot (heavy)** — `36×36 px` hitbox, **2 HP**, slower speed, dark-red armored body with yellow visor. Requires two hits (with ~250 ms i-frame between hits so a single stomp can't consume both HP). Appears only in Act 2.
 - **Bogmech (boss)** — `60×48 px` hitbox, 4 HP. Hovers in an arena at the end of Zone 1 Act 2, periodically winds up and dives toward Froggo's position. Damaged by stomp/roll (contact otherwise hurts Froggo via the stinger band). HP bar + "BOGMECH" label rendered above. Arena locks behind Froggo once he enters. Enters an **enraged phase** when HP ≤ `ceil(maxHp/2)` — hover window drops from 1800 → 1000 ms, wind-up from 520 → 380 ms, dive initial velocity 480 → 560, gravity 1450 → 1700, player-tracking factor 0.9 → 1.15 (cap 300 px/s), hover sway 96 → 130 px. Visual: red pulsing aura, blood-red armor tint, white-flashing eye.
-- **Slithertron (boss)** — `40×28 px` head hitbox + 4 trailing body segments (`28×24 px` each, sampled from a position-history trail at a 12-frame offset). 4 HP. Glides in an S-curve across the upper arena, rises to wind-up, dives toward Froggo, then returns. Head is the only vulnerable part; body segments damage Froggo on contact *unless* Froggo is rolling.
+- **Slithertron (boss)** — `40×28 px` head hitbox + 4 trailing body segments (`28×24 px` each, sampled from a position-history trail at a 12-frame offset). 4 HP. Attack pattern (retuned 2026-04-23): glides 2.4s biased toward Froggo's current x (so wind-ups start above him), winds up 0.55s while continuously re-locking target and sliding toward it, then dives with gravity 1300, initial horizontal 280 px/s plus lateral homing acceleration (cap 400 px/s). Head is the only vulnerable part; body segments damage Froggo on contact *unless* Froggo is rolling.
 - **Droplet** — `16×16 px` pixel-art golden teardrop. Worth +10 score. Player starts with 0 droplets. Getting hit scatters up to 16 droplets in an upward arc; they bounce with gravity on the ground and can be recollected within ~4.5 s (blink in the final ~1.5 s before disappearing). Any droplets beyond 16 at the time of hit are lost, matching Sonic ring-loss behavior.
 - **Spring** — `32×16 px` pad. On contact, gives -1600 px/s vertical velocity (~711 px launch height). Camera pans upward to keep Froggo visible during flight.
+- **Climb wall** (Zone 3+) — solid rectangular block with handhold pick-marks on both faces. Froggo collides with it normally from any direction (can land on top, blocked walking into side, bonk head underneath). Additionally, while airborne Froggo can **cling** to either face by pressing the direction INTO the wall; see the **Climb mechanic** section. Rendered as slate-blue stone with lighter-blue pick-marks every 28 px.
 - **Goal arch** (Act 1 only) — triggers end-of-act transition, not the full win cinematic. Shows "ACT 1 CLEAR!" card followed by the "ACT 2" title slam.
 
 ## Damage & death
@@ -95,6 +103,38 @@ Frame-rate independent, tuned for feel, not realism.
 - Releasing `↓` launches Froggo in the facing direction at speed `SPINDASH_BASE + chargeLevel * SPINDASH_PER_REV` (420–720 px/s), enters the rolling state, and plays a launch whoosh.
 - Launching while airborne or moving is impossible — entry requires `|vx| < 30` and `grounded`.
 
+## Climb mechanic (Zone 3+)
+
+Introduced in Zone 3 (Crazy Mountain). Froggo can cling to designated **climb walls** and scale them vertically, drawing on a grip meter.
+
+| Constant | Value | Purpose |
+|---|---|---|
+| `CLIMB_SPEED` | `160 px/s` | Vertical movement while clinging |
+| `CLIMB_JUMP_V` | `-640 px/s` | Vertical impulse on wall-jump (slightly less than a ground jump) |
+| `CLIMB_WALL_KICK` | `340 px/s` | Horizontal kick AWAY from wall on wall-jump |
+| `GRIP_MAX` | `2.5 s` | Total cling time at full grip |
+| `GRIP_DRAIN_PER_SEC` | `1.0` | Drain rate while clinging |
+| `GRIP_RECOVER_GROUND` | `5.0` | Fast recovery while grounded |
+| `GRIP_RECOVER_AIR` | `0.3` | Slow recovery mid-air (prevents spamming climb-jump-climb) |
+| `CLIMB_RELEASE_COOLDOWN` | `200 ms` | Cannot re-cling immediately after release |
+
+**Cling trigger:** Airborne, overlapping a climb wall (hitbox extended by 2 px horizontally), pressing the direction INTO the wall, with `grip > 0.05` and past the release cooldown. On trigger, Froggo snaps to the wall edge, `vx/vy` zero out, `climbing = true`, and `facing` flips toward the wall.
+
+**While clinging:**
+- Default behavior is **auto-ascend** (Froggo climbs up at `CLIMB_SPEED` with no input). Held `↓`/`S` (or **ROLL** on mobile) descends at the same rate.
+- Grip drains at `GRIP_DRAIN_PER_SEC` regardless of vertical direction.
+- Pressing away from the wall releases (Froggo falls, cooldown starts).
+- Pressing **Space** (desktop) or **JUMP** (mobile) wall-jumps off with a horizontal kick and vertical impulse. On desktop, `ArrowUp`/`W` does NOT trigger jump while clinging (it's reserved as climb-up input so it reads intuitively); only `Space` triggers wall-jump from keyboard.
+- Grip reaches zero → forced release.
+
+**Mantle at top:** When Froggo is ascending and reaches the top of the wall, he auto-mantles — snapped onto the wall's top surface, centered, `grounded = true`, `vx/vy = 0`. From there he can walk or jump off either side like a normal platform.
+
+**Solid collision:** Climb walls are two-way solid (unlike platforms). Walking into a wall's side is blocked; jumping up into the bottom bonks Froggo's head; falling onto the top lands normally. Collision resolution uses min-penetration direction, and runs AFTER ground-collision so "standing on top of a wall" doesn't get clobbered by the grounded=false reset.
+
+**Rendering:** Climb walls render as slate-blue stone pillars with lighter-blue pick-mark handholds every 28 px on both faces, plus a darker shadow column on the right edge and a cap/base band. The visual contrast with regular ground tells the player this surface is climbable.
+
+**HUD:** A canvas-rendered grip meter appears in the top-right corner only when grip is below full. It fills blue by default and turns amber when grip drops below 35 %.
+
 ## Zones and acts
 
 Zones contain multiple **Acts** played back-to-back. Beating the final act of a zone triggers the full zone-clear cinematic and submits the combined score to the leaderboard. Beating a non-final zone unlocks the next zone — the clear screen prompts the player to advance directly, and the title screen exposes a **zone picker** once more than one zone is unlocked (also accessible via number keys `1` / `2`). Zone unlock progress is persisted in `localStorage` under `froggo.zonesUnlocked`.
@@ -115,12 +155,24 @@ Dr. Slither's industrial outpost carved into the poisoned swamp. Metal-plate gro
 | 1 | Cyber Swamp, Dawn | 7500 px | Deep teal/purple palette, cyan neon seams. 5 basic Bugbots, 3 Zappers, 2 spike strips, 2 sawblades, 3 springs, 1 checkpoint at `x ≈ 3340`. Ends at a goal arch. Target time: 120 s. |
 | 2 | Cyber Swamp, Core | 9500 px | Magenta/ultraviolet palette. 4 basic + 3 Heavy Bugbots, 4 Zappers, 3 Shockbots, 3 spike strips, 3 sawblades, 4 springs, 1 checkpoint at `x ≈ 5000`. Boss arena locks at `x > 8400` for the **Slithertron** fight (4 HP, serpent body chain). Target time: 180 s. |
 
+### Zone 3 — Crazy Mountain Zone (in progress)
+
+Snow-capped mountain exterior giving way to an ancient temple interior. Introduces the **climb mechanic** (see above) — certain walls must be scaled to progress. Palette `mountain-peak`: pale blue sky gradient, white snow caps on ground tiles, slate-grey rocky hills, evergreen silhouettes, white clouds.
+
+Act 2 (temple interior) and the **Yeti Mech** boss are planned but not yet implemented. For now Act 1 alone acts as the final zone-clear target, so beating it triggers the zone-clear cinematic and leaderboard submission.
+
+| Act | Theme | Width | Key features |
+|---|---|---|---|
+| 1 | Mountain Ascent | 7200 px | Mountain exterior — terrain rises from `y=540` at the start to `y=300` at the summit via a mix of slopes, pits, and **two mandatory climb walls** (at `x=2600` and `x=4600`, each `28×160 px`). One spring launches to a secret platform over the first pit; each climb wall leads to a reward platform directly above it. 5 basic + 2 Heavy Bugbots (placeholder until Snowroller is implemented). Summit goal arch at `x ≈ 6960`. Target time: 150 s. |
+| 2 | Temple Depths (planned) | — | Inside-the-mountain temple theme. Planned hazards: dart traps. Planned boss: **Yeti Mech** (5 HP, ground-pound + ice-boulder + charge). Not yet implemented. |
+
 ### Zone music
 
-- **Zone 1:** `audio/Froggo_Act1.mp3`, looped via an `<audio id="bgm">` element at volume `0.6`.
-- **Zone 2:** `audio/Froggo_Act2_Cyber_Swamp.mp3`, looped via a second `<audio id="bgm2">` element at volume `0.6`.
-- Switching zones pauses one `<audio>` element and plays the other via `setZoneMusic(zoneIdx)` / `startMusic()`.
-- A WebAudio-synthesized chiptune loop (126 BPM, C minor, saw bass + square lead + synth drums) remains in the code as an automatic **fallback** — it only kicks in if `bgm2.play()` fails at runtime. It does not play when the MP3 is present and loads successfully.
+- **Zone 1:** `audio/Froggo_Act1.mp3`, looped via `<audio id="bgm">` at volume `0.6`.
+- **Zone 2:** `audio/Froggo_Act2_Cyber_Swamp.mp3`, looped via `<audio id="bgm2">` at volume `0.6`.
+- **Zone 3:** `audio/Crazy_Mountain_Zone3.mp3`, looped via `<audio id="bgm3">` at volume `0.6`.
+- Switching zones pauses the inactive elements and plays the active one via `setZoneMusic(zoneIdx)` / `startMusic()`.
+- A WebAudio-synthesized chiptune loop (126 BPM, C minor, saw bass + square lead + synth drums) remains in the code as an automatic **Zone 2 fallback** — it only kicks in if `bgm2.play()` fails at runtime. It does not play when the MP3 is present and loads successfully.
 
 ### Between-act transition
 
@@ -201,7 +253,8 @@ ImagineX parent forwards to `POST /api/leaderboard`. Requires adding `'froggo-ad
 - **Music:**
   - Zone 1: `audio/Froggo_Act1.mp3`, looped via `<audio id="bgm">` at volume `0.6`.
   - Zone 2: `audio/Froggo_Act2_Cyber_Swamp.mp3`, looped via `<audio id="bgm2">` at volume `0.6`.
-  - Starts on the first `Enter` press / tap / click (autoplay-safe). Continues across restart. Zone switching pauses the inactive element and plays the active one.
+  - Zone 3: `audio/Crazy_Mountain_Zone3.mp3`, looped via `<audio id="bgm3">` at volume `0.6`.
+  - Starts on the first `Enter` press / tap / click (autoplay-safe). Continues across restart. Zone switching pauses the inactive elements and plays the active one.
   - If `bgm2.play()` rejects at runtime, an automatic WebAudio-synth chiptune loop (126 BPM, C minor, saw bass + detuned square lead + synth kick/snare/hats) kicks in so Zone 2 is never silent.
 - **SFX:** All synthesized procedurally via WebAudio — no audio files needed. Events: `jump`, `droplet pickup`, `spring`, `bugbot squish`, `hurt`, `goal`, `rev` (spin-dash charge), `launch` (spin-dash release), `tick` (score tally ka-ching), `firework` (celebration burst), `checkpoint` (rising chime on totem touch), `zap` (Zapper firing), `shock` (Shockbot electrify), `saw` (sawblade rumble), `1UP` (rising 5-note fanfare when a life is earned).
 
@@ -217,9 +270,14 @@ public/games/froggo-adventure/
 ├── title.png                     # Title-screen background art
 ├── cover.png                     # Cartridge cover (1024×1536)
 └── audio/
-    ├── Froggo_Act1.mp3           # Zone 1 looped background music
-    └── Froggo_Act2_Cyber_Swamp.mp3  # Zone 2 looped background music
+    ├── Froggo_Act1.mp3              # Zone 1 looped background music
+    ├── Froggo_Act2_Cyber_Swamp.mp3  # Zone 2 looped background music
+    └── Crazy_Mountain_Zone3.mp3     # Zone 3 looped background music
 ```
+
+## Playtest flags
+
+- `TEST_INFINITE_LIVES` (in `index.html`): when `true`, `gameOver()` does not decrement `lives`, so deaths always respawn. Currently **ENABLED** in production for father-and-son co-playtesting of later zones without restarting from Zone 1 on each death. Set to `false` before publishing a public build.
 
 ## Already implemented (cumulative)
 
@@ -251,11 +309,16 @@ public/games/froggo-adventure/
 - [x] **Zone 2 music** — `Froggo_Act2_Cyber_Swamp.mp3` looped via a dedicated `<audio id="bgm2">` element, with a WebAudio-synthesized chiptune loop retained as an automatic fallback if the MP3 fails to load
 - [x] **Bogmech tuning** — bumped from 3 HP to 4 HP; added low-HP enraged phase with faster attack cycle, harder player tracking, and red-aura visual tell
 - [x] **1UP at every 100 droplets** — `+1` life per 100-droplet threshold crossed (`DROPLETS_PER_1UP = 100`, capped at `LIVES_CAP = 9`), with rising 5-note fanfare and a bouncy "1 UP!" banner; compact `♥×N` HUD above 3 lives
+- [x] **Jump control tuning (2026-04-23)** — `MAX_RUN` 360→320 and `AIR_ACCEL` 400→650. Tightens horizontal jump distance (still clears every 200 px gap) and gives active mid-air steering instead of rail-like jumps.
+- [x] **Entity placement audit (2026-04-23)** — swept Zone 1 Act 2 and Zone 2 Acts 1+2 for springs on slope segments, saws buried under or floating above ground, floating spikes, zappers sinking 4 px, and four droplet rows embedded inside descending slope tiles. All fixed.
+- [x] **Slithertron aggression pass (2026-04-23)** — glide time 4.2s→2.4s with player-x bias, wind-up 0.85s→0.55s with continuous target re-lock and slide-toward, dive gains lateral homing (cap 400 px/s). Previously could not reliably hit a running Froggo; now forces real dodging.
+- [x] **Climb mechanic + grip meter (2026-04-23)** — hold-to-climb walls (`climbWalls` array in level data), auto-ascend / ROLL-to-descend / Space-to-wall-jump / press-away-to-release, grip meter (2.5s full, drains while clinging, recovers on ground), mantle-at-top auto-step, solid wall collision with on-top handling. Grip HUD in top-right, amber warning below 35 %.
+- [x] **Zone 3 Act 1 — Crazy Mountain (in progress, 2026-04-23)** — `mountain-peak` palette (snow-cap ground, pale blue sky, slate rocks), `Crazy_Mountain_Zone3.mp3` wired via `<audio id="bgm3">`, 7200 px ascent geometry with two mandatory climb walls, spring-launched secret, stepping-stone across a pit, reward platforms above each climb wall, summit goal arch. Placeholder Bugbots (Snowroller still to do). Title picker now shows a third snowy-white button; keyboard `3` jumps in when unlocked.
 
 ## Out of scope for now
 
-- Zones beyond Cyber Swamp
-- Full Dr. Slither boss fight (Slithertron is the prototype)
+- Zones beyond Zone 3 (Zones 4 + 5 TBD; Zone 6 reserved for Dr. Slither finale)
+- Full Dr. Slither boss fight (Slithertron is the prototype; final fight lives in Zone 6)
 - Multi-frame sprite animation (idle blink, run cycle, jump pose) — currently procedural transforms on single PNG
 - Shield / power-up items
 - Second playable character
@@ -264,8 +327,10 @@ public/games/froggo-adventure/
 
 ## Next candidates (ordered)
 
-1. Zone 3 — new biome (ice cavern? factory interior?) with unique enemies and boss.
-2. Dr. Slither full boss fight.
-3. Power-up: shield droplet (one-hit protection).
-4. Cyber-themed goal-arch visuals for Zone 2 Act 1.
-5. Additional checkpoints on longer acts / tuning pass on Zone 2 difficulty.
+1. **Snowroller enemy** — rolling snowball for Crazy Mountain Act 1 (currently using Bugbots as placeholder).
+2. **Zone 3 Act 2 — Temple Depths** — ancient temple interior palette (stone, torches, markings), Dart Trap hazard, additional climb walls.
+3. **Yeti Mech boss** — Zone 3 finale. 5 HP, ground-pound shockwave / ice-boulder lob / horizontal charge. Enraged phase at ≤ half HP. Climb mechanic ties into the charge dodge.
+4. Shield droplet power-up (one-hit protection).
+5. Cyber-themed goal-arch visuals for Zone 2 Act 1.
+6. Additional checkpoints on longer acts / tuning pass on Zone 2 & 3 difficulty.
+7. Disable `TEST_INFINITE_LIVES` for a public build.
