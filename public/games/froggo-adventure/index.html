@@ -163,6 +163,7 @@
   <canvas id="c" width="800" height="600"></canvas>
   <audio id="bgm" src="audio/Froggo_Act1.mp3" loop preload="auto"></audio>
   <audio id="bgm2" src="audio/Froggo_Act2_Cyber_Swamp.mp3" loop preload="auto"></audio>
+  <audio id="bgm3" src="audio/Crazy_Mountain_Zone3.mp3" loop preload="auto"></audio>
   <div class="hud hidden" id="hud">
     <div>DROPLETS <span id="dropletCount">0</span></div>
     <div>TIME <span id="timer">0.0</span></div>
@@ -391,6 +392,8 @@ const bgm = document.getElementById('bgm');
 if (bgm) bgm.volume = 0.6;
 const bgm2 = document.getElementById('bgm2');
 if (bgm2) bgm2.volume = 0.6;
+const bgm3 = document.getElementById('bgm3');
+if (bgm3) bgm3.volume = 0.6;
 let cyberMusic = null;    // Lazily initialized synth fallback for Zone 2 (used only if MP3 fails)
 
 function createCyberMusic() {
@@ -554,8 +557,17 @@ function createCyberMusic() {
 }
 
 function startMusic() {
+  if (currentZone === 2) {
+    // Zone 3 — Crazy Mountain
+    try { bgm  && bgm.pause();  } catch (e) {}
+    try { bgm2 && bgm2.pause(); } catch (e) {}
+    if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+    if (bgm3) bgm3.play().catch(() => {});
+    return;
+  }
   if (currentZone === 1) {
     try { bgm && bgm.pause(); } catch (e) {}
+    try { bgm3 && bgm3.pause(); } catch (e) {}
     if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
     if (bgm2) {
       const p = bgm2.play();
@@ -571,9 +583,10 @@ function startMusic() {
     if (cyberMusic && cyberMusic.start) cyberMusic.start();
     return;
   }
-  // Zone 1 music — stop Zone 2 sources if running
+  // Zone 1 music — stop other zones' sources if running
   if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
   try { bgm2 && bgm2.pause(); } catch (e) {}
+  try { bgm3 && bgm3.pause(); } catch (e) {}
   if (!bgm) return;
   bgm.play().catch(() => {});
 }
@@ -755,7 +768,7 @@ window.addEventListener('keydown', (e) => {
     startMusic();
   }
   // Zone select from title (numeric keys)
-  if (state === 'title' && (e.key === '1' || e.key === '2')) {
+  if (state === 'title' && (e.key === '1' || e.key === '2' || e.key === '3')) {
     const zIdx = parseInt(e.key, 10) - 1;
     if (zIdx < getUnlockedZones() && zIdx >= 0) {
       ensureAudio();
@@ -914,8 +927,10 @@ function refreshTitleZonePicker() {
     btn.style.font = '12px "Press Start 2P", monospace';
     btn.style.padding = '10px 14px';
     btn.style.color = '#fff';
-    btn.style.background = i === 1 ? 'rgba(143, 63, 217, 0.45)' : 'rgba(78, 191, 104, 0.45)';
-    btn.style.border = `3px solid ${i === 1 ? '#d946ef' : '#8effa6'}`;
+    const bg = i === 2 ? 'rgba(140, 180, 220, 0.50)' : (i === 1 ? 'rgba(143, 63, 217, 0.45)' : 'rgba(78, 191, 104, 0.45)');
+    const border = i === 2 ? '#d6e8ff' : (i === 1 ? '#d946ef' : '#8effa6');
+    btn.style.background = bg;
+    btn.style.border = `3px solid ${border}`;
     btn.style.cursor = 'pointer';
     btn.addEventListener('click', () => {
       ensureAudio();
@@ -986,11 +1001,6 @@ const ZONES_ACT_LILY_POND = [
       { x: 900,  y: 300, w: 500, h: 16 },
       { x: 1720, y: 440, w: 200, h: 16 },
       { x: 2880, y: 240, w: 620, h: 16 },
-    ],
-    climbWalls: [
-      // TEMP Phase-1 test: climbable pillar between the two Bugbot patrols.
-      // Ground here is flat y=500, bottom of wall sits on ground.
-      { x: 2050, y: 320, w: 22, h: 180 },
     ],
     makeEntities() {
       droplets = [
@@ -1384,9 +1394,96 @@ const ZONES_ACT_CYBER_SWAMP = [
   },
 ];
 
+// Zone 3 (Crazy Mountain) — mountain exterior with hold-to-climb walls. Act 2 (temple) +
+// Yeti Mech boss come in the next build pass; for now Act 1 alone acts as the final zone clear.
+const ZONES_ACT_CRAZY_MOUNTAIN = [
+  // ==================== Act 1: Mountain Ascent ====================
+  {
+    id: 'crazy-mountain-1',
+    name: 'Crazy Mountain Zone  —  Act 1',
+    subtitle: '— MOUNTAIN ASCENT —',
+    width: 7200,
+    height: 720,
+    palette: 'mountain-peak',
+    targetTime: 150,
+    ground: [
+      { x1:    0, x2:  800, y1: 540, y2: 540 },
+      { x1:  800, x2: 1000, y1: 540, y2: 480 },   // ramp up
+      { x1: 1000, x2: 2000, y1: 480, y2: 480 },   // mid plateau
+      // pit 2000-2200 (spring at 2100 launches to secret platform)
+      { x1: 2200, x2: 3000, y1: 480, y2: 480 },   // climb-wall plateau
+      { x1: 3000, x2: 3200, y1: 480, y2: 420 },   // ramp up
+      { x1: 3200, x2: 4000, y1: 420, y2: 420 },   // upper plateau
+      // pit 4000-4200
+      { x1: 4200, x2: 4800, y1: 420, y2: 420 },   // second climb-wall plateau
+      { x1: 4800, x2: 5000, y1: 420, y2: 360 },   // ramp
+      { x1: 5000, x2: 5800, y1: 360, y2: 360 },   // near-top
+      { x1: 5800, x2: 6000, y1: 360, y2: 300 },   // final ramp
+      { x1: 6000, x2: 7200, y1: 300, y2: 300 },   // goal plateau
+    ],
+    platforms: [
+      { x: 2060, y: 380, w: 160, h: 16 },   // spring target above pit 1
+      { x: 2630, y: 320, w: 180, h: 16 },   // reward above climb wall 1 (right of wall)
+      { x: 4090, y: 360, w: 160, h: 16 },   // stepping stone across pit 2
+      { x: 4640, y: 260, w: 220, h: 16 },   // reward above climb wall 2 (right of wall)
+      { x: 5300, y: 280, w: 180, h: 16 },   // approach to summit
+    ],
+    climbWalls: [
+      // Stands on the 2200-3000 plateau; mantling onto its top gives access to the (2530,320) reward platform.
+      { x: 2600, y: 320, w: 28, h: 160 },
+      // Stands on the 4200-4800 plateau; reaches the (4560,260) reward platform.
+      { x: 4600, y: 260, w: 28, h: 160 },
+    ],
+    makeEntities() {
+      droplets = [
+        ...makeDropletLine(140, 520, 5),
+        ...makeDropletArc(520, 490, 4),
+        ...makeDropletLine(1050, 440, 6),
+        ...makeDropletLine(1500, 440, 5),
+        ...makeDropletArc(1850, 440, 4),
+        ...makeDropletLine(2080, 340, 6),    // spring reward
+        ...makeDropletLine(2300, 440, 5),
+        ...makeDropletLine(2660, 280, 6),    // climb reward (above platform 2630-2810)
+        ...makeDropletLine(2850, 440, 5),
+        ...makeDropletLine(3250, 380, 5),
+        ...makeDropletArc(3550, 380, 4),
+        ...makeDropletLine(3800, 380, 5),
+        ...makeDropletLine(4100, 320, 5),    // stepping stone
+        ...makeDropletLine(4350, 380, 5),
+        ...makeDropletLine(4680, 220, 7),    // big climb-2 reward (above platform 4640-4860)
+        ...makeDropletLine(4850, 380, 4),
+        ...makeDropletArc(5100, 320, 4),
+        ...makeDropletLine(5330, 240, 6),    // approach platform
+        ...makeDropletLine(5620, 320, 5),
+        ...makeDropletArc(6000, 260, 4),
+        ...makeDropletLine(6200, 260, 6),
+        ...makeDropletLine(6500, 260, 5),
+      ].map(d => ({ ...d, collected: false }));
+
+      bugbots = [
+        { type: 'basic', x:  900, y: 510, vx: 65, dir:  1, patrolMin:  820, patrolMax:  980,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 1400, y: 450, vx: 70, dir: -1, patrolMin: 1220, patrolMax: 1580,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 2400, y: 450, vx: 75, dir:  1, patrolMin: 2240, patrolMax: 2580,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 3500, y: 390, vx: 55, dir: -1, patrolMin: 3260, patrolMax: 3740,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 4400, y: 390, vx: 80, dir:  1, patrolMin: 4240, patrolMax: 4580,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'basic', x: 5400, y: 330, vx: 70, dir: -1, patrolMin: 5120, patrolMax: 5680,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 6300, y: 270, vx: 50, dir:  1, patrolMin: 6080, patrolMax: 6580,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+      ];
+
+      springs = [
+        { x: 2100, y: 480 - 14 },  // launches to platform at (2060,380)
+      ];
+
+      goal = { x: 6960, y: 300 - 180, w: 140, h: 180, armed: true };
+      boss = null;
+    },
+  },
+];
+
 const ZONES = [
-  { id: 'lily-pond',   name: 'LILY POND',   subtitle: '— NATURE SWAMP —',  acts: ZONES_ACT_LILY_POND },
-  { id: 'cyber-swamp', name: 'CYBER SWAMP', subtitle: '— DR. SLITHER’S LAB —', acts: ZONES_ACT_CYBER_SWAMP },
+  { id: 'lily-pond',     name: 'LILY POND',     subtitle: '— NATURE SWAMP —',        acts: ZONES_ACT_LILY_POND },
+  { id: 'cyber-swamp',   name: 'CYBER SWAMP',   subtitle: '— DR. SLITHER’S LAB —', acts: ZONES_ACT_CYBER_SWAMP },
+  { id: 'crazy-mountain', name: 'CRAZY MOUNTAIN', subtitle: '— FROZEN ASCENT —',      acts: ZONES_ACT_CRAZY_MOUNTAIN },
 ];
 
 function currentActDef() {
@@ -1538,11 +1635,19 @@ function setZoneMusic(zoneIdx) {
   if (zoneIdx === 0) {
     if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
     try { bgm2 && bgm2.pause(); } catch (e) {}
+    try { bgm3 && bgm3.pause(); } catch (e) {}
     if (state !== 'title' && state !== 'zoneIntro' && bgm) bgm.play().catch(() => {});
-  } else {
+  } else if (zoneIdx === 1) {
     if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
     try { bgm && bgm.pause(); } catch (e) {}
+    try { bgm3 && bgm3.pause(); } catch (e) {}
     if (state !== 'title' && state !== 'zoneIntro' && bgm2) bgm2.play().catch(() => {});
+  } else {
+    // Zone 3 — Crazy Mountain
+    if (cyberMusic && cyberMusic.stop) cyberMusic.stop();
+    try { bgm  && bgm.pause();  } catch (e) {}
+    try { bgm2 && bgm2.pause(); } catch (e) {}
+    if (state !== 'title' && state !== 'zoneIntro' && bgm3) bgm3.play().catch(() => {});
   }
 }
 
@@ -1707,14 +1812,27 @@ function update(dt) {
         froggo.grip = Math.max(0, froggo.grip - GRIP_DRAIN_PER_SEC * dt);
         // Vertical integration, clamped to wall extent
         froggo.y += froggo.vy * dt;
-        const minY = cw.y - 4;
+        const minY = cw.y - froggo.h;   // Froggo's top-left y when standing on wall top
         const maxY = cw.y + cw.h - froggo.h + 4;
-        if (froggo.y < minY) { froggo.y = minY; froggo.vy = 0; }
-        if (froggo.y > maxY) { froggo.y = maxY; }
-        // Grip exhausted → forced release
-        if (froggo.grip <= 0) {
+        // Mantle: ascending and reaching top → step onto the wall.
+        if (vIn > 0 && froggo.y <= minY + 0.5) {
           froggo.climbing = false;
           froggo.climbReleasedAt = now;
+          froggo.y = minY;
+          froggo.vx = 0;
+          froggo.vy = 0;
+          froggo.grounded = true;
+          froggo.groundedAt = now;
+          // Center Froggo on top of the wall so there's no overhang off the edge.
+          froggo.x = cw.x + (cw.w - froggo.w) / 2;
+        } else {
+          if (froggo.y < minY) { froggo.y = minY; froggo.vy = 0; }
+          if (froggo.y > maxY) { froggo.y = maxY; }
+          // Grip exhausted → forced release
+          if (froggo.grip <= 0) {
+            froggo.climbing = false;
+            froggo.climbReleasedAt = now;
+          }
         }
       }
     }
@@ -1817,38 +1935,6 @@ function update(dt) {
   if (froggo.x < 0) { froggo.x = 0; froggo.vx = 0; }
   if (froggo.x > LEVEL_WIDTH - froggo.w) { froggo.x = LEVEL_WIDTH - froggo.w; froggo.vx = 0; }
 
-  // Solid collision with climbable walls (always — blocks walking through)
-  for (const w of climbWalls) {
-    if (!rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, w.x, w.y, w.w, w.h)) continue;
-    const penLeft  = (froggo.x + froggo.w) - w.x;   // coming from left
-    const penRight = (w.x + w.w) - froggo.x;         // coming from right
-    const penTop   = (froggo.y + froggo.h) - w.y;   // coming from above
-    const penBot   = (w.y + w.h) - froggo.y;         // coming from below
-    const minPen = Math.min(penLeft, penRight, penTop, penBot);
-    if (minPen === penTop && froggo.vy >= 0) {
-      // Land on top of wall
-      froggo.y = w.y - froggo.h;
-      froggo.vy = 0;
-      froggo.grounded = true;
-      froggo.groundedAt = now;
-    } else if (minPen === penLeft) {
-      froggo.x = w.x - froggo.w;
-      if (froggo.vx > 0) froggo.vx = 0;
-    } else if (minPen === penRight) {
-      froggo.x = w.x + w.w;
-      if (froggo.vx < 0) froggo.vx = 0;
-    } else if (minPen === penBot) {
-      froggo.y = w.y + w.h;
-      if (froggo.vy < 0) froggo.vy = 0;
-    }
-  }
-
-  // Grip recovery (when not clinging)
-  if (!froggo.climbing) {
-    const r = froggo.grounded ? GRIP_RECOVER_GROUND : GRIP_RECOVER_AIR;
-    froggo.grip = Math.min(GRIP_MAX, froggo.grip + r * dt);
-  }
-
   // Ground collision (height-map + floating platforms) — skipped while clinging
   if (!froggo.climbing) {
   froggo.grounded = false;
@@ -1880,6 +1966,39 @@ function update(dt) {
     froggo.groundedAt = now;
   }
   } // end !froggo.climbing ground collision
+
+  // Solid collision with climbable walls (runs AFTER ground collision so
+  // "standing on top of wall" sets grounded without ground collision clobbering it).
+  // The +1 on height treats on-top-touching as overlap so penTop catches it.
+  for (const w of climbWalls) {
+    if (!rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h + 1, w.x, w.y, w.w, w.h)) continue;
+    const penLeft  = (froggo.x + froggo.w) - w.x;
+    const penRight = (w.x + w.w) - froggo.x;
+    const penTop   = (froggo.y + froggo.h) - w.y;
+    const penBot   = (w.y + w.h) - froggo.y;
+    const minPen = Math.min(penLeft, penRight, penTop, penBot);
+    if (minPen === penTop && froggo.vy >= 0) {
+      froggo.y = w.y - froggo.h;
+      froggo.vy = 0;
+      froggo.grounded = true;
+      froggo.groundedAt = now;
+    } else if (minPen === penLeft) {
+      froggo.x = w.x - froggo.w;
+      if (froggo.vx > 0) froggo.vx = 0;
+    } else if (minPen === penRight) {
+      froggo.x = w.x + w.w;
+      if (froggo.vx < 0) froggo.vx = 0;
+    } else if (minPen === penBot) {
+      froggo.y = w.y + w.h;
+      if (froggo.vy < 0) froggo.vy = 0;
+    }
+  }
+
+  // Grip recovery (when not clinging — runs after we know grounded state)
+  if (!froggo.climbing) {
+    const r = froggo.grounded ? GRIP_RECOVER_GROUND : GRIP_RECOVER_AIR;
+    froggo.grip = Math.min(GRIP_MAX, froggo.grip + r * dt);
+  }
 
   // Death pit
   if (froggo.y > DEATH_Y) {
@@ -3499,11 +3618,19 @@ const SKY_BANDS = {
     { start: 320, end: 400, color: '#7a0c88' },
     { start: 400, end: 450, color: '#a020b0' },
   ],
+  'mountain-peak': [
+    { start: 0,   end: 80,  color: '#5c7aa8' },
+    { start: 80,  end: 160, color: '#7a98c0' },
+    { start: 160, end: 240, color: '#9ab4d0' },
+    { start: 240, end: 320, color: '#b8cde0' },
+    { start: 320, end: 400, color: '#d4e0ec' },
+    { start: 400, end: 450, color: '#ebf0f6' },
+  ],
 };
-const HILL_COLOR = { day: '#0f4520', sunset: '#1a0d26', 'cyber-dawn': '#0a1830', 'cyber-core': '#1a0028' };
-const TREE_COLOR = { day: '#0a3a16', sunset: '#0f0820', 'cyber-dawn': '#0a2038', 'cyber-core': '#2a0640' };
-const REED_COLOR = { day: '#0a2612', sunset: '#0a0618', 'cyber-dawn': '#081820', 'cyber-core': '#180028' };
-const CLOUD_COLOR = { day: '#ffffff', sunset: '#f0d0b8', 'cyber-dawn': '#a0c8e0', 'cyber-core': '#e888d0' };
+const HILL_COLOR = { day: '#0f4520', sunset: '#1a0d26', 'cyber-dawn': '#0a1830', 'cyber-core': '#1a0028', 'mountain-peak': '#364a6a' };
+const TREE_COLOR = { day: '#0a3a16', sunset: '#0f0820', 'cyber-dawn': '#0a2038', 'cyber-core': '#2a0640', 'mountain-peak': '#1e3448' };
+const REED_COLOR = { day: '#0a2612', sunset: '#0a0618', 'cyber-dawn': '#081820', 'cyber-core': '#180028', 'mountain-peak': '#48607a' };
+const CLOUD_COLOR = { day: '#ffffff', sunset: '#f0d0b8', 'cyber-dawn': '#a0c8e0', 'cyber-core': '#e888d0', 'mountain-peak': '#ffffff' };
 
 function isCyberPalette() { return levelPalette === 'cyber-dawn' || levelPalette === 'cyber-core'; }
 
@@ -3527,6 +3654,14 @@ const GROUND_PALETTE = {
     water: '#2a0844', waterDither: '#4a0a6a', waterWave: '#b040d0',
     dirt: '#180022', dirtDark: '#0a0012', dirtPebble: '#40205a',
     topMain: '#4a3a5a', topHi: '#8a6ab0', topUnder: '#20102c', tuftHi: '#d946ef',
+  },
+  'mountain-peak': {
+    // "water" tiles repurposed as crevasses / icy pits.
+    water: '#2a3d5a', waterDither: '#3e5474', waterWave: '#86a8cc',
+    // "dirt" = exposed rock beneath the snow cap.
+    dirt: '#4a4e5a', dirtDark: '#2e3240', dirtPebble: '#6e727e',
+    // Snow cap on top of each ground tile.
+    topMain: '#f4f8ff', topHi: '#ffffff', topUnder: '#b8c8e0', tuftHi: '#e6f0ff',
   },
 };
 function groundPal() { return GROUND_PALETTE[levelPalette] || GROUND_PALETTE.day; }
@@ -3568,9 +3703,10 @@ function drawBackground() {
     { x: 4300, y: 70,  w: 72, h: 10 },
   ];
   const cloudShadow =
-    levelPalette === 'sunset'     ? '#b48a6e' :
-    levelPalette === 'cyber-dawn' ? '#4068a0' :
-    levelPalette === 'cyber-core' ? '#902090' :
+    levelPalette === 'sunset'         ? '#b48a6e' :
+    levelPalette === 'cyber-dawn'     ? '#4068a0' :
+    levelPalette === 'cyber-core'     ? '#902090' :
+    levelPalette === 'mountain-peak'  ? '#b8c8dc' :
     '#d0e0d8';
   for (const c of clouds) {
     ctx.fillStyle = cloudColor;
@@ -3606,9 +3742,10 @@ function drawBackground() {
   // --- Distant hills: stepped silhouettes (no curves) ---
   const hillColor = HILL_COLOR[levelPalette] || '#0f4520';
   const hillHighlight =
-    levelPalette === 'sunset'     ? '#291337' :
-    levelPalette === 'cyber-dawn' ? '#203858' :
-    levelPalette === 'cyber-core' ? '#3a0848' :
+    levelPalette === 'sunset'         ? '#291337' :
+    levelPalette === 'cyber-dawn'     ? '#203858' :
+    levelPalette === 'cyber-core'     ? '#3a0848' :
+    levelPalette === 'mountain-peak'  ? '#5a6f92' :
     '#185a2a';
   const px1 = -camera.x * 0.25;
   ctx.fillStyle = hillColor;
@@ -3645,9 +3782,10 @@ function drawBackground() {
   // --- Reeds / neon pipes ---
   const reedColor = REED_COLOR[levelPalette] || '#0a2612';
   const reedTip =
-    levelPalette === 'sunset'     ? '#8a5a4a' :
-    levelPalette === 'cyber-dawn' ? '#66d4ff' :
-    levelPalette === 'cyber-core' ? '#d946ef' :
+    levelPalette === 'sunset'         ? '#8a5a4a' :
+    levelPalette === 'cyber-dawn'     ? '#66d4ff' :
+    levelPalette === 'cyber-core'     ? '#d946ef' :
+    levelPalette === 'mountain-peak'  ? '#f4f8ff' :
     '#4a7a3a';
   const px2 = -camera.x * 0.5;
   for (let i = 0; i < 70; i++) {
