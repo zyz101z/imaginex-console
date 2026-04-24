@@ -235,6 +235,16 @@ const JUMP_BUFFER_MS = 100;
 const SPRING_V = -1600;
 const DEATH_Y = 680;
 
+// Climb mechanic (Zone 3+)
+const CLIMB_SPEED = 160;        // px/s vertical on climb wall
+const CLIMB_JUMP_V = -640;      // wall-jump vertical impulse
+const CLIMB_WALL_KICK = 340;    // wall-jump horizontal kick (away from wall)
+const GRIP_MAX = 2.5;           // seconds of cling at full grip
+const GRIP_DRAIN_PER_SEC = 1.0; // drain while clinging
+const GRIP_RECOVER_GROUND = 5.0;// recover while grounded
+const GRIP_RECOVER_AIR = 0.3;   // slow recover while airborne (not clinging)
+const CLIMB_RELEASE_COOLDOWN = 200; // ms before Froggo can re-cling after releasing
+
 // ---------- Canvas ----------
 const cvs = document.getElementById('c');
 const ctx = cvs.getContext('2d');
@@ -719,6 +729,8 @@ window.addEventListener('keydown', (e) => {
     if (froggo.charging) {
       froggo.chargeLevel = Math.min(SPINDASH_MAX_REVS, froggo.chargeLevel + 1);
       sfxRev(froggo.chargeLevel);
+    } else if (froggo.climbing && (e.key === 'ArrowUp' || e.key === 'w')) {
+      // While clinging, ArrowUp/W is climb-up input — reserve wall-jump for Space/touch.
     } else {
       jumpBufferAt = performance.now();
     }
@@ -938,6 +950,7 @@ let zappers;        // stationary turrets (Zone 2+)
 let projectiles;    // live zapper plasma shots
 let shockbots;      // electrified patrollers (Zone 2+)
 let checkpoints;    // mid-level respawn totems (Zone 2+)
+let climbWalls = []; // climbable solid walls (Zone 3+)
 let activeCheckpoint = null; // {x,y} of touched checkpoint for current act
 let currentZone = 0;
 let currentAct = 0;
@@ -973,6 +986,11 @@ const ZONES_ACT_LILY_POND = [
       { x: 900,  y: 300, w: 500, h: 16 },
       { x: 1720, y: 440, w: 200, h: 16 },
       { x: 2880, y: 240, w: 620, h: 16 },
+    ],
+    climbWalls: [
+      // TEMP Phase-1 test: climbable pillar between the two Bugbot patrols.
+      // Ground here is flat y=500, bottom of wall sits on ground.
+      { x: 2050, y: 320, w: 22, h: 180 },
     ],
     makeEntities() {
       droplets = [
@@ -1389,6 +1407,7 @@ function loadAct(actIdx) {
   projectiles = [];
   shockbots = [];
   checkpoints = [];
+  climbWalls = L.climbWalls ? L.climbWalls.map(w => ({ ...w })) : [];
   activeCheckpoint = null;
   L.makeEntities();
   goalParticles = [];
@@ -1479,6 +1498,12 @@ const froggo = {
   charging: false,
   chargeLevel: 0,
   chargeSpinAngle: 0,
+  // Climb
+  climbing: false,
+  climbWall: null,
+  climbSide: 0,           // -1 wall to Froggo's left, +1 right
+  grip: GRIP_MAX,
+  climbReleasedAt: -9999,
 };
 
 // Scattered droplets (Sonic-style ring loss)
@@ -1548,6 +1573,8 @@ function resetLevel() {
   froggo.hurtUntil = 0; froggo.dead = false;
   froggo.facing = 1; froggo.rotation = 0;
   froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.climbing = false; froggo.climbWall = null; froggo.climbSide = 0;
+  froggo.grip = GRIP_MAX; froggo.climbReleasedAt = -9999;
   froggo.airbornSinceMs = -1;
   scatteredDroplets = [];
   bugbotsKilled = 0;
@@ -1576,6 +1603,8 @@ function advanceToAct(actIdx, restoredCp) {
   froggo.hurtUntil = 0; froggo.dead = false;
   froggo.facing = 1; froggo.rotation = 0;
   froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.climbing = false; froggo.climbWall = null; froggo.climbSide = 0;
+  froggo.grip = GRIP_MAX; froggo.climbReleasedAt = -9999;
   froggo.airbornSinceMs = -1;
   scatteredDroplets = [];
   dropletScore = 0;
@@ -1623,7 +1652,76 @@ function update(dt) {
   const lx = left(), rx = right();
   const inputDir = (rx ? 1 : 0) - (lx ? 1 : 0);
 
-  // Horizontal accel
+  // ===== Climb mechanic =====
+  // 1) Try to cling: airborne, pressing toward wall, overlapping it, grip available, off-cooldown.
+  if (!froggo.climbing && !froggo.grounded && inputDir !== 0 &&
+      froggo.grip > 0.05 && (now - froggo.climbReleasedAt) > CLIMB_RELEASE_COOLDOWN) {
+    for (const w of climbWalls) {
+      if (!rectsOverlap(froggo.x - 2, froggo.y, froggo.w + 4, froggo.h, w.x, w.y, w.w, w.h)) continue;
+      const fCx = froggo.x + froggo.w / 2;
+      const wCx = w.x + w.w / 2;
+      const wallSide = wCx > fCx ? 1 : -1;   // direction from Froggo to wall
+      if (inputDir !== wallSide) continue;   // must press TOWARD wall
+      froggo.climbing = true;
+      froggo.climbWall = w;
+      froggo.climbSide = wallSide;
+      froggo.facing = wallSide;
+      froggo.x = (wallSide === 1) ? w.x - froggo.w : w.x + w.w;
+      froggo.vx = 0;
+      froggo.vy = 0;
+      froggo.jumping = false;
+      froggo.rolling = false;
+      froggo.charging = false;
+      break;
+    }
+  }
+
+  // 2) Active climb: vertical movement, grip drain, wall-jump, release conditions.
+  if (froggo.climbing) {
+    const cw = froggo.climbWall;
+    // Release by pressing AWAY from wall
+    if (inputDir === -froggo.climbSide) {
+      froggo.climbing = false;
+      froggo.climbReleasedAt = now;
+    } else if (!cw) {
+      froggo.climbing = false;
+    } else {
+      // Wall-jump takes priority if jump buffered
+      if (jumpBufferAt > 0 && (now - jumpBufferAt) <= JUMP_BUFFER_MS) {
+        froggo.vy = CLIMB_JUMP_V;
+        froggo.vx = -froggo.climbSide * CLIMB_WALL_KICK;
+        froggo.facing = -froggo.climbSide;
+        froggo.climbing = false;
+        froggo.climbReleasedAt = now;
+        froggo.jumping = true;
+        jumpBufferAt = -1;
+        sfxJump();
+      } else {
+        // Vertical input (default: ascend; ROLL/down: descend)
+        const upI   = (keys['arrowup']   || keys['w']) ? 1 : 0;
+        const downI = (keys['arrowdown'] || keys['s'] || touchKeys.roll) ? 1 : 0;
+        let vIn = upI - downI;
+        if (vIn === 0) vIn = 1;   // auto-ascend while clinging
+        froggo.vx = 0;
+        froggo.vy = -vIn * CLIMB_SPEED;
+        froggo.grip = Math.max(0, froggo.grip - GRIP_DRAIN_PER_SEC * dt);
+        // Vertical integration, clamped to wall extent
+        froggo.y += froggo.vy * dt;
+        const minY = cw.y - 4;
+        const maxY = cw.y + cw.h - froggo.h + 4;
+        if (froggo.y < minY) { froggo.y = minY; froggo.vy = 0; }
+        if (froggo.y > maxY) { froggo.y = maxY; }
+        // Grip exhausted → forced release
+        if (froggo.grip <= 0) {
+          froggo.climbing = false;
+          froggo.climbReleasedAt = now;
+        }
+      }
+    }
+  }
+
+  // Horizontal accel (suspended while clinging — climb block owns vx/vy)
+  if (!froggo.climbing) {
   if (froggo.grounded) {
     if (froggo.rolling) {
       // Rolling: no accel, only friction-slowdown and max cap, plus slope boost
@@ -1650,6 +1748,7 @@ function update(dt) {
       if (!froggo.rolling) froggo.facing = inputDir;
     }
   }
+  } // end !froggo.climbing horizontal accel
 
   // Roll entry / exit
   if (froggo.grounded && downHeld() && Math.abs(froggo.vx) > 40) {
@@ -1689,12 +1788,12 @@ function update(dt) {
     froggo.chargeLevel = 0;
   }
 
-  // Gravity
-  froggo.vy += GRAVITY * dt;
+  // Gravity (off while clinging — climb block owns vy)
+  if (!froggo.climbing) froggo.vy += GRAVITY * dt;
 
-  // Jump buffer / coyote
+  // Jump buffer / coyote (ground-jump only — wall-jump handled in climb block)
   const canCoyote = (now - froggo.groundedAt) <= COYOTE_MS;
-  if ((froggo.grounded || canCoyote) && jumpBufferAt > 0 && (now - jumpBufferAt) <= JUMP_BUFFER_MS) {
+  if (!froggo.climbing && (froggo.grounded || canCoyote) && jumpBufferAt > 0 && (now - jumpBufferAt) <= JUMP_BUFFER_MS) {
     froggo.vy = JUMP_V;
     froggo.grounded = false;
     froggo.jumping = true;
@@ -1708,15 +1807,50 @@ function update(dt) {
   }
   if (froggo.vy >= 0) froggo.jumping = false;
 
-  // Integrate position
-  froggo.x += froggo.vx * dt;
-  froggo.y += froggo.vy * dt;
+  // Integrate position (climb block already integrates vertical)
+  if (!froggo.climbing) {
+    froggo.x += froggo.vx * dt;
+    froggo.y += froggo.vy * dt;
+  }
 
   // Clamp to level bounds
   if (froggo.x < 0) { froggo.x = 0; froggo.vx = 0; }
   if (froggo.x > LEVEL_WIDTH - froggo.w) { froggo.x = LEVEL_WIDTH - froggo.w; froggo.vx = 0; }
 
-  // Ground collision (height-map + floating platforms)
+  // Solid collision with climbable walls (always — blocks walking through)
+  for (const w of climbWalls) {
+    if (!rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, w.x, w.y, w.w, w.h)) continue;
+    const penLeft  = (froggo.x + froggo.w) - w.x;   // coming from left
+    const penRight = (w.x + w.w) - froggo.x;         // coming from right
+    const penTop   = (froggo.y + froggo.h) - w.y;   // coming from above
+    const penBot   = (w.y + w.h) - froggo.y;         // coming from below
+    const minPen = Math.min(penLeft, penRight, penTop, penBot);
+    if (minPen === penTop && froggo.vy >= 0) {
+      // Land on top of wall
+      froggo.y = w.y - froggo.h;
+      froggo.vy = 0;
+      froggo.grounded = true;
+      froggo.groundedAt = now;
+    } else if (minPen === penLeft) {
+      froggo.x = w.x - froggo.w;
+      if (froggo.vx > 0) froggo.vx = 0;
+    } else if (minPen === penRight) {
+      froggo.x = w.x + w.w;
+      if (froggo.vx < 0) froggo.vx = 0;
+    } else if (minPen === penBot) {
+      froggo.y = w.y + w.h;
+      if (froggo.vy < 0) froggo.vy = 0;
+    }
+  }
+
+  // Grip recovery (when not clinging)
+  if (!froggo.climbing) {
+    const r = froggo.grounded ? GRIP_RECOVER_GROUND : GRIP_RECOVER_AIR;
+    froggo.grip = Math.min(GRIP_MAX, froggo.grip + r * dt);
+  }
+
+  // Ground collision (height-map + floating platforms) — skipped while clinging
+  if (!froggo.climbing) {
   froggo.grounded = false;
   const footX = froggo.x + froggo.w / 2;
   const groundY = groundAt(footX);
@@ -1745,6 +1879,7 @@ function update(dt) {
     froggo.grounded = true;
     froggo.groundedAt = now;
   }
+  } // end !froggo.climbing ground collision
 
   // Death pit
   if (froggo.y > DEATH_Y) {
@@ -2733,6 +2868,8 @@ function startZone(zoneIdx) {
   froggo.hurtUntil = 0; froggo.dead = false;
   froggo.facing = 1; froggo.rotation = 0;
   froggo.charging = false; froggo.chargeLevel = 0; froggo.chargeSpinAngle = 0;
+  froggo.climbing = false; froggo.climbWall = null; froggo.climbSide = 0;
+  froggo.grip = GRIP_MAX; froggo.climbReleasedAt = -9999;
   froggo.airbornSinceMs = -1;
   froggo.x = 80; froggo.y = 480;
   scatteredDroplets = [];
@@ -3755,6 +3892,40 @@ function drawDroplets(now) {
   ctx.restore();
 }
 
+function drawClimbWalls(now) {
+  if (!climbWalls || climbWalls.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const w of climbWalls) {
+    // Base stone block — slate with cool blue tint so climbable walls read as distinct from ground.
+    ctx.fillStyle = '#4a5a78';
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    // Lighter left-edge highlight column (one-pixel pixel-art shading)
+    ctx.fillStyle = '#6a7ea0';
+    ctx.fillRect(w.x, w.y, 2, w.h);
+    // Darker right-edge shadow
+    ctx.fillStyle = '#2a3550';
+    ctx.fillRect(w.x + w.w - 2, w.y, 2, w.h);
+    // Handholds: pairs of pick-marks every 28px down the wall, flanking each side.
+    ctx.fillStyle = '#d8e4ff';
+    for (let yy = w.y + 10; yy < w.y + w.h - 6; yy += 28) {
+      ctx.fillRect(w.x + 2, yy, 4, 2);
+      ctx.fillRect(w.x + w.w - 6, yy, 4, 2);
+    }
+    ctx.fillStyle = '#8aa0cc';
+    for (let yy = w.y + 10; yy < w.y + w.h - 6; yy += 28) {
+      ctx.fillRect(w.x + 2, yy + 2, 4, 1);
+      ctx.fillRect(w.x + w.w - 6, yy + 2, 4, 1);
+    }
+    // Cap and base bands
+    ctx.fillStyle = '#8aa0cc';
+    ctx.fillRect(w.x, w.y, w.w, 3);
+    ctx.fillStyle = '#2a3550';
+    ctx.fillRect(w.x, w.y + w.h - 3, w.w, 3);
+  }
+  ctx.restore();
+}
+
 function drawSprings() {
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
@@ -4426,6 +4597,7 @@ function frameBody(t) {
 
   drawBackground();
   drawGround();
+  drawClimbWalls(t);
   drawHazards(t);
   drawCheckpoints(t);
   drawDroplets(t);
@@ -4456,8 +4628,31 @@ function frameBody(t) {
     drawRespawnCard(t);
   }
   if (oneUp) drawOneUpBanner(t);
+  drawGripMeter(t);
 
   updateHUD();
+}
+
+// --------- Grip meter (shown only when grip < full; floats near Froggo while clinging) ---------
+function drawGripMeter(now) {
+  if (state !== 'play') return;
+  if (froggo.grip >= GRIP_MAX - 0.01) return;   // hide at full
+  const pct = Math.max(0, Math.min(1, froggo.grip / GRIP_MAX));
+  ctx.save();
+  // Position: corner-mounted top-right so it's visible regardless of camera.
+  const bx = W - 96, by = 16, bw = 72, bh = 8;
+  ctx.fillStyle = 'rgba(10, 18, 40, 0.7)';
+  ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+  ctx.fillStyle = '#1a2a45';
+  ctx.fillRect(bx, by, bw, bh);
+  // Colored fill — blue when healthy, amber warning below 35%
+  ctx.fillStyle = pct < 0.35 ? '#ffb84a' : '#66d4ff';
+  ctx.fillRect(bx, by, Math.floor(bw * pct), bh);
+  // Label
+  ctx.font = '7px "Press Start 2P", monospace';
+  ctx.fillStyle = '#cfe3ff';
+  ctx.fillText('GRIP', bx, by - 4);
+  ctx.restore();
 }
 
 // --------- 1UP banner (shown briefly after earning a life) ---------
