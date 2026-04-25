@@ -1528,34 +1528,35 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
       { x1: 2200, x2: 3000, y1: 440, y2: 440 },
       // pit 3000-3200 (drop)
       { x1: 3200, x2: 3800, y1: 440, y2: 440 },   // approach climb wall 1
-      // climb wall 1 at x=3800-3830, top y=320 → upper corridor
-      { x1: 3830, x2: 5000, y1: 320, y2: 320 },   // CHECKPOINT plateau (long)
-      { x1: 5000, x2: 5200, y1: 320, y2: 380 },
+      // climb wall 1 at x=3800-3830, top y=260 → upper corridor (raised to force climb)
+      { x1: 3830, x2: 5000, y1: 260, y2: 260 },   // CHECKPOINT plateau (raised from 320)
+      { x1: 5000, x2: 5200, y1: 260, y2: 380 },   // descent slope
       { x1: 5200, x2: 5800, y1: 380, y2: 380 },
       // pit 5800-6000
       { x1: 6000, x2: 6600, y1: 380, y2: 380 },   // approach climb wall 2
-      // climb wall 2 at x=6600-6630, top y=260
-      { x1: 6630, x2: 7400, y1: 260, y2: 260 },
-      { x1: 7400, x2: 7600, y1: 260, y2: 320 },
+      // climb wall 2 at x=6600-6630, top y=180 (raised to force climb)
+      { x1: 6630, x2: 7400, y1: 180, y2: 180 },   // higher corridor (raised from 260)
+      { x1: 7400, x2: 7600, y1: 180, y2: 320 },   // sharper descent
       { x1: 7600, x2: 8000, y1: 320, y2: 320 },
       // pit 8000-8200 (last gap)
-      { x1: 8200, x2: 9500, y1: 320, y2: 320 },   // final corridor / future boss arena
+      { x1: 8200, x2: 9500, y1: 320, y2: 320 },   // boss arena
     ],
     platforms: [
       { x: 1240, y: 440, w: 160, h: 16 },     // stepping stone over pit 1
       { x: 3040, y: 380, w: 140, h: 16 },     // across pit 2
       { x: 3500, y: 360, w: 200, h: 16 },     // approach to climb wall 1
-      { x: 4750, y: 240, w: 220, h: 16 },     // optional upper path past checkpoint
+      { x: 4750, y: 180, w: 220, h: 16 },     // upper-path reward (above plateau y=260)
       { x: 5840, y: 320, w: 160, h: 16 },     // across pit 3
-      { x: 6700, y: 200, w: 240, h: 16 },     // big reward above climb wall 2
-      { x: 7330, y: 180, w: 100, h: 16 },     // shortcut platform above climb wall 3
+      { x: 6700, y: 100, w: 240, h: 16 },     // big reward above climb wall 2 (above corridor y=180)
       { x: 8050, y: 260, w: 140, h: 16 },     // across pit 4
     ],
     climbWalls: [
-      { x: 3800, y: 320, w: 30, h: 120 },     // wall 1: 440→320
-      { x: 6600, y: 260, w: 30, h: 120 },     // wall 2: 380→260
-      { x: 7300, y: 180, w: 28,  h: 80 },     // wall 3: 260→180 (optional shortcut to high reward)
-      { x: 8700, y: 200, w: 30, h: 120 },     // arena climb wall — escape route during Yeti Mech charge
+      // Wall heights forced above max-jump apex so the climb mechanic is mandatory.
+      // Player feet apex from ground = ground - 128. Wall top must be HIGHER (smaller y)
+      // than apex to block normal jumps.
+      { x: 3800, y: 260, w: 30, h: 180 },     // wall 1: 440→260 (apex from 440 = 312, top 260 = 52 px short)
+      { x: 6600, y: 180, w: 30, h: 200 },     // wall 2: 380→180 (apex from 380 = 252, top 180 = 72 px short)
+      { x: 8700, y: 160, w: 30, h: 160 },     // arena escape: 320→160 (apex from 320 = 192, top 160 = 32 px short)
     ],
     makeEntities() {
       droplets = [
@@ -1567,17 +1568,16 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
         ...makeDropletLine(2400, 400, 7),
         ...makeDropletLine(3060, 340, 5),    // platform 2
         ...makeDropletLine(3520, 320, 6),    // approach platform
-        ...makeDropletLine(3870, 280, 5),    // above climb wall 1
-        ...makeDropletArc( 4200, 280, 4),
-        ...makeDropletLine(4500, 280, 6),
-        ...makeDropletLine(4790, 200, 7),    // upper path reward
-        ...makeDropletLine(5300, 340, 6),
+        ...makeDropletLine(3870, 200, 5),    // above climb wall 1 (plateau y=260)
+        ...makeDropletArc( 4200, 200, 4),
+        ...makeDropletLine(4500, 200, 6),
+        ...makeDropletLine(4790, 140, 7),    // upper-path reward (platform y=180)
+        ...makeDropletLine(5300, 200, 6),    // along the upper plateau before descent
         ...makeDropletArc( 5700, 340, 4),
         ...makeDropletLine(5870, 280, 5),    // stepping stone
         ...makeDropletLine(6200, 340, 6),
-        ...makeDropletLine(6730, 160, 8),    // big reward above climb 2
-        ...makeDropletArc( 7050, 220, 4),
-        ...makeDropletLine(7350, 140, 4),    // shortcut reward
+        ...makeDropletLine(6730,  60, 8),    // big reward above climb 2 (platform y=100)
+        ...makeDropletArc( 7050, 140, 4),    // higher corridor (y=180)
         ...makeDropletLine(7700, 280, 5),
         ...makeDropletArc( 8050, 220, 4),
         ...makeDropletLine(8300, 280, 6),
@@ -1590,10 +1590,10 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
         { type: 'heavy', x: 1700, y: 470, vx: 50, dir: -1, patrolMin: 1450, patrolMax: 1950,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
         { type: 'basic', x: 2600, y: 410, vx: 80, dir:  1, patrolMin: 2240, patrolMax: 2980,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
         { type: 'basic', x: 3500, y: 410, vx: 75, dir:  1, patrolMin: 3240, patrolMax: 3780,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
-        { type: 'heavy', x: 4400, y: 290, vx: 50, dir: -1, patrolMin: 4150, patrolMax: 4950,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 4400, y: 230, vx: 50, dir: -1, patrolMin: 4150, patrolMax: 4950,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
         { type: 'basic', x: 5500, y: 350, vx: 80, dir: -1, patrolMin: 5240, patrolMax: 5780,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
         { type: 'basic', x: 6300, y: 350, vx: 75, dir:  1, patrolMin: 6040, patrolMax: 6580,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
-        { type: 'heavy', x: 7000, y: 230, vx: 55, dir: -1, patrolMin: 6650, patrolMax: 7380,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        { type: 'heavy', x: 7000, y: 150, vx: 55, dir: -1, patrolMin: 6650, patrolMax: 7380,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
         // Arena boundary at x=8200 — no patrolling enemies past this point so the
         // Yeti Mech fight is solo. The two earlier 8500/9100 Bugbots have been
         // pulled out to the 7600-8000 corridor before the boss-arena pit.
@@ -1601,7 +1601,7 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
       ];
 
       checkpoints = [
-        { x: 4500, y: 320, activated: false, pulseUntil: 0 },   // checkpoint on long upper corridor
+        { x: 4500, y: 260, activated: false, pulseUntil: 0 },   // checkpoint on raised upper plateau
       ];
 
       // Yeti Mech boss arena: locks at x>8200, climb wall at x=8700 lets you dodge charges,
@@ -4360,7 +4360,12 @@ function drawBackground() {
 
   // ---------- Temple Depths extras ----------
   if (levelPalette === 'temple-depths') {
-    const screenStart = camera.x - 100;
+    // Temple decorations render in screen space (no ctx.translate(-camera.x) is
+    // applied here; horizontal parallax is computed manually). screenStart is
+    // therefore a SCREEN-space margin, NOT world-space. Earlier versions used
+    // (camera.x - 100) here which made all loops emit indices off-screen after
+    // a few seconds of walking — bug fixed 2026-04-25.
+    const screenStart = -100;
 
     // (a) Stone-block back wall (parallax 0.2, well behind pillars). Brickwork pattern
     //     of large 96×48 blocks with mortar lines + occasional hieroglyph carvings so
