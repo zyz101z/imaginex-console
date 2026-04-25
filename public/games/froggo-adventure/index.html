@@ -966,6 +966,7 @@ let projectiles;    // live zapper plasma shots
 let shockbots;      // electrified patrollers (Zone 2+)
 let checkpoints;    // mid-level respawn totems (Zone 2+)
 let climbWalls = []; // climbable solid walls (Zone 3+)
+let oneUps = [];     // collectible 1UP heart pickups (one-shot per act)
 let activeCheckpoint = null; // {x,y} of touched checkpoint for current act
 let currentZone = 0;
 let currentAct = 0;
@@ -1110,6 +1111,10 @@ const ZONES_ACT_LILY_POND = [
         { x: 4400, y: 540 - 14 },  // to platform at 4550 (flat 4100-4500)
       ];
 
+      checkpoints = [
+        { x: 4980, y: 460, activated: false, pulseUntil: 0 },   // pre-Bogmech checkpoint (just before arena ramp at x=5000)
+      ];
+
       goal = null;  // Act 2 has a boss, not a goal arch
       boss = {
         kind: 'bogmech',
@@ -1179,6 +1184,10 @@ const ZONES_ACT_CYBER_SWAMP = [
       { x: 4840, y: 320, w: 200, h: 16 },  // upper path
       { x: 5920, y: 400, w: 200, h: 16 },  // across pit 4
       { x: 6500, y: 260, w: 260, h: 16 },  // high cache near end
+    ],
+    // Hidden 1UP heart on the high secret platform — spring at x=3050 + a clean landing required.
+    oneUps: [
+      { x: 3380, y: 195 },
     ],
     makeEntities() {
       droplets = [
@@ -1372,7 +1381,8 @@ const ZONES_ACT_CYBER_SWAMP = [
       projectiles = [];
 
       checkpoints = [
-        { x: 5000, y: 440, activated: false, pulseUntil: 0 },    // on mid plateau
+        { x: 5000, y: 440, activated: false, pulseUntil: 0 },    // mid plateau
+        { x: 8100, y: 520, activated: false, pulseUntil: 0 },    // pre-Slithertron checkpoint (just before arena ramp at x=8200)
       ];
 
       goal = null;  // boss act
@@ -1601,7 +1611,8 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
       ];
 
       checkpoints = [
-        { x: 4500, y: 260, activated: false, pulseUntil: 0 },   // checkpoint on raised upper plateau
+        { x: 4500, y: 260, activated: false, pulseUntil: 0 },   // upper-plateau checkpoint
+        { x: 7900, y: 320, activated: false, pulseUntil: 0 },   // pre-Yeti Mech checkpoint (just before arena pit at x=8000)
       ];
 
       // Yeti Mech boss arena: locks at x>8200, climb wall at x=8700 lets you dodge charges,
@@ -1650,6 +1661,7 @@ function loadAct(actIdx) {
   shockbots = [];
   checkpoints = [];
   climbWalls = L.climbWalls ? L.climbWalls.map(w => ({ ...w })) : [];
+  oneUps = L.oneUps ? L.oneUps.map(o => ({ ...o, collected: false })) : [];
   activeCheckpoint = null;
   L.makeEntities();
   goalParticles = [];
@@ -2164,6 +2176,19 @@ function update(dt) {
       dropletScore += 1;
       sfxDroplet();
       onDropletPickedUp();
+    }
+  }
+
+  // 1UP heart pickups (hidden bonus lives — separate from the droplet-threshold 1UP)
+  if (oneUps && oneUps.length > 0) {
+    for (const o of oneUps) {
+      if (o.collected) continue;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, o.x - 14, o.y - 12, 28, 24)) {
+        o.collected = true;
+        if (lives < LIVES_CAP) lives += 1;
+        oneUp = { startMs: now };   // re-uses the existing "1 UP!" banner + sfx
+        sfxOneUp();
+      }
     }
   }
 
@@ -4762,6 +4787,60 @@ function drawDroplets(now) {
   ctx.restore();
 }
 
+function drawOneUps(now) {
+  if (!oneUps || oneUps.length === 0) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  for (const o of oneUps) {
+    if (o.collected) continue;
+    const cx = Math.round(o.x);
+    const bob = Math.floor(Math.sin(now / 280 + o.x * 0.01) * 3);
+    const cy = Math.round(o.y + bob);
+    // Pulsing green halo so the pickup catches the eye against any background.
+    const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+    ctx.fillStyle = `rgba(142, 255, 166, ${0.18 + 0.12 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18 + pulse * 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.10 + 0.10 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 8 + pulse * 2, 0, Math.PI * 2);
+    ctx.fill();
+    // Pixel heart shape (16 wide, 14 tall).
+    // Two top lobes
+    ctx.fillStyle = '#0a4d1a';
+    ctx.fillRect(cx - 8, cy - 7, 16, 2);
+    ctx.fillRect(cx - 8, cy - 5, 6, 2);
+    ctx.fillRect(cx + 2, cy - 5, 6, 2);
+    ctx.fillRect(cx - 8, cy - 3, 16, 2);
+    // Body
+    ctx.fillRect(cx - 6, cy - 1, 12, 2);
+    ctx.fillRect(cx - 4, cy + 1, 8, 2);
+    ctx.fillRect(cx - 2, cy + 3, 4, 2);
+    // Highlight (bright green inner)
+    ctx.fillStyle = '#4ebf68';
+    ctx.fillRect(cx - 6, cy - 5, 4, 2);
+    ctx.fillRect(cx + 2, cy - 5, 4, 2);
+    ctx.fillRect(cx - 6, cy - 3, 12, 2);
+    ctx.fillRect(cx - 4, cy - 1, 8, 2);
+    ctx.fillRect(cx - 2, cy + 1, 4, 2);
+    // Sheen
+    ctx.fillStyle = '#8effa6';
+    ctx.fillRect(cx - 5, cy - 5, 2, 2);
+    ctx.fillRect(cx + 3, cy - 5, 2, 2);
+    ctx.fillRect(cx - 4, cy - 3, 2, 2);
+    // "1UP" mini label below the heart
+    ctx.font = 'bold 7px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0a4d1a';
+    ctx.fillText('1UP', cx + 1, cy + 13);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('1UP', cx, cy + 12);
+    ctx.textAlign = 'start';
+  }
+  ctx.restore();
+}
+
 function drawClimbWalls(now) {
   if (!climbWalls || climbWalls.length === 0) return;
   ctx.save();
@@ -5471,6 +5550,7 @@ function frameBody(t) {
   drawHazards(t);
   drawCheckpoints(t);
   drawDroplets(t);
+  drawOneUps(t);
   drawScatteredDroplets(t);
   drawSprings();
   drawBugbots(t);
