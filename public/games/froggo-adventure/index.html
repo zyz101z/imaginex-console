@@ -2506,7 +2506,8 @@ function updateBoss(dt, now) {
   // --- Collision with Froggo ---
   // Hit zones:
   //   Top + sides = DAMAGE BOSS (safe to touch)
-  //   Bottom 14px (the stinger) = HURT FROGGO (unless rolling, which always damages boss)
+  //   Bottom 14px (the stinger) = HURT FROGGO — always, even when rolling.
+  //   The boss's underside is the threat zone; only sides and top can damage him.
   const bx = boss.x - boss.w / 2, by = boss.y - boss.h / 2;
   if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, bx, by, boss.w, boss.h)) {
     const STINGER_BAND = 14;                       // bottom 14 px of boss
@@ -2514,7 +2515,7 @@ function updateBoss(dt, now) {
     // Froggo is "in stinger range" only if his HEAD (top) is below the stinger top line.
     // That means he's not above/beside the boss, just underneath.
     const inStingerZone = froggo.y > stingerTopY;
-    const hurtsPlayer = inStingerZone && !froggo.rolling;
+    const hurtsPlayer = inStingerZone;
 
     if (hurtsPlayer) {
       if (now > froggo.hurtUntil) {
