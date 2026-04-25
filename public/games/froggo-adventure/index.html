@@ -1741,6 +1741,8 @@ let levelStartMs = 0;
 let levelEndScore = 0;
 let actStartMs = 0;
 let totalZoneScore = 0;  // Running total across acts of current zone; submitted on zone clear
+let totalDropletsZone = 0;   // Cumulative droplets collected across acts of current zone (for zone-clear tally)
+let totalBugbotsZone  = 0;   // Cumulative bugbots killed across acts of current zone (for zone-clear tally)
 let actTransition = null; // { startMs, ... } during the act-clear card
 let zoneIntro = null;     // { startMs, zoneIdx } during the "ZONE N" intro card between zones
 
@@ -1814,6 +1816,8 @@ function resetLevel() {
   // Full reset returns to Zone 1 Act 1, zeros accumulated score, refills lives.
   dropletScore = 0;
   totalZoneScore = 0;
+  totalDropletsZone = 0;
+  totalBugbotsZone = 0;
   lives = MAX_LIVES;
   currentZone = 0;
   loadAct(0);
@@ -3050,6 +3054,10 @@ function onActComplete() {
   const bugbotPoints  = bugbotsKilled * 50;
   const actScore = dropletPoints + timeBonus + bugbotPoints;
   totalZoneScore += actScore;
+  // Accumulate zone-cumulative droplet/bugbot counts so the zone-clear tally
+  // shows totals across all acts, not just the final act.
+  totalDropletsZone += dropletScore;
+  totalBugbotsZone  += bugbotsKilled;
 
   const isFinalActOfZone = currentAct >= ZONES[currentZone].acts.length - 1;
   if (!isFinalActOfZone) {
@@ -3085,6 +3093,9 @@ function zoneCleared(actScore, timeBonus, dropletPoints, bugbotPoints) {
     timeBonus,
     dropletPoints,
     bugbotPoints,
+    // Zone-cumulative counts for the score-tally panel (across all acts).
+    totalDroplets: totalDropletsZone,
+    totalBugbots:  totalBugbotsZone,
     total: totalZoneScore,
     fireworks: [],
     lastFireworkAt: -999,
@@ -3123,6 +3134,8 @@ function startZone(zoneIdx) {
   dropletScore = 0;
   bugbotsKilled = 0;
   totalZoneScore = 0;
+  totalDropletsZone = 0;
+  totalBugbotsZone = 0;
   lives = MAX_LIVES;
   currentZone = zoneIdx;
   loadAct(0);
@@ -3285,23 +3298,27 @@ function updateWinFx(dt, now) {
   }
   winFx.fireworks = winFx.fireworks.filter(f => !f.exploded || f.particles.length > 0);
 
-  // Score tally tick sounds at phase thresholds
+  // Score tally tick sounds at phase thresholds — read from winFx so totals
+  // span the entire zone, not just whatever's in dropletScore/bugbotsKilled
+  // for the final act. (Live counters reset between acts; winFx captures totals.)
+  const tallyDroplets = winFx.totalDroplets || 0;
+  const tallyBugbots  = winFx.totalBugbots  || 0;
   if (elapsed > 2000) {
-    const tgt = Math.min(dropletScore, Math.floor((elapsed - 2000) / 40));
+    const tgt = Math.min(tallyDroplets, Math.floor((elapsed - 2000) / 40));
     if (tgt > winFx.shownDroplets) {
       winFx.shownDroplets = tgt;
       if (tgt % 2 === 0) sfxTick();
     }
   }
-  if (elapsed > 2000 + dropletScore * 40 + 200) {
-    const base = 2000 + dropletScore * 40 + 200;
-    const tgt = Math.min(bugbotsKilled, Math.floor((elapsed - base) / 80));
+  if (elapsed > 2000 + tallyDroplets * 40 + 200) {
+    const base = 2000 + tallyDroplets * 40 + 200;
+    const tgt = Math.min(tallyBugbots, Math.floor((elapsed - base) / 80));
     if (tgt > winFx.shownBugbots) {
       winFx.shownBugbots = tgt;
       sfxTick();
     }
   }
-  const timePhaseStart = 2000 + dropletScore * 40 + 200 + bugbotsKilled * 80 + 200;
+  const timePhaseStart = 2000 + tallyDroplets * 40 + 200 + tallyBugbots * 80 + 200;
   if (elapsed > timePhaseStart) {
     const tgt = Math.min(winFx.timeBonus, Math.floor((elapsed - timePhaseStart) * 2));
     if (tgt > winFx.shownTime) {
