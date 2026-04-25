@@ -1,7 +1,7 @@
 # Froggo Adventure — Design Spec
 
 **Game ID:** `froggo-adventure`
-**Version:** 0.8
+**Version:** 0.9
 **Last updated:** 2026-04-25
 **Platform:** ImagineX Console (web, iframe-embedded). Works on desktop (keyboard) and mobile (on-screen touch controls).
 
@@ -22,7 +22,7 @@ The play feel target: momentum-driven platforming where speed is earned, jumps a
 | Electrified patroller | **Shockbot** (Zone 2) | Purple bot with antennae. Cycles between electrified (2.0 s) and dormant (1.5 s). Hittable only while dormant; any contact while electrified hurts Froggo. |
 | Boss (Zone 1) | **Bogmech** | 4 HP hover-dive boss in a locked arena at the end of Lily Pond Act 2. Drops into an **enraged phase** at ≤ half HP: red pulsing aura, darker armor, white-flashing eye, shorter hover/wind-up windows, faster and more aggressive player-tracking dives. |
 | Boss (Zone 2) | **Slithertron** | 4 HP cyber-snake boss with a 4-segment trailing body. Head is vulnerable; body segments damage Froggo on contact (roll makes body contact safe). Aggressive attack pattern: glides 2.4s biased toward Froggo's x, winds up 0.55s with continuous target re-lock, then dives with homing acceleration (up to 400 px/s lateral) so the dive adjusts mid-air instead of following a fixed arc. |
-| Boss (Zone 3, planned) | **Yeti Mech** | 5 HP bipedal mech boss at the end of Crazy Mountain Zone Act 2 (temple). Planned attacks: ground-pound shockwave (jump to dodge), ice-boulder lob (side-step), horizontal charge (climb a wall to escape — ties the climb mechanic into the boss fight). Enraged phase at ≤ half HP. Not yet implemented. |
+| Boss (Zone 3) | **Yeti Mech** | 5 HP bipedal mech at the end of Crazy Mountain Zone Act 2. State machine: idle (paces toward Froggo) → telegraph (raises arms, eye glows) → one of two attacks → recover (1.0–1.1 s, vulnerable to stomp/roll). **Pound:** leaps up, falls onto Froggo's tracked x, lands and emits a left + right ice-blue ground shockwave (340 px/s, 1.4 s lifetime, can NOT be cancelled by rolling — must be jumped). **Charge:** dashes horizontally toward Froggo at 480 px/s (560 enraged); the arena climb wall at x=8700 lets Froggo mantle above the dash line. **Enraged phase** at HP ≤ 2: faster pacing, shorter idle/telegraph/recover windows, faster charge. Boulder-lob is reserved for a later polish pass. |
 | Villain | **Dr. Slither** | Cyber-snake mastermind. Slithertron is his prototype; the full Dr. Slither fight is reserved for the final zone (Zone 6). |
 | Enemy (Zone 3, planned) | **Snowroller** | Rolling snowball enemy for Crazy Mountain Act 1. Rolls along the ground and accelerates on downhill slopes. 1 HP, killed by stomp/roll from above. Not yet implemented — Zone 3 Act 1 currently uses Bugbots as placeholder enemies. |
 
@@ -161,12 +161,12 @@ Snow-capped mountain exterior giving way to an ancient temple interior. Introduc
 
 Palette `mountain-peak` (Act 1): pale blue sky gradient, white snow caps on ground tiles, slate-grey rocky hills, evergreen silhouettes, white clouds.
 
-Palette `temple-depths` (Act 2): near-black ceiling fading to deep purple, dark-stone ground tiles with golden trim, dim purple hills/silhouettes, warm amber accents.
+Palette `temple-depths` (Act 2): near-black ceiling fading to deep purple, dark-stone ground tiles with golden trim, dim purple hills/silhouettes. Background includes **carved temple pillars** (parallax 0.4, with vertical fluting and cap/foot stones) and **wall-mounted torches** with animated flame and warm glow halos. Stone arch overhangs (parallax 0.65) with golden engraving sit at the top of the screen as foreground decoration.
 
 | Act | Theme | Width | Key features |
 |---|---|---|---|
 | 1 | Mountain Ascent | 9500 px | Mountain exterior. Terrain rises from `y=540` at the start to `y=180` at the true summit through slopes, pits, and **three mandatory climb walls** (`x=2600` h=160, `x=4600` h=160, `x=8500` h=140). One spring launches to a secret over the first pit; each climb wall has a reward platform directly above it. Mid-summit **checkpoint** at `x=6500`, then a descent into an icy ridge with a stepping stone bridging a crevasse, an approach plateau, the third climb wall, and a final ramp to the summit goal arch at `x ≈ 9320`. 7 basic + 3 Heavy Bugbots (placeholder until Snowroller). Target time: 220 s. |
-| 2 | Temple Depths | 9500 px | Inside-the-mountain temple corridors with dark-stone tiles and golden trim. Three climb walls (`x=3800` h=120, `x=6600` h=120, `x=7300` h=80 optional shortcut), mid-corridor **checkpoint** at `x=4500`, four pit gaps bridged by stepping stones, optional upper-path platform past the checkpoint. 6 basic + 4 Heavy Bugbots (placeholder until Dart Trap and final boss enemies). Final corridor at `x > 8200` is reserved for the **Yeti Mech** boss arena; currently a placeholder goal arch sits at `x ≈ 9220`. Target time: 200 s. |
+| 2 | Temple Depths | 9500 px | Inside-the-mountain temple corridors with dark-stone tiles, golden trim, carved pillars, and torch lighting. Four climb walls (`x=3800` h=120, `x=6600` h=120, `x=7300` h=80 optional shortcut, `x=8700` h=120 inside the boss arena as a charge-escape route), mid-corridor **checkpoint** at `x=4500`, four pit gaps bridged by stepping stones, optional upper-path platform past the checkpoint. 6 basic + 4 Heavy Bugbots populate the run-up. **Boss arena locks at `x > 8200` for the Yeti Mech fight** (5 HP, pound + charge attacks, enraged at ≤ half HP). Target time: 200 s. |
 
 ### Zone music
 
@@ -317,7 +317,10 @@ public/games/froggo-adventure/
 - [x] **Climb mechanic + grip meter (2026-04-23)** — hold-to-climb walls (`climbWalls` array in level data), auto-ascend / ROLL-to-descend / Space-to-wall-jump / press-away-to-release, grip meter (2.5s full, drains while clinging, recovers on ground), mantle-at-top auto-step, solid wall collision with on-top handling. Grip HUD in top-right, amber warning below 35 %.
 - [x] **Zone 3 Act 1 — Crazy Mountain (2026-04-23)** — `mountain-peak` palette (snow-cap ground, pale blue sky, slate rocks), `Crazy_Mountain_Zone3.mp3` wired via `<audio id="bgm3">`, ascent geometry with mandatory climb walls, spring-launched secret, stepping-stone across pits, reward platforms above each climb wall, summit goal arch. Placeholder Bugbots (Snowroller still to do). Title picker now shows a third snowy-white button; keyboard `3` jumps in when unlocked.
 - [x] **Zone 3 Act 1 expansion (2026-04-25)** — extended from 7200 px → 9500 px (target time 150 s → 220 s). Added a third climb wall at `x=8500` (h=140), a mid-summit checkpoint at `x=6500`, a descent ridge + icy-crevasse stepping-stone past the original goal, three more Bugbots (one Heavy), and a true summit at `y=180`. Goal arch moved from `x=6960` to `x=9320`.
-- [x] **Zone 3 Act 2 — Temple Depths (2026-04-25)** — new `temple-depths` palette (dark-stone tiles with gold trim, near-black ceiling, dim purple silhouettes), 9500 px corridor with three climb walls (h=120/120/80), four pit gaps with stepping-stone platforms, optional upper-path reward, mid-corridor checkpoint at `x=4500`, 6 basic + 4 Heavy Bugbots. Final corridor reserved for Yeti Mech boss; currently a placeholder goal arch at `x ≈ 9220` triggers the (final) zone-clear cinematic.
+- [x] **Zone 3 Act 2 — Temple Depths (2026-04-25)** — `temple-depths` palette (dark-stone tiles with gold trim, near-black ceiling, dim purple silhouettes), 9500 px corridor with four climb walls, four pit gaps with stepping-stone platforms, optional upper-path reward, mid-corridor checkpoint at `x=4500`, 6 basic + 4 Heavy Bugbots.
+- [x] **Temple visuals (2026-04-25)** — temple-only background layer adds carved fluted pillars with cap/foot stones (parallax 0.4), wall-mounted torches with animated flame + warm glow halo on alternate pillars, and stone arch overhangs with gold engraving at the top of the screen (parallax 0.65). Replaces the prior pure-color-swap "temple" treatment with actual temple architecture so the act reads as inside-the-mountain.
+- [x] **Zone-clear tally totals (2026-04-25)** — added `totalDropletsZone` / `totalBugbotsZone` accumulators that bank in `onActComplete()` before the per-act counters reset. The score-tally panel now sums droplets and bugbots across all acts of the zone instead of showing only the final act.
+- [x] **Yeti Mech boss (Zone 3 Act 2, 2026-04-25)** — 5 HP bipedal mech with pixel-art armor, white-fur shoulders, gold-trim chest plate, mech helmet w/ horns, and a red eye visor. State machine: idle (paces toward Froggo) → telegraph (arms raised, eye glows) → pound (leap + slam → ice-blue shockwave projectiles to either side) OR charge (horizontal dash) → recover (vulnerable to stomp/roll). Enraged phase at HP ≤ 2 speeds everything up. Arena climb wall at `x=8700` lets Froggo mantle above the charge dash line. HP bar + "YETI MECH" label render above the boss.
 
 ## Out of scope for now
 
@@ -331,7 +334,7 @@ public/games/froggo-adventure/
 
 ## Next candidates (ordered)
 
-1. **Yeti Mech boss** — Zone 3 finale, replacing the Act 2 placeholder goal arch. 5 HP, ground-pound shockwave (jump to dodge) + ice-boulder lob (side-step) + horizontal charge (climb a wall to escape). Enraged phase at ≤ half HP.
+1. **Yeti Mech boulder-lob attack** — third attack pattern (currently the boss has only pound + charge). Arcing projectile thrown at Froggo's predicted position, breaks on ground impact.
 2. **Dart Trap hazard** — Zone 3 Act 2 trap that fires horizontal darts on a fixed cadence. Needs a `kind: 'dart'` entry in `hazards`, a render path, and a projectile entry that travels until hitting Froggo or a wall.
 3. **Snowroller enemy** — rolling snowball for Crazy Mountain Act 1 (currently using Bugbots as placeholder).
 4. Shield droplet power-up (one-hit protection).

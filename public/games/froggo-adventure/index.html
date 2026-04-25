@@ -1555,6 +1555,7 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
       { x: 3800, y: 320, w: 30, h: 120 },     // wall 1: 440→320
       { x: 6600, y: 260, w: 30, h: 120 },     // wall 2: 380→260
       { x: 7300, y: 180, w: 28,  h: 80 },     // wall 3: 260→180 (optional shortcut to high reward)
+      { x: 8700, y: 200, w: 30, h: 120 },     // arena climb wall — escape route during Yeti Mech charge
     ],
     makeEntities() {
       droplets = [
@@ -1601,9 +1602,23 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
         { x: 4500, y: 320, activated: false, pulseUntil: 0 },   // checkpoint on long upper corridor
       ];
 
-      // Final corridor placeholder goal — will be replaced with the Yeti Mech boss arena.
-      goal = { x: 9220, y: 320 - 180, w: 140, h: 180, armed: true };
-      boss = null;
+      // Yeti Mech boss arena: locks at x>8200, climb wall at x=8700 lets you dodge charges,
+      // 5 HP boss with pace → telegraph → (pound | charge) → recover loop. Enraged at HP ≤ 2.
+      goal = null;
+      boss = {
+        kind: 'yetimech',
+        x: 9100, y: 280,            // y = ground(320) - h/2(40)
+        w: 50, h: 80,
+        vx: 0, vy: 0,
+        hp: 5, maxHp: 5,
+        state: 'idle',
+        stateAt: 0,
+        facing: -1,
+        hitFlashUntil: 0,
+        defeated: false,
+        queuedAttack: null,
+        arenaLeft: 8200, arenaRight: 9460,
+      };
     },
   },
 ];
@@ -2283,14 +2298,17 @@ function update(dt) {
     }
   }
 
-  // Projectiles (from zappers)
+  // Projectiles (Zapper plasma + Yeti Mech shockwaves)
   if (projectiles && projectiles.length > 0) {
     for (const p of projectiles) {
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, p.x - 5, p.y - 5, 10, 10)) {
-        if (froggo.rolling) {
+      const hitW = p.kind === 'shockwave' ? 22 : 10;
+      const hitH = p.kind === 'shockwave' ? 18 : 10;
+      if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, p.x - hitW / 2, p.y - hitH / 2, hitW, hitH)) {
+        if (froggo.rolling && p.kind !== 'shockwave') {
+          // Roll cancels Zapper plasma but NOT a shockwave (it's a wave on the ground; you have to jump it).
           p.life = 0;
         } else if (now > froggo.hurtUntil) {
           if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
@@ -2419,6 +2437,7 @@ let bossArenaLocked = false;  // true once Froggo enters arena in current act
 function updateBoss(dt, now) {
   if (!boss || boss.defeated) return;
   if (boss.kind === 'slithertron') { updateSlithertron(dt, now); return; }
+  if (boss.kind === 'yetimech')    { updateYetiMech(dt, now);    return; }
 
   const arenaL = boss.arenaLeft, arenaR = boss.arenaRight;
   // Activate arena when Froggo enters
@@ -2694,7 +2713,26 @@ function drawProjectiles(now) {
   ctx.translate(-camera.x, -camera.y);
   for (const p of projectiles) {
     const cx = Math.round(p.x), cy = Math.round(p.y);
-    // Cyan plasma bolt — trail + core
+    if (p.kind === 'shockwave') {
+      // Yeti Mech ground shockwave: stepped pixel ripple riding along the floor.
+      const dir = Math.sign(p.vx) || 1;
+      const fade = Math.max(0, Math.min(1, p.life / 1.4));
+      // Trailing dust plume
+      ctx.fillStyle = `rgba(220, 200, 170, ${0.35 * fade})`;
+      ctx.fillRect(cx - dir * 18, cy - 8, 18, 8);
+      ctx.fillRect(cx - dir * 12, cy - 12, 14, 12);
+      // Shockwave crest (ice-blue spike)
+      ctx.fillStyle = `rgba(140, 220, 255, ${0.85 * fade})`;
+      ctx.fillRect(cx - 4, cy - 16, 8, 4);
+      ctx.fillRect(cx - 6, cy - 12, 12, 4);
+      ctx.fillRect(cx - 8, cy - 8,  16, 4);
+      ctx.fillRect(cx - 10, cy - 4, 20, 4);
+      // Bright core
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * fade})`;
+      ctx.fillRect(cx - 2, cy - 14, 4, 12);
+      continue;
+    }
+    // Cyan plasma bolt (Zapper) — trail + core
     ctx.fillStyle = 'rgba(100, 220, 255, 0.4)';
     ctx.fillRect(cx - 7, cy - 2, 14, 4);
     ctx.fillStyle = '#66d4ff';
@@ -2758,6 +2796,7 @@ function drawBoss(now) {
     return;
   }
   if (boss.kind === 'slithertron') { drawSlithertron(now); return; }
+  if (boss.kind === 'yetimech')    { drawYetiMech(now);    return; }
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
   const bx = boss.x, by = boss.y;
@@ -3035,6 +3074,257 @@ function drawSlithertron(now) {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#d946ef';
   ctx.fillText('SLITHERTRON', bx, hpY - 4);
+  ctx.textAlign = 'start';
+
+  ctx.restore();
+}
+
+// ---------- Yeti Mech (Zone 3 Act 2 boss) ----------
+// Bipedal mech, 5 HP. Cycles idle (paces toward Froggo) → telegraph → one of two
+// attacks (pound or charge) → recover (vulnerable). Pound spawns ground shockwaves
+// to either side; charge dashes horizontally across the arena. Climb wall in arena
+// at x=8700 lets Froggo escape charges by mantling above the dash line.
+function updateYetiMech(dt, now) {
+  const arenaL = boss.arenaLeft, arenaR = boss.arenaRight;
+  if (!bossArenaLocked && froggo.x > arenaL) {
+    bossArenaLocked = true;
+    boss.stateAt = now;
+    boss.state = 'idle';
+  }
+  if (!bossArenaLocked) return;
+
+  const elapsed = now - boss.stateAt;
+  const enraged = boss.hp <= Math.ceil(boss.maxHp / 2);
+  const groundY = 320;
+  const standY  = groundY - boss.h / 2;   // 280
+
+  // Airborne: pound jump physics (only state that has airborne motion).
+  if (boss.state === 'pound-jump') {
+    boss.vy += 1500 * dt;
+    boss.y  += boss.vy * dt;
+    // While falling, slight horizontal homing toward Froggo.
+    if (boss.vy > 0) {
+      const dx = (froggo.x + froggo.w / 2) - boss.x;
+      boss.x += Math.sign(dx) * Math.min(Math.abs(dx), 90 * dt);
+      if (boss.x < arenaL + 30) boss.x = arenaL + 30;
+      if (boss.x > arenaR - 30) boss.x = arenaR - 30;
+    }
+    if (boss.y >= standY && boss.vy > 0) {
+      boss.y  = standY;
+      boss.vy = 0;
+      // Spawn left + right shockwaves along the ground.
+      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx: -340, vy: 0, life: 1.4 });
+      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx:  340, vy: 0, life: 1.4 });
+      sfxBugbotSquish();
+      boss.state   = 'recover';
+      boss.stateAt = now;
+    }
+  }
+
+  if (boss.state === 'idle') {
+    // Pace toward Froggo (slow stomp).
+    const dir = Math.sign((froggo.x + froggo.w / 2) - boss.x) || 1;
+    const speed = enraged ? 95 : 65;
+    boss.x += dir * speed * dt;
+    if (boss.x < arenaL + 50) boss.x = arenaL + 50;
+    if (boss.x > arenaR - 50) boss.x = arenaR - 50;
+    boss.facing = dir;
+    if (elapsed > (enraged ? 800 : 1200)) {
+      boss.state    = 'telegraph';
+      boss.stateAt  = now;
+      // Pick attack — pound when player is grounded near boss, charge when player is across the arena.
+      const dxAbs = Math.abs((froggo.x + froggo.w / 2) - boss.x);
+      const r = Math.random();
+      if (dxAbs > 240 && r < 0.7) boss.queuedAttack = 'charge';
+      else if (r < 0.55)          boss.queuedAttack = 'pound';
+      else                        boss.queuedAttack = 'charge';
+    }
+  } else if (boss.state === 'telegraph') {
+    if (elapsed > (enraged ? 380 : 580)) {
+      boss.stateAt = now;
+      if (boss.queuedAttack === 'pound') {
+        boss.vy    = -540;
+        boss.state = 'pound-jump';
+      } else {
+        // Charge horizontally toward Froggo.
+        boss.vx     = ((froggo.x + froggo.w / 2) > boss.x ? 1 : -1) * (enraged ? 560 : 480);
+        boss.facing = Math.sign(boss.vx);
+        boss.state  = 'charge';
+      }
+    }
+  } else if (boss.state === 'charge') {
+    boss.x += boss.vx * dt;
+    // Decelerate over the run.
+    boss.vx *= 0.992;
+    if (boss.x < arenaL + 50) { boss.x = arenaL + 50; boss.vx = 0; }
+    if (boss.x > arenaR - 50) { boss.x = arenaR - 50; boss.vx = 0; }
+    if (Math.abs(boss.vx) < 60) {
+      boss.state   = 'recover';
+      boss.stateAt = now;
+      boss.vx      = 0;
+    }
+  } else if (boss.state === 'recover') {
+    if (elapsed > (enraged ? 700 : 1100)) {
+      boss.state   = 'idle';
+      boss.stateAt = now;
+    }
+  }
+
+  // Collision with Froggo. Vulnerable only during 'recover' (stomp or roll).
+  // Stomp from above during pound-jump fall is also a damage chance.
+  const bbX = boss.x - boss.w / 2, bbY = boss.y - boss.h / 2;
+  if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, bbX, bbY, boss.w, boss.h)) {
+    if (now - boss.hitFlashUntil >= 500) {
+      const fromAbove   = froggo.vy > 50 && (froggo.y + froggo.h) < bbY + 14;
+      const isVulnerable = (boss.state === 'recover') || (boss.state === 'pound-jump' && boss.vy > 0);
+      const damageBoss   = isVulnerable && (fromAbove || (boss.state === 'recover' && froggo.rolling));
+      if (damageBoss) {
+        boss.hp -= 1;
+        boss.hitFlashUntil = now + 500;
+        froggo.vy = -460;
+        sfxBugbotSquish();
+        if (boss.hp <= 0) {
+          boss.defeated = true;
+          onActComplete();
+          return;
+        }
+        // Stagger boss back into recover so back-to-back hits are blocked by i-frame.
+        boss.state   = 'recover';
+        boss.stateAt = now;
+        boss.vx      = 0;
+      } else if (now > froggo.hurtUntil) {
+        if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+        scatterDroplets(dropletScore);
+        dropletScore = 0;
+        froggo.hurtUntil = now + 1200;
+        froggo.vx = (froggo.x < boss.x ? -1 : 1) * 320;
+        froggo.vy = -300;
+        froggo.rolling  = false;
+        froggo.charging = false;
+        sfxHurt();
+      }
+    }
+  }
+
+  if (bossArenaLocked && froggo.x < arenaL) {
+    froggo.x = arenaL;
+    if (froggo.vx < 0) froggo.vx = 0;
+  }
+}
+
+function drawYetiMech(now) {
+  if (!boss || boss.defeated) return;
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+  const bx = boss.x, by = boss.y;
+  const flashing = now < boss.hitFlashUntil && Math.floor(now / 70) % 2 === 0;
+  const enraged  = boss.hp <= Math.ceil(boss.maxHp / 2);
+  const isTelegraph = boss.state === 'telegraph';
+  const isCharge    = boss.state === 'charge';
+
+  // Shadow on ground beneath boss.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.ellipse(bx, 318, 30, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Enraged red aura
+  if (enraged) {
+    const pulse = (Math.sin(now / 90) + 1) / 2;
+    ctx.fillStyle = `rgba(255, 60, 80, ${0.16 + 0.12 * pulse})`;
+    ctx.fillRect(bx - 32, by - 44, 64, 88);
+  }
+
+  // ---- Yeti Mech (mech body in dark armor, white-fur shoulders, red visor) ----
+  // Legs (heavy plated boots)
+  ctx.fillStyle = flashing ? '#fff' : '#3a4050';
+  ctx.fillRect(bx - 18, by + 12, 14, 24);
+  ctx.fillRect(bx + 4,  by + 12, 14, 24);
+  ctx.fillStyle = flashing ? '#fff' : '#1a1e2a';
+  ctx.fillRect(bx - 20, by + 34, 18, 6);
+  ctx.fillRect(bx + 2,  by + 34, 18, 6);
+  // Knee gold trim
+  ctx.fillStyle = flashing ? '#fff' : '#ffd166';
+  ctx.fillRect(bx - 18, by + 22, 14, 2);
+  ctx.fillRect(bx + 4,  by + 22, 14, 2);
+
+  // Torso fur (white-blue mountain yeti pelt)
+  ctx.fillStyle = flashing ? '#fff' : '#e8eef4';
+  ctx.fillRect(bx - 24, by - 14, 48, 32);
+  // Fur tufts at edges
+  ctx.fillStyle = flashing ? '#fff' : '#c8d2e0';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillRect(bx - 26 + i * 12, by - 18, 3, 6);
+  }
+
+  // Chest plate (mech armor, gold trim)
+  ctx.fillStyle = flashing ? '#fff' : (enraged ? '#902030' : '#3a3640');
+  ctx.fillRect(bx - 14, by - 8, 28, 22);
+  ctx.fillStyle = flashing ? '#fff' : '#ffd166';
+  ctx.fillRect(bx - 14, by - 8,  28, 3);
+  ctx.fillRect(bx - 14, by + 11, 28, 3);
+  // Center reactor jewel
+  const jewelPulse = isTelegraph ? '#fff' : (enraged ? '#ff2244' : '#66d4ff');
+  ctx.fillStyle = jewelPulse;
+  ctx.fillRect(bx - 4, by - 2, 8, 8);
+
+  // Arms — extended forward during charge, raised during telegraph.
+  const armOffsetX = isCharge      ? boss.facing * 6 : 0;
+  const armOffsetY = isTelegraph   ? -10 : 0;
+  ctx.fillStyle = flashing ? '#fff' : '#3a3e48';
+  ctx.fillRect(bx - 34 + armOffsetX, by - 4 + armOffsetY, 12, 22);
+  ctx.fillRect(bx + 22 + armOffsetX, by - 4 + armOffsetY, 12, 22);
+  // Claw bands
+  ctx.fillStyle = flashing ? '#fff' : '#1a1e28';
+  ctx.fillRect(bx - 34 + armOffsetX, by + 14 + armOffsetY, 12, 4);
+  ctx.fillRect(bx + 22 + armOffsetX, by + 14 + armOffsetY, 12, 4);
+  // Arm gold trim
+  ctx.fillStyle = flashing ? '#fff' : '#ffd166';
+  ctx.fillRect(bx - 34 + armOffsetX, by + 4 + armOffsetY, 12, 2);
+  ctx.fillRect(bx + 22 + armOffsetX, by + 4 + armOffsetY, 12, 2);
+
+  // Head (mech helmet w/ horns)
+  ctx.fillStyle = flashing ? '#fff' : '#5a606e';
+  ctx.fillRect(bx - 16, by - 38, 32, 24);
+  ctx.fillStyle = flashing ? '#fff' : '#3a3e48';
+  ctx.fillRect(bx - 16, by - 18, 32, 4);
+  // Helmet horns (curved up like yeti)
+  ctx.fillStyle = flashing ? '#fff' : '#1a1e28';
+  ctx.fillRect(bx - 22, by - 40, 5, 10);
+  ctx.fillRect(bx + 17, by - 40, 5, 10);
+  ctx.fillRect(bx - 24, by - 46, 5, 6);
+  ctx.fillRect(bx + 19, by - 46, 5, 6);
+
+  // Eye visor (wider, glows brighter when telegraphing or enraged)
+  const eyeBase = isTelegraph ? '#ff8800' : (enraged ? '#ff2244' : '#ff4466');
+  const eyeFlash = (isTelegraph || enraged) && Math.floor(now / 110) % 2 === 0;
+  ctx.fillStyle = eyeFlash ? '#ffffff' : eyeBase;
+  ctx.fillRect(bx - 12, by - 30, 24, 6);
+  ctx.fillStyle = '#ffaabb';
+  ctx.fillRect(bx - 10, by - 30, 5, 3);
+
+  // Telegraph glow on raised arms (charging-up indicator)
+  if (isTelegraph) {
+    const pulse = (Math.sin(now / 80) + 1) / 2;
+    ctx.fillStyle = `rgba(255, 200, 100, ${0.35 + 0.4 * pulse})`;
+    ctx.fillRect(bx - 38 + armOffsetX, by - 18 + armOffsetY, 14, 14);
+    ctx.fillRect(bx + 24 + armOffsetX, by - 18 + armOffsetY, 14, 14);
+  }
+
+  // HP bar above
+  const hpBarW = 110, hpBarH = 7;
+  const hpX = bx - hpBarW / 2, hpY = by - 60;
+  ctx.fillStyle = '#222';
+  ctx.fillRect(hpX - 1, hpY - 1, hpBarW + 2, hpBarH + 2);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(hpX, hpY, hpBarW, hpBarH);
+  ctx.fillStyle = boss.hp > 3 ? '#8effa6' : boss.hp > 2 ? '#ffe066' : '#ff4466';
+  ctx.fillRect(hpX, hpY, (hpBarW * boss.hp) / boss.maxHp, hpBarH);
+  // BOSS label
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff4466';
+  ctx.fillText('YETI MECH', bx, hpY - 4);
   ctx.textAlign = 'start';
 
   ctx.restore();
@@ -3995,6 +4285,95 @@ function drawBackground() {
       ctx.fillRect(tx,     530 - th - 10, 8, 4);
       ctx.fillStyle = '#66d4ff';
       ctx.fillRect(tx + 3, 530 - th - 12, 2, 2);
+    }
+  }
+
+  // ---------- Temple Depths extras: stone pillars, torches, arch overhangs ----------
+  if (levelPalette === 'temple-depths') {
+    // Mid-distance temple pillars (parallax 0.4) — tall carved columns.
+    const pillarPx = -camera.x * 0.4;
+    const pillarSpan = 320;
+    const screenStart = camera.x - 100;
+    const i0 = Math.floor((screenStart - pillarPx) / pillarSpan) - 1;
+    const i1 = i0 + Math.ceil(W / pillarSpan) + 3;
+    for (let i = i0; i < i1; i++) {
+      const px = i * pillarSpan + pillarPx;
+      // Capital (top decoration)
+      ctx.fillStyle = '#1f1730';
+      ctx.fillRect(px - 6, 196, 40, 10);
+      ctx.fillStyle = '#5e4a76';
+      ctx.fillRect(px - 4, 198, 36, 4);
+      // Pillar shaft
+      ctx.fillStyle = '#2e2042';
+      ctx.fillRect(px, 206, 28, 264);
+      // Carved fluting (vertical lines)
+      ctx.fillStyle = '#1a1224';
+      ctx.fillRect(px + 6,  206, 2, 264);
+      ctx.fillRect(px + 14, 206, 2, 264);
+      ctx.fillRect(px + 22, 206, 2, 264);
+      // Highlight on the lit side
+      ctx.fillStyle = '#5a4a72';
+      ctx.fillRect(px + 1, 206, 3, 264);
+      // Foot
+      ctx.fillStyle = '#1f1730';
+      ctx.fillRect(px - 6, 470, 40, 10);
+      ctx.fillStyle = '#5e4a76';
+      ctx.fillRect(px - 4, 470, 36, 3);
+
+      // Torch on every other pillar — wall-mounted at mid-height.
+      if ((i & 1) === 0) {
+        const torchY = 280;
+        // Bracket
+        ctx.fillStyle = '#2a1810';
+        ctx.fillRect(px + 12, torchY, 4, 8);
+        // Flame (animated in size + position)
+        const fyOff = Math.floor(Math.sin(performance.now() / 65 + i * 1.7) * 2);
+        const fy = torchY - 12 + fyOff;
+        ctx.fillStyle = '#ff5a18';
+        ctx.fillRect(px + 10, fy, 8, 12);
+        ctx.fillStyle = '#ffb84a';
+        ctx.fillRect(px + 11, fy + 2, 6, 8);
+        ctx.fillStyle = '#ffe680';
+        ctx.fillRect(px + 12, fy + 4, 4, 5);
+        ctx.fillStyle = '#fffacc';
+        ctx.fillRect(px + 13, fy + 5, 2, 3);
+        // Glow halo (varies subtly)
+        const glowAlpha = 0.10 + 0.06 * Math.sin(performance.now() / 90 + i);
+        ctx.fillStyle = `rgba(255, 180, 80, ${glowAlpha})`;
+        ctx.beginPath();
+        ctx.arc(px + 14, fy + 6, 36, 0, Math.PI * 2);
+        ctx.fill();
+        // Inner glow
+        ctx.fillStyle = `rgba(255, 220, 140, ${glowAlpha * 1.2})`;
+        ctx.beginPath();
+        ctx.arc(px + 14, fy + 6, 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Foreground stone arch overhangs at the top of the screen (parallax 0.65).
+    const archPx = -camera.x * 0.65;
+    const archSpan = 540;
+    const a0 = Math.floor((screenStart - archPx) / archSpan) - 1;
+    const a1 = a0 + Math.ceil(W / archSpan) + 2;
+    for (let i = a0; i < a1; i++) {
+      const ax = i * archSpan + archPx;
+      // Crossbeam
+      ctx.fillStyle = '#1a0f25';
+      ctx.fillRect(ax, 60, 220, 14);
+      ctx.fillStyle = '#2a1f3a';
+      ctx.fillRect(ax + 4, 74, 212, 6);
+      // Carved gold engraving (centered)
+      ctx.fillStyle = '#a07a2a';
+      ctx.fillRect(ax + 100, 64, 20, 4);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(ax + 103, 65, 14, 2);
+      // Drooping vine/chain decoration
+      ctx.fillStyle = '#1a0f25';
+      ctx.fillRect(ax + 30, 80, 2, 14);
+      ctx.fillRect(ax + 60, 80, 2, 22);
+      ctx.fillRect(ax + 158, 80, 2, 22);
+      ctx.fillRect(ax + 188, 80, 2, 14);
     }
   }
   ctx.restore();
