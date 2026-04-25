@@ -1594,8 +1594,10 @@ const ZONES_ACT_CRAZY_MOUNTAIN = [
         { type: 'basic', x: 5500, y: 350, vx: 80, dir: -1, patrolMin: 5240, patrolMax: 5780,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
         { type: 'basic', x: 6300, y: 350, vx: 75, dir:  1, patrolMin: 6040, patrolMax: 6580,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
         { type: 'heavy', x: 7000, y: 230, vx: 55, dir: -1, patrolMin: 6650, patrolMax: 7380,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
-        { type: 'basic', x: 8500, y: 290, vx: 80, dir:  1, patrolMin: 8240, patrolMax: 8780,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
-        { type: 'heavy', x: 9100, y: 290, vx: 55, dir: -1, patrolMin: 8850, patrolMax: 9380,  hp: 2, maxHp: 2, alive: true, hitFlashUntil: 0 },
+        // Arena boundary at x=8200 — no patrolling enemies past this point so the
+        // Yeti Mech fight is solo. The two earlier 8500/9100 Bugbots have been
+        // pulled out to the 7600-8000 corridor before the boss-arena pit.
+        { type: 'basic', x: 7700, y: 290, vx: 80, dir: -1, patrolMin: 7620, patrolMax: 7980,  hp: 1, maxHp: 1, alive: true, hitFlashUntil: 0 },
       ];
 
       checkpoints = [
@@ -3112,9 +3114,10 @@ function updateYetiMech(dt, now) {
     if (boss.y >= standY && boss.vy > 0) {
       boss.y  = standY;
       boss.vy = 0;
-      // Spawn left + right shockwaves along the ground.
-      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx: -340, vy: 0, life: 1.4 });
-      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx:  340, vy: 0, life: 1.4 });
+      // Spawn left + right shockwaves along the ground (slowed and shortened
+      // so they're easier to jump over).
+      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx: -280, vy: 0, life: 1.0 });
+      projectiles.push({ kind: 'shockwave', x: boss.x, y: groundY - 8, vx:  280, vy: 0, life: 1.0 });
       sfxBugbotSquish();
       boss.state   = 'recover';
       boss.stateAt = now;
@@ -3124,12 +3127,12 @@ function updateYetiMech(dt, now) {
   if (boss.state === 'idle') {
     // Pace toward Froggo (slow stomp).
     const dir = Math.sign((froggo.x + froggo.w / 2) - boss.x) || 1;
-    const speed = enraged ? 95 : 65;
+    const speed = enraged ? 90 : 60;
     boss.x += dir * speed * dt;
     if (boss.x < arenaL + 50) boss.x = arenaL + 50;
     if (boss.x > arenaR - 50) boss.x = arenaR - 50;
     boss.facing = dir;
-    if (elapsed > (enraged ? 800 : 1200)) {
+    if (elapsed > (enraged ? 1100 : 1500)) {
       boss.state    = 'telegraph';
       boss.stateAt  = now;
       // Pick attack — pound when player is grounded near boss, charge when player is across the arena.
@@ -3140,14 +3143,15 @@ function updateYetiMech(dt, now) {
       else                        boss.queuedAttack = 'charge';
     }
   } else if (boss.state === 'telegraph') {
-    if (elapsed > (enraged ? 380 : 580)) {
+    // Longer wind-up so the player has time to read the attack.
+    if (elapsed > (enraged ? 580 : 800)) {
       boss.stateAt = now;
       if (boss.queuedAttack === 'pound') {
         boss.vy    = -540;
         boss.state = 'pound-jump';
       } else {
-        // Charge horizontally toward Froggo.
-        boss.vx     = ((froggo.x + froggo.w / 2) > boss.x ? 1 : -1) * (enraged ? 560 : 480);
+        // Charge horizontally toward Froggo (slowed for fairness).
+        boss.vx     = ((froggo.x + froggo.w / 2) > boss.x ? 1 : -1) * (enraged ? 460 : 380);
         boss.facing = Math.sign(boss.vx);
         boss.state  = 'charge';
       }
@@ -3164,7 +3168,8 @@ function updateYetiMech(dt, now) {
       boss.vx      = 0;
     }
   } else if (boss.state === 'recover') {
-    if (elapsed > (enraged ? 700 : 1100)) {
+    // 1.5s vulnerable window (1.1s when enraged) — wide stomp / roll opportunity.
+    if (elapsed > (enraged ? 1100 : 1500)) {
       boss.state   = 'idle';
       boss.stateAt = now;
     }
@@ -3221,6 +3226,7 @@ function drawYetiMech(now) {
   const enraged  = boss.hp <= Math.ceil(boss.maxHp / 2);
   const isTelegraph = boss.state === 'telegraph';
   const isCharge    = boss.state === 'charge';
+  const isVulnerable = boss.state === 'recover';
 
   // Shadow on ground beneath boss.
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
@@ -3228,8 +3234,19 @@ function drawYetiMech(now) {
   ctx.ellipse(bx, 318, 30, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Enraged red aura
-  if (enraged) {
+  // Vulnerable aura (priority over enraged red so the stun reads clearly).
+  if (isVulnerable) {
+    const pulse = (Math.sin(now / 110) + 1) / 2;
+    // Bright yellow halo
+    ctx.fillStyle = `rgba(255, 224, 102, ${0.30 + 0.25 * pulse})`;
+    ctx.fillRect(bx - 36, by - 48, 72, 96);
+    // Outer pulse ring
+    ctx.strokeStyle = `rgba(255, 240, 160, ${0.6 + 0.3 * pulse})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, 38 + pulse * 6, 50 + pulse * 8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (enraged) {
     const pulse = (Math.sin(now / 90) + 1) / 2;
     ctx.fillStyle = `rgba(255, 60, 80, ${0.16 + 0.12 * pulse})`;
     ctx.fillRect(bx - 32, by - 44, 64, 88);
@@ -3295,13 +3312,39 @@ function drawYetiMech(now) {
   ctx.fillRect(bx - 24, by - 46, 5, 6);
   ctx.fillRect(bx + 19, by - 46, 5, 6);
 
-  // Eye visor (wider, glows brighter when telegraphing or enraged)
-  const eyeBase = isTelegraph ? '#ff8800' : (enraged ? '#ff2244' : '#ff4466');
-  const eyeFlash = (isTelegraph || enraged) && Math.floor(now / 110) % 2 === 0;
-  ctx.fillStyle = eyeFlash ? '#ffffff' : eyeBase;
+  // Eye visor — color tells you the state at a glance:
+  //   recover (vulnerable): SOFT BLUE (eyes "stunned")
+  //   telegraph: ORANGE (windup)
+  //   enraged idle: red flashing
+  //   normal: dim red
+  let eyeColor;
+  if (isVulnerable) eyeColor = '#7ad4ff';
+  else if (isTelegraph) eyeColor = '#ff8800';
+  else if (enraged)  eyeColor = '#ff2244';
+  else               eyeColor = '#ff4466';
+  const eyeFlash = (isTelegraph || enraged) && !isVulnerable && Math.floor(now / 110) % 2 === 0;
+  ctx.fillStyle = eyeFlash ? '#ffffff' : eyeColor;
   ctx.fillRect(bx - 12, by - 30, 24, 6);
-  ctx.fillStyle = '#ffaabb';
+  ctx.fillStyle = isVulnerable ? '#cce8ff' : '#ffaabb';
   ctx.fillRect(bx - 10, by - 30, 5, 3);
+  // Crossed-out "X" eye marks during stun for unmistakable readability.
+  if (isVulnerable) {
+    ctx.fillStyle = '#1a1e2a';
+    // Left X
+    ctx.fillRect(bx - 10, by - 29, 2, 2);
+    ctx.fillRect(bx - 8, by - 27, 2, 2);
+    ctx.fillRect(bx - 6, by - 25, 2, 2);
+    ctx.fillRect(bx - 6, by - 29, 2, 2);
+    ctx.fillRect(bx - 8, by - 27, 2, 2);
+    ctx.fillRect(bx - 10, by - 25, 2, 2);
+    // Right X
+    ctx.fillRect(bx + 4, by - 29, 2, 2);
+    ctx.fillRect(bx + 6, by - 27, 2, 2);
+    ctx.fillRect(bx + 8, by - 25, 2, 2);
+    ctx.fillRect(bx + 8, by - 29, 2, 2);
+    ctx.fillRect(bx + 6, by - 27, 2, 2);
+    ctx.fillRect(bx + 4, by - 25, 2, 2);
+  }
 
   // Telegraph glow on raised arms (charging-up indicator)
   if (isTelegraph) {
@@ -3309,6 +3352,33 @@ function drawYetiMech(now) {
     ctx.fillStyle = `rgba(255, 200, 100, ${0.35 + 0.4 * pulse})`;
     ctx.fillRect(bx - 38 + armOffsetX, by - 18 + armOffsetY, 14, 14);
     ctx.fillRect(bx + 24 + armOffsetX, by - 18 + armOffsetY, 14, 14);
+  }
+
+  // Spinning stun stars overhead during vulnerable recover state.
+  if (isVulnerable) {
+    const spinT = now / 280;
+    for (let i = 0; i < 3; i++) {
+      const a = spinT + (i / 3) * Math.PI * 2;
+      const sx = bx + Math.cos(a) * 18;
+      const sy = by - 50 + Math.sin(a) * 6;
+      ctx.fillStyle = '#ffe066';
+      // 5-point pixel star
+      ctx.fillRect(Math.round(sx), Math.round(sy) - 4, 2, 2);
+      ctx.fillRect(Math.round(sx) - 4, Math.round(sy), 10, 2);
+      ctx.fillRect(Math.round(sx), Math.round(sy) + 2, 2, 2);
+      ctx.fillRect(Math.round(sx) - 2, Math.round(sy) - 2, 6, 6);
+      ctx.fillStyle = '#fff7c0';
+      ctx.fillRect(Math.round(sx), Math.round(sy), 2, 2);
+    }
+    // "STUN!" label above the stars
+    ctx.font = 'bold 11px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#1a0824';
+    ctx.strokeText('HIT IT!', bx, by - 70);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText('HIT IT!', bx, by - 70);
+    ctx.textAlign = 'start';
   }
 
   // HP bar above
@@ -4288,12 +4358,82 @@ function drawBackground() {
     }
   }
 
-  // ---------- Temple Depths extras: stone pillars, torches, arch overhangs ----------
+  // ---------- Temple Depths extras ----------
   if (levelPalette === 'temple-depths') {
-    // Mid-distance temple pillars (parallax 0.4) — tall carved columns.
-    const pillarPx = -camera.x * 0.4;
-    const pillarSpan = 320;
     const screenStart = camera.x - 100;
+
+    // (a) Stone-block back wall (parallax 0.2, well behind pillars). Brickwork pattern
+    //     of large 96×48 blocks with mortar lines + occasional hieroglyph carvings so
+    //     the rear reads as cut stone instead of empty sky.
+    const wallPx = -camera.x * 0.2;
+    const blockW = 96, blockH = 48;
+    const wallTop = 100, wallBottom = 480;
+    const rows = Math.ceil((wallBottom - wallTop) / blockH) + 1;
+    const cols = Math.ceil(W / blockW) + 3;
+    const c0 = Math.floor((screenStart - wallPx) / blockW) - 1;
+    for (let r = 0; r < rows; r++) {
+      const rowY = wallTop + r * blockH;
+      const rowOffset = (r & 1) ? blockW / 2 : 0;
+      for (let c = 0; c < cols; c++) {
+        const colIdx = c0 + c;
+        const blockX = (colIdx * blockW) + wallPx + rowOffset;
+        // Block fill — slight color variation between blocks for stone-cut feel.
+        const variant = ((colIdx * 17 + r * 31) & 3);
+        ctx.fillStyle = variant === 0 ? '#231838' : variant === 1 ? '#1f1530' : variant === 2 ? '#281a3e' : '#1a1228';
+        ctx.fillRect(blockX, rowY, blockW, blockH);
+        // Top-edge highlight (stone block lit from above)
+        ctx.fillStyle = '#3a2a52';
+        ctx.fillRect(blockX, rowY, blockW, 2);
+        ctx.fillRect(blockX, rowY, 2, blockH);
+        // Mortar line (right + bottom)
+        ctx.fillStyle = '#0e0818';
+        ctx.fillRect(blockX + blockW - 2, rowY, 2, blockH);
+        ctx.fillRect(blockX, rowY + blockH - 2, blockW, 2);
+        // Hieroglyph carving on every ~5th block — simple pixel symbols.
+        const sym = (colIdx * 7 + r * 11) % 11;
+        if (sym < 4) {
+          const sx = blockX + 30, sy = rowY + 14;
+          ctx.fillStyle = '#a07a2a';
+          if (sym === 0) {
+            // Eye of horus-ish
+            ctx.fillRect(sx + 2,  sy + 6, 32, 2);
+            ctx.fillRect(sx + 4,  sy + 4,  4, 6);
+            ctx.fillRect(sx + 8,  sy + 4, 20, 2);
+            ctx.fillRect(sx + 14, sy + 8,  6, 4);
+            ctx.fillRect(sx + 28, sy + 8,  4, 4);
+            ctx.fillRect(sx + 28, sy + 12, 4, 4);
+          } else if (sym === 1) {
+            // Wave / serpent line
+            ctx.fillRect(sx,      sy + 8, 6, 2);
+            ctx.fillRect(sx + 4,  sy + 6, 6, 2);
+            ctx.fillRect(sx + 8,  sy + 8, 6, 2);
+            ctx.fillRect(sx + 12, sy + 6, 6, 2);
+            ctx.fillRect(sx + 16, sy + 8, 6, 2);
+            ctx.fillRect(sx + 20, sy + 6, 6, 2);
+            ctx.fillRect(sx + 24, sy + 8, 6, 2);
+            ctx.fillRect(sx + 28, sy + 6, 6, 2);
+          } else if (sym === 2) {
+            // Sun disk + rays
+            ctx.fillRect(sx + 12, sy + 8, 8, 8);
+            ctx.fillRect(sx + 14, sy + 4, 4, 2);
+            ctx.fillRect(sx + 14, sy + 18, 4, 2);
+            ctx.fillRect(sx + 4,  sy + 10, 4, 4);
+            ctx.fillRect(sx + 24, sy + 10, 4, 4);
+          } else {
+            // Stepped pyramid
+            ctx.fillRect(sx + 14, sy + 4,  4, 4);
+            ctx.fillRect(sx + 10, sy + 8,  12, 4);
+            ctx.fillRect(sx + 6,  sy + 12, 20, 4);
+            ctx.fillRect(sx + 2,  sy + 16, 28, 2);
+          }
+        }
+      }
+    }
+
+    // (b) Mid-distance temple pillars (parallax 0.4) — denser spacing so the corridor
+    //     feels packed with columns rather than sparse.
+    const pillarPx = -camera.x * 0.4;
+    const pillarSpan = 220;
     const i0 = Math.floor((screenStart - pillarPx) / pillarSpan) - 1;
     const i1 = i0 + Math.ceil(W / pillarSpan) + 3;
     for (let i = i0; i < i1; i++) {
@@ -4320,38 +4460,81 @@ function drawBackground() {
       ctx.fillStyle = '#5e4a76';
       ctx.fillRect(px - 4, 470, 36, 3);
 
-      // Torch on every other pillar — wall-mounted at mid-height.
-      if ((i & 1) === 0) {
-        const torchY = 280;
-        // Bracket
-        ctx.fillStyle = '#2a1810';
-        ctx.fillRect(px + 12, torchY, 4, 8);
-        // Flame (animated in size + position)
-        const fyOff = Math.floor(Math.sin(performance.now() / 65 + i * 1.7) * 2);
-        const fy = torchY - 12 + fyOff;
-        ctx.fillStyle = '#ff5a18';
-        ctx.fillRect(px + 10, fy, 8, 12);
-        ctx.fillStyle = '#ffb84a';
-        ctx.fillRect(px + 11, fy + 2, 6, 8);
-        ctx.fillStyle = '#ffe680';
-        ctx.fillRect(px + 12, fy + 4, 4, 5);
-        ctx.fillStyle = '#fffacc';
-        ctx.fillRect(px + 13, fy + 5, 2, 3);
-        // Glow halo (varies subtly)
-        const glowAlpha = 0.10 + 0.06 * Math.sin(performance.now() / 90 + i);
-        ctx.fillStyle = `rgba(255, 180, 80, ${glowAlpha})`;
-        ctx.beginPath();
-        ctx.arc(px + 14, fy + 6, 36, 0, Math.PI * 2);
-        ctx.fill();
-        // Inner glow
-        ctx.fillStyle = `rgba(255, 220, 140, ${glowAlpha * 1.2})`;
-        ctx.beginPath();
-        ctx.arc(px + 14, fy + 6, 18, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // Wall-mounted torch on every pillar (every-other reads sparser when pillars
+      // are denser, so put one on each pillar but stagger their flicker phase).
+      const torchY = 280 + (i & 1) * 20;
+      // Bracket
+      ctx.fillStyle = '#2a1810';
+      ctx.fillRect(px + 12, torchY, 4, 8);
+      // Flame (animated in size + position)
+      const fyOff = Math.floor(Math.sin(performance.now() / 65 + i * 1.7) * 2);
+      const fy = torchY - 12 + fyOff;
+      ctx.fillStyle = '#ff5a18';
+      ctx.fillRect(px + 10, fy, 8, 12);
+      ctx.fillStyle = '#ffb84a';
+      ctx.fillRect(px + 11, fy + 2, 6, 8);
+      ctx.fillStyle = '#ffe680';
+      ctx.fillRect(px + 12, fy + 4, 4, 5);
+      ctx.fillStyle = '#fffacc';
+      ctx.fillRect(px + 13, fy + 5, 2, 3);
+      // Glow halo (varies subtly)
+      const glowAlpha = 0.10 + 0.06 * Math.sin(performance.now() / 90 + i);
+      ctx.fillStyle = `rgba(255, 180, 80, ${glowAlpha})`;
+      ctx.beginPath();
+      ctx.arc(px + 14, fy + 6, 36, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner glow
+      ctx.fillStyle = `rgba(255, 220, 140, ${glowAlpha * 1.2})`;
+      ctx.beginPath();
+      ctx.arc(px + 14, fy + 6, 18, 0, Math.PI * 2);
+      ctx.fill();
     }
 
-    // Foreground stone arch overhangs at the top of the screen (parallax 0.65).
+    // (c) Foreground free-standing stone braziers on the floor (parallax 0.75).
+    //     Reads as "you are inside the temple, walking past lit braziers."
+    const brazierPx = -camera.x * 0.75;
+    const brazierSpan = 360;
+    const b0 = Math.floor((screenStart - brazierPx) / brazierSpan) - 1;
+    const b1 = b0 + Math.ceil(W / brazierSpan) + 2;
+    for (let i = b0; i < b1; i++) {
+      const bx = i * brazierSpan + brazierPx + 80;
+      const groundY = 480;   // foreground ground line in screen space
+      // Stone column (tapered)
+      ctx.fillStyle = '#1f1730';
+      ctx.fillRect(bx - 8, groundY - 28, 24, 28);
+      ctx.fillStyle = '#3a2a4a';
+      ctx.fillRect(bx - 6, groundY - 26, 20, 24);
+      ctx.fillStyle = '#5a4a72';
+      ctx.fillRect(bx - 6, groundY - 26, 3, 24);
+      // Stone bowl on top
+      ctx.fillStyle = '#1a0f25';
+      ctx.fillRect(bx - 12, groundY - 36, 32, 8);
+      ctx.fillStyle = '#3a2a4a';
+      ctx.fillRect(bx - 10, groundY - 34, 28, 4);
+      // Flame (larger than wall torch, animated)
+      const bfOff = Math.floor(Math.sin(performance.now() / 55 + i * 2.3) * 3);
+      const bfY = groundY - 56 + bfOff;
+      ctx.fillStyle = '#ff5a18';
+      ctx.fillRect(bx - 6, bfY,      18, 18);
+      ctx.fillStyle = '#ffb84a';
+      ctx.fillRect(bx - 4, bfY + 3,  14, 14);
+      ctx.fillStyle = '#ffe680';
+      ctx.fillRect(bx - 2, bfY + 6,  10, 10);
+      ctx.fillStyle = '#fffacc';
+      ctx.fillRect(bx,     bfY + 8,   6,  6);
+      // Strong glow halo
+      const bGlow = 0.18 + 0.10 * Math.sin(performance.now() / 80 + i * 1.4);
+      ctx.fillStyle = `rgba(255, 180, 80, ${bGlow})`;
+      ctx.beginPath();
+      ctx.arc(bx + 3, bfY + 8, 56, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 220, 140, ${bGlow * 1.2})`;
+      ctx.beginPath();
+      ctx.arc(bx + 3, bfY + 8, 24, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // (d) Foreground stone arch overhangs at the top of the screen (parallax 0.65).
     const archPx = -camera.x * 0.65;
     const archSpan = 540;
     const a0 = Math.floor((screenStart - archPx) / archSpan) - 1;
