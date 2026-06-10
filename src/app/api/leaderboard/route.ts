@@ -31,10 +31,17 @@ export async function GET(req: NextRequest) {
     });
     if (!rows || rows.length === 0) return [];
     const entries: Entry[] = [];
+    // Concurrent POSTs can race the write-side dedupe and leave a second
+    // entry for the same nickname; rows arrive highest-first, so keeping
+    // only the first occurrence per nickname keeps the best score.
+    const seen = new Set<string>();
     for (const raw of rows) {
       try {
         const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-        if (parsed && typeof parsed.score === "number") entries.push(parsed);
+        if (parsed && typeof parsed.score === "number" && !seen.has(parsed.nickname)) {
+          seen.add(parsed.nickname);
+          entries.push(parsed);
+        }
       } catch {}
     }
     return entries;

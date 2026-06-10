@@ -551,9 +551,6 @@
             transform: scale(0.93);
         }
 
-        @media (pointer: coarse) {
-            #touch-controls { display: block; }
-        }
     </style>
 </head>
 <body>
@@ -721,7 +718,7 @@ let playerInventory = { speed: 0, jump: 0, luck: 0 };
 let unlockedSkins = ['steve', 'racer', 'builder', 'punk', 'ninja']; 
 let gameState = 'MENU';
 let sessionCoins = 0; let sessionDiamonds = 0;
-let frameCount = 0; let timeLeft = 90; let lastTime = 0;
+let frameCount = 0; let timeLeft = 90; let lastTime = 0; let stepAccumulator = 0;
 let currentDifficulty = 'EASY'; let selectedCharIndex = 0;
 let questTimerInterval = null;
 let currentMap = 'mountain'; 
@@ -926,6 +923,7 @@ const AudioSys = {
     },
     playGeneratedSkyscraperTheme: function() {
         // Generated Fallback (Retro City)
+        if (this.musicInterval) { clearInterval(this.musicInterval); this.musicInterval = null; }
         this.init();
         let beat=0; const tempo=130; 
         
@@ -1241,6 +1239,15 @@ function renderShop() {
     });
 }
 
+function showToast(msg) {
+    const t = document.createElement('div');
+    t.innerText = msg;
+    t.style.cssText = "position:absolute;top:25%;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.85);color:#FFD700;border:2px solid #FFD700;border-radius:6px;padding:12px 20px;font-family:'Press Start 2P',cursive;font-size:12px;text-align:center;pointer-events:none;opacity:1;transition:opacity 0.5s;";
+    document.getElementById('game-container').appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; }, 1500);
+    setTimeout(() => { t.remove(); }, 2000);
+}
+
 function buyItem(id) {
     const item = SHOP_ITEMS.find(i => i.id === id);
     if (!item) return;
@@ -1257,7 +1264,7 @@ function buyItem(id) {
     // Grant Item
     if (item.type === 'skin') {
         unlockedSkins.push(item.id);
-        alert("Skin Unlocked!");
+        showToast("Skin Unlocked!");
     } else if (item.type === 'potion') {
         playerInventory[item.id]++;
     }
@@ -2076,8 +2083,9 @@ class Entity {
     draw() {
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(this.x + 5, this.y + 20, this.width, 5); 
         drawStickman(ctx, this.x, this.y, this.width, this.height, this.facingRight, this.charData, this.animTime);
-        if (this.isCpu) { ctx.fillStyle = '#F44336'; ctx.font = '10px Arial'; ctx.fillText("CPU", this.x, this.y - 35); }
-        else { ctx.fillStyle = '#4CAF50'; ctx.font = '10px Arial'; ctx.fillText("P1", this.x, this.y - 35); }
+        ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+        if (this.isCpu) { ctx.fillStyle = '#F44336'; ctx.font = '10px Arial'; ctx.fillText("CPU", this.x + this.width / 2, this.y - 35); }
+        else { ctx.fillStyle = '#4CAF50'; ctx.font = '10px Arial'; ctx.fillText("P1", this.x + this.width / 2, this.y - 35); }
     }
 }
 
@@ -2088,6 +2096,12 @@ class Particle {
 }
 
 // --- Main Loop ---
+
+// Touch overlay sits above the menu screens, so only show it during active gameplay
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const touchControlsEl = document.getElementById('touch-controls');
+function showTouchControls() { if (isTouchDevice && touchControlsEl) touchControlsEl.style.display = 'block'; }
+function hideTouchControls() { if (touchControlsEl) touchControlsEl.style.display = 'none'; }
 
 function initGame() {
     AudioSys.stopMusic();
@@ -2126,7 +2140,10 @@ function initGame() {
     cpu = new Entity(gameLevel.spawnCpu.x, gameLevel.spawnCpu.y, 25, 25, randomCpu.id, true);
     
     particles = []; timeLeft = 90; cameraY = 0;
+    const m = Math.floor(timeLeft / 60); const s = timeLeft % 60;
+    timerDisplay.innerText = `TIME: ${m}:${s < 10 ? '0'+s : s}`;
     startScreen.classList.add('hidden'); gameOverScreen.classList.add('hidden');
+    showTouchControls();
     
     gameState = 'COUNTDOWN';
     countdownValue = 3;
@@ -2150,11 +2167,12 @@ function endGame(winner) {
     } else {
         winnerText.innerText = 'CPU WINS!'; lootReport.innerText = "Loot Lost!"; winnerText.style.color = '#F44336'; AudioSys.playLoseTune();
     }
+    hideTouchControls();
     gameOverScreen.classList.remove('hidden');
 }
 
 function goToMenu() {
-    gameState = 'MENU'; AudioSys.stopMusic(); AudioSys.startTitleMusic();
+    gameState = 'MENU'; AudioSys.stopMusic(); AudioSys.startTitleMusic(); hideTouchControls();
     gameOverScreen.classList.add('hidden'); startScreen.classList.remove('hidden'); updateHUD(); updateMapLock();
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = "#202028"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     requestAnimationFrame(drawPreview);
@@ -2171,23 +2189,47 @@ function gameLoop(timestamp) {
         ctx.fillText("FIRST TO THE STAR WINS!", canvas.width/2, canvas.height/2 - 50);
         ctx.font = '60px "Press Start 2P"'; ctx.fillStyle = '#FFF';
         if (countdownValue > 0) ctx.fillText(countdownValue, canvas.width/2, canvas.height/2 + 20);
-        else { ctx.fillText("GO!", canvas.width/2, canvas.height/2 + 20); if (elapsed > 3.5) { gameState = 'PLAYING'; lastTime = timestamp; } }
+        else { ctx.fillText("GO!", canvas.width/2, canvas.height/2 + 20); if (elapsed > 3.5) { gameState = 'PLAYING'; lastTime = timestamp; stepAccumulator = 0; } }
         requestAnimationFrame(gameLoop); return;
     }
 
     if (gameState !== 'PLAYING') return;
-    const dt = timestamp - lastTime; lastTime = timestamp;
-    
-    // CAMERA LOGIC (Vertical Scrolling for Volcano)
-    let targetCamY = 0;
-    if (currentMap === 'volcano') {
-        // Follow the PLAYER ONLY - ignore CPU position
-        if (player.y < 200) {
-            targetCamY = 200 - player.y;
+    // Fixed-timestep accumulator: physics steps run at 60/sec regardless of display refresh rate
+    let dt = timestamp - lastTime; lastTime = timestamp;
+    if (dt > 250) dt = 250; // Clamp huge gaps (e.g. tab restore)
+    stepAccumulator += dt;
+    const STEP_MS = 1000 / 60;
+    let steps = 0;
+    while (stepAccumulator >= STEP_MS && steps < 5 && gameState === 'PLAYING') {
+        stepAccumulator -= STEP_MS; steps++;
+
+        // CAMERA LOGIC (Vertical Scrolling for Volcano)
+        let targetCamY = 0;
+        if (currentMap === 'volcano') {
+            // Follow the PLAYER ONLY - ignore CPU position
+            if (player.y < 200) {
+                targetCamY = 200 - player.y;
+            }
+        }
+        // Smooth lerp
+        cameraY = cameraY + (targetCamY - cameraY) * 0.1;
+
+        if(gameLevel.update) gameLevel.update();
+
+        // Update logic first (Order matters for ties!)
+        cpu.update(); 
+        player.update(); 
+
+        particles = particles.filter(p => { p.update(); return p.life > 0; });
+
+        frameCount++;
+        if (frameCount % 60 === 0) {
+            timeLeft--; if (timeLeft <= 0) endGame('CPU');
+            const m = Math.floor(timeLeft / 60); const s = timeLeft % 60;
+            timerDisplay.innerText = `TIME: ${m}:${s < 10 ? '0'+s : s}`;
         }
     }
-    // Smooth lerp
-    cameraY = cameraY + (targetCamY - cameraY) * 0.1;
+    if (steps === 5) stepAccumulator = 0; // Spiral-of-death guard: drop unprocessed time
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
@@ -2195,33 +2237,22 @@ function gameLoop(timestamp) {
     ctx.save();
     ctx.translate(0, cameraY);
     
-    if(gameLevel.update) gameLevel.update();
     gameLevel.draw(); 
     
-    // Update logic first (Order matters for ties!)
-    cpu.update(); 
-    player.update(); 
-    
     player.draw(); cpu.draw();
-    particles = particles.filter(p => { p.update(); p.draw(); return p.life > 0; });
+    particles.forEach(p => p.draw());
     
     // DRAW STAR LAST (Top Layer)
     gameLevel.drawStar();
 
     ctx.restore(); // Restore context for HUD
 
-    frameCount++;
-    if (frameCount % 60 === 0) {
-        timeLeft--; if (timeLeft <= 0) endGame('CPU');
-        const m = Math.floor(timeLeft / 60); const s = timeLeft % 60;
-        timerDisplay.innerText = `TIME: ${m}:${s < 10 ? '0'+s : s}`;
-    }
     requestAnimationFrame(gameLoop);
 }
 
 // --- UI Handlers ---
-window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
-window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+window.addEventListener('keydown', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (keys.hasOwnProperty(k)) keys[k] = true; });
+window.addEventListener('keyup', (e) => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; if (keys.hasOwnProperty(k)) keys[k] = false; });
 window.addEventListener('blur', () => { for (let k in keys) keys[k] = false; });
 diffButtons.forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -2246,7 +2277,7 @@ musicFileInput.addEventListener('change', (e) => { const file = e.target.files[0
 playBtn.addEventListener('click', initGame);
 restartBtn.addEventListener('click', initGame);
 quitBtn.addEventListener('click', goToMenu);
-questBtn.addEventListener('click', () => { questScreen.classList.remove('hidden'); if (!playerQuests || !playerQuests.list || playerQuests.list.length === 0) { playerQuests = generateDailyQuests(); saveGameData(); } renderQuests(); updateQuestTimer(); if(questTimerInterval) clearInterval(questTimerInterval); questTimerInterval = setInterval(updateQuestTimer, 1000); });
+questBtn.addEventListener('click', () => { questScreen.classList.remove('hidden'); const todayPST = new Date().toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }); if (!playerQuests || !playerQuests.list || playerQuests.list.length === 0 || playerQuests.date !== todayPST) { playerQuests = generateDailyQuests(); saveGameData(); } renderQuests(); updateQuestTimer(); if(questTimerInterval) clearInterval(questTimerInterval); questTimerInterval = setInterval(updateQuestTimer, 1000); });
 closeQuestBtn.addEventListener('click', () => { questScreen.classList.add('hidden'); if(questTimerInterval) clearInterval(questTimerInterval); });
 shopBtn.addEventListener('click', () => { shopScreen.classList.remove('hidden'); renderShop(); });
 closeShopBtn.addEventListener('click', () => { shopScreen.classList.add('hidden'); });
@@ -2261,12 +2292,11 @@ initAuth();
 
 // --- Mobile Joystick Controls ---
 (function() {
-    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
     if (!isTouchDevice) return;
 
     const touchControls = document.getElementById('touch-controls');
     if (!touchControls) return;
-    touchControls.style.display = 'block';
+    touchControls.style.display = 'none'; // Hidden until a match starts (see showTouchControls)
 
     const zone = document.getElementById('joystick-zone');
     const thumb = document.getElementById('joystick-thumb');

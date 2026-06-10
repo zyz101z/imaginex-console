@@ -290,16 +290,26 @@ function GameDetail({
     } catch { /* audio not available */ }
   }, []);
 
+  const insertTimersRef = useRef<number[]>([]);
+
   const handleInsert = () => {
     if (phase !== "idle") return;
     playInsertSound();
     setPhase("lifting");
-    setTimeout(() => setPhase("dropping"), 400);
-    setTimeout(() => setPhase("seated"), 900);
-    setTimeout(() => setPhase("glowing"), 1100);
-    setTimeout(() => setPhase("launching"), 2200);
-    setTimeout(() => onPlay(), 2800);
+    insertTimersRef.current = [
+      window.setTimeout(() => setPhase("dropping"), 400),
+      window.setTimeout(() => setPhase("seated"), 900),
+      window.setTimeout(() => setPhase("glowing"), 1100),
+      window.setTimeout(() => setPhase("launching"), 2200),
+      window.setTimeout(() => onPlay(), 2800),
+    ];
   };
+
+  useEffect(() => {
+    return () => {
+      insertTimersRef.current.forEach((t) => window.clearTimeout(t));
+    };
+  }, []);
 
   useEffect(() => {
     setPhase("idle");
@@ -493,7 +503,8 @@ function GamePlayer({
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data && e.data.type === "imaginex-score") {
+      if (e.origin !== window.location.origin) return;
+      if (e.data && e.data.type === "imaginex-score" && e.data.gameId === game.id) {
         const profile = getProfile();
         void addLeaderboardEntry({
           nickname: profile?.nickname || e.data.nickname || "Player",
@@ -505,7 +516,7 @@ function GamePlayer({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [game.id]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
@@ -540,6 +551,13 @@ function GamePlayer({
           const iframe = e.target as HTMLIFrameElement;
           iframe.focus();
           try { iframe.contentWindow?.focus(); } catch(_) {}
+          // Keydowns inside the iframe never reach the parent window, so the
+          // ESC menu toggle must be attached to the (same-origin) game document.
+          try {
+            iframe.contentWindow?.addEventListener("keydown", (ev) => {
+              if ((ev as KeyboardEvent).key === "Escape") setShowExit((prev) => !prev);
+            });
+          } catch { /* cross-origin game: ESC menu via mouse hover only */ }
         }}
       />
     </div>
@@ -808,7 +826,7 @@ export default function Console() {
               className={`nav-item ${(view === item.id || (view === "game-detail" && item.id === "games")) ? "active" : ""}`}
               onClick={() => {
                 setView(item.id);
-                if (item.id !== "games") setSelectedGame(null);
+                setSelectedGame(null);
               }}
             >
               {item.icon}

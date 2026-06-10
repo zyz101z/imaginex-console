@@ -373,6 +373,8 @@
             wrapper.style.marginLeft = ((winW - gameW * scale) / 2) + 'px';
             wrapper.style.marginTop = ((winH - gameH * scale) / 2) + 'px';
         } else {
+            document.body.style.justifyContent = '';
+            document.body.style.alignItems = '';
             wrapper.style.transform = '';
             wrapper.style.marginLeft = '';
             wrapper.style.marginTop = '';
@@ -794,7 +796,7 @@
             if (snap.exists()) d = snap.data();
         } else {
             const raw = localStorage.getItem('tw_slot' + slotNum);
-            if (raw) d = JSON.parse(raw);
+            if (raw) { try { d = JSON.parse(raw); } catch(e) { d = null; } }
         }
         if (d) {
             rep = d.rep || 0; tutorialDone = d.tutorialDone || false; inventory = d.inventory || inventory; equipped = d.equipped || equipped;
@@ -832,7 +834,7 @@
                 data = snap.exists() ? snap.data() : null;
             } else {
                 const raw = localStorage.getItem('tw_slot' + i);
-                if (raw) data = JSON.parse(raw);
+                if (raw) { try { data = JSON.parse(raw); } catch(e) { data = null; } }
             }
             const card = document.createElement('div'); card.className = 'slot-card';
             const info = `<div><div class="text-[#facc15] text-[10px] mb-1">PROFILE 0${i}</div><div class="text-[6px] text-white opacity-70">${data ? 'REP: ' + data.rep + ' | GYMS: ' + (data.defeatedGyms ? data.defeatedGyms.length : 0) : 'NEW DATA'}</div></div>`;
@@ -861,12 +863,12 @@
     }
 
     function startStandardMatch() {
-        gameState = 'MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        gameState = 'MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0; match.serving = 'p1';
         if(activeNPC) document.getElementById('cpu-name-label').innerText = activeNPC.name.toUpperCase();
         document.getElementById('p1-score').innerText = 0; document.getElementById('cpu-score').innerText = 0;
         let goal = 3;
         if (activeNPC.type === 'gym' || activeNPC.type === 'volcano_guard') goal = 7;
-        if (activeNPC.type === 'pirate' || activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss') goal = 11;
+        if (activeNPC.type === 'pirate' || activeNPC.type === 'boss' || activeNPC.type === 'volcano_boss' || activeNPC.type === 'tourney' || activeNPC.type === 'king') goal = 11;
         document.getElementById('match-goal-text').innerText = "GOAL: " + goal;
         document.getElementById('top-bar').style.display = 'none'; document.getElementById('ach-btn').style.display = 'none'; document.getElementById('match-score').style.display = 'flex';
         document.getElementById('special-meter-container').style.display = 'block'; document.getElementById('dialog').style.display = 'none';
@@ -875,7 +877,8 @@
     }
 
     function startTournamentMatch() {
-        match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0; match.serving = 'p1';
+        document.getElementById('p1-score').innerText = 0; document.getElementById('cpu-score').innerText = 0;
         document.getElementById('top-bar').style.display = 'none'; document.getElementById('ach-btn').style.display = 'none'; document.getElementById('match-score').style.display = 'flex';
         document.getElementById('special-meter-container').style.display = 'block';
         if (tournamentRound === 1) activeNPC = { name: "Rival Chad", level: 4.5, zone: 'Town', type: 'tourney', action: 'MATCH', color: '#dc2626', hair: '#111' };
@@ -887,7 +890,7 @@
     }
     
     function startTutorialMatch() {
-        gameState = 'TUTORIAL_MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0;
+        gameState = 'TUTORIAL_MATCH'; match.p1.score = 0; match.cpu.score = 0; match.p1.specialMeter = 0; match.serving = 'p1';
         document.getElementById('cpu-name-label').innerText = "CHAD";
         document.getElementById('p1-score').innerText = 0; document.getElementById('cpu-score').innerText = 0;
         document.getElementById('match-goal-text').innerText = "GOAL: 5";
@@ -987,7 +990,9 @@
                     if (tournamentRound === 1) { document.getElementById('dialog-text').innerText = "Winner! advanced to Finals!"; tournamentRound = 2; activeNPC.action = 'TOURNAMENT_START'; }
                     else if (tournamentRound === 2) { document.getElementById('dialog-text').innerText = "CHAMPION! King awaits!"; tournamentRound = 3; activeNPC.action = 'TOURNAMENT_START'; }
                     else if (tournamentRound === 3) { document.getElementById('dialog-text').innerText = "DEFEATED KING! GOLD MEDAL!"; hasGoldMedal = true; document.getElementById('medal-icon').classList.remove('hidden'); tournamentRound = 0; activeNPC.action = 'EXIT'; }
-                } else { const reward = (activeNPC && activeNPC.name === 'Leafy') ? 25 : 50; rep += reward; document.getElementById('rep-val').innerText = rep; document.getElementById('dialog-text').innerText = `Win! +${reward} Rep.`; if(activeNPC) activeNPC.action = 'EXIT'; }
+                }
+                else if (activeNPC && activeNPC.type === 'king') { if (!hasGoldMedal) { hasGoldMedal = true; document.getElementById('medal-icon').classList.remove('hidden'); } document.getElementById('dialog-text').innerText = "DEFEATED KING! GOLD MEDAL!"; activeNPC.action = 'EXIT'; }
+                else { const reward = (activeNPC && activeNPC.name === 'Leafy') ? 25 : 50; rep += reward; document.getElementById('rep-val').innerText = rep; document.getElementById('dialog-text').innerText = `Win! +${reward} Rep.`; if(activeNPC) activeNPC.action = 'EXIT'; }
             } else { if (gameState !== 'TUTORIAL_MATCH') matchStats.currentStreak = 0; document.getElementById('dialog-text').innerText = "Defeat!"; tournamentRound = 0; if(activeNPC) activeNPC.action = 'EXIT'; }
             saveGameData(); updateObjectiveHint(); checkAchievements();
             if (w === 'p1') { try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tennis-world', score: rep, nickname: 'Player' }, '*'); } catch(e) {} }
@@ -1022,7 +1027,7 @@
             
             ctx.fillStyle = racketColor || '#eee'; ctx.fillRect(-2, -5, 4, 15);
             // Netting
-            if (equipped.racket !== 'racket_basic') {
+            if (isP1 && equipped.racket !== 'racket_basic') {
                 ctx.globalAlpha = 0.4; ctx.fillStyle = racketColor || '#eee'; ctx.fillRect(-10, -25, 20, 20); ctx.globalAlpha = 1.0;
             }
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(-10, -25, 20, 20); 
@@ -1782,6 +1787,7 @@
             // Special now auto-triggers on ball hit when meter is full
         });
         window.addEventListener('keyup', e => keys[e.code] = false);
+        window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
         // --- MOBILE TOUCH CONTROLS ---
         (function initTouchControls() {

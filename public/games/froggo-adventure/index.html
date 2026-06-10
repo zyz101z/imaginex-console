@@ -748,7 +748,7 @@ window.addEventListener('keydown', (e) => {
       jumpBufferAt = performance.now();
     }
   }
-  if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'win' || state === 'play')) {
+  if ((e.key === 'r' || e.key === 'R') && (state === 'gameover' || state === 'win')) {
     if (state === 'win' && winFx && winFx.hasNextZone && !winFx.isFinalZone) {
       // Advance to next zone instead of restarting
       ensureAudio();
@@ -762,9 +762,10 @@ window.addEventListener('keydown', (e) => {
     }
   }
   if (e.key === 'Enter' && state === 'title') {
+    ensureAudio();
+    resetLevel();
     state = 'play';
     showScreen('hud');
-    ensureAudio();
     startMusic();
   }
   // Zone select from title (numeric keys)
@@ -788,6 +789,9 @@ window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
   if (e.code === 'Space') keys[' '] = false;
 });
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+});
 function left()  { return keys['arrowleft']  || keys['a'] || touchKeys.left; }
 function right() { return keys['arrowright'] || keys['d'] || touchKeys.right; }
 function jumpHeld() { return keys['arrowup'] || keys['w'] || keys[' '] || touchKeys.jump; }
@@ -801,9 +805,10 @@ if (isTouchDevice) touchControlsEl.classList.remove('hidden');
 
 function startGameFromInput() {
   if (state === 'title') {
+    ensureAudio();
+    resetLevel();
     state = 'play';
     showScreen('hud');
-    ensureAudio();
     startMusic();
   } else if (state === 'win' && winFx && winFx.hasNextZone && !winFx.isFinalZone) {
     ensureAudio();
@@ -832,8 +837,11 @@ document.querySelectorAll('.tc-btn').forEach(btn => {
         jumpBufferAt = performance.now();
       }
     }
-    if (state === 'title' || state === 'gameover' || state === 'win') {
+    if (state === 'title' || state === 'gameover') {
       startGameFromInput();
+    } else if (state === 'win') {
+      const elapsed = winFx ? (performance.now() - winFx.startMs) : 0;
+      if (elapsed > 3500) startGameFromInput();
     }
   };
   const release = (e) => {
@@ -1660,6 +1668,7 @@ function loadAct(actIdx) {
   projectiles = [];
   shockbots = [];
   checkpoints = [];
+  springs = [];
   climbWalls = L.climbWalls ? L.climbWalls.map(w => ({ ...w })) : [];
   oneUps = L.oneUps ? L.oneUps.map(o => ({ ...o, collected: false })) : [];
   activeCheckpoint = null;
@@ -3899,13 +3908,14 @@ function drawWinSequence(now) {
     ctx.fillStyle = '#d946ef';
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 4;
-    ctx.fillText('★  ZONE 2 UNLOCKED: CYBER SWAMP  ★', W / 2, 112);
+    const nextZone = ZONES[winFx.clearedZoneIdx + 1];
+    ctx.fillText(`★  ZONE ${winFx.clearedZoneIdx + 2} UNLOCKED: ${nextZone.name}  ★`, W / 2, 112);
     ctx.restore();
     ctx.textAlign = 'start';
   }
 
   // --- Phase 5: prompt (shows once total reveal is complete) ---
-  const readyAt = 2000 + dropletScore * 40 + 200 + bugbotsKilled * 80 + 200 + winFx.timeBonus / 2 + 600;
+  const readyAt = 2000 + (winFx.totalDroplets || 0) * 40 + 200 + (winFx.totalBugbots || 0) * 80 + 200 + winFx.timeBonus / 2 + 600;
   if (t > readyAt) {
     if (Math.floor(now / 400) % 2 === 0) {
       ctx.save();
@@ -3916,7 +3926,8 @@ function drawWinSequence(now) {
       ctx.shadowBlur = 4;
       let label;
       if (winFx.hasNextZone && !winFx.isFinalZone) {
-        label = isTouchDevice ? 'TAP TO ENTER ZONE 2' : 'PRESS R TO ENTER ZONE 2';
+        const nextZoneNum = winFx.clearedZoneIdx + 2;
+        label = isTouchDevice ? `TAP TO ENTER ZONE ${nextZoneNum}` : `PRESS R TO ENTER ZONE ${nextZoneNum}`;
       } else if (winFx.isFinalZone) {
         label = isTouchDevice ? 'TAP TO PLAY AGAIN' : 'PRESS R TO PLAY AGAIN';
       } else {
