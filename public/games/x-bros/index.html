@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>X-Bros</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: #000; color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #wrap {
+    position: relative;
+    width: min(100vw, calc(100vh * 16 / 9), 1280px);
+    height: min(100vh, calc(100vw * 9 / 16), 720px);
+    aspect-ratio: 16 / 9;
+    background: #000;
+    box-shadow: 0 0 60px rgba(120, 180, 255, 0.18);
+    box-sizing: border-box;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+</head>
+<body>
+<div id="wrap"><div id="game"></div></div>
+<script>
+// X-Bros — Smash-style 2D platform fighter
+// Single player vs CPU. Placeholder rectangles; per-character art comes later.
+
+// =============================================================================
+// SoundManager — procedural Web Audio so we don't ship/load any audio files.
+// All sounds are short oscillator + envelope combos. Master gain sits at 0.4.
+// First play() call lazily creates the context; first user gesture resumes it.
+// =============================================================================
+
+class SoundManager {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.muted = false;
+  }
+  ensure() {
+    if (this.ctx) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    this.ctx = new Ctx();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.4;
+    this.master.connect(this.ctx.destination);
+  }
+  resume() {
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  }
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 0.4;
+  }
+  toggleMute() { this.setMuted(!this.muted); return this.muted; }
+
+  // Helper: oscillator with optional pitch sweep
+  tone({ type = "square", freqStart, freqEnd, dur = 0.1, volume = 0.3, delay = 0 }) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime + delay;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqStart, t);
+    if (freqEnd && freqEnd !== freqStart) {
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), t + dur);
+    }
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(volume, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  // Helper: filtered noise burst
+  noise({ dur = 0.1, volume = 0.25, filterFreq = 2000, filterQ = 1, type = "bandpass", delay = 0 }) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime + delay;
+    const len = Math.ceil(dur * this.ctx.sampleRate);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = filterFreq;
+    filter.Q.value = filterQ;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(volume, t + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start(t);
+    src.stop(t + dur + 0.05);
+  }
+
+  play(name) {
+    this.ensure();
+    this.resume();
+    if (this.muted || !this.ctx) return;
+    switch (name) {
+      case "jump":
+        this.tone({ type: "square",   freqStart: 240, freqEnd: 520, dur: 0.10, volume: 0.30 }); break;
+      case "doubleJump":
+        this.tone({ type: "triangle", freqStart: 380, freqEnd: 760, dur: 0.10, volume: 0.30 }); break;
+      case "attack":
+        this.noise({ dur: 0.06, volume: 0.22, filterFreq: 1200, filterQ: 2 }); break;
+      case "hit":
+        this.tone({ type: "sine",   freqStart: 90, freqEnd: 35, dur: 0.16, volume: 0.55 });
+        this.noise({ dur: 0.05, volume: 0.22, filterFreq: 800, filterQ: 1 });
+        break;
+      case "dashHit":
+        this.tone({ type: "sine",   freqStart: 110, freqEnd: 40, dur: 0.18, volume: 0.6 });
+        this.noise({ dur: 0.08, volume: 0.3, filterFreq: 1100, filterQ: 1 });
+        this.tone({ type: "square", freqStart: 660, freqEnd: 220, dur: 0.10, volume: 0.18 });
+        break;
+      case "ko":
+        this.tone({ type: "square", freqStart: 480, freqEnd: 80, dur: 0.55, volume: 0.4 });
+        this.noise({ dur: 0.4, volume: 0.18, filterFreq: 600, filterQ: 0.8, delay: 0.05 });
+        break;
+      case "victory":
+        // C-E-G arpeggio
+        this.tone({ type: "triangle", freqStart: 523, dur: 0.12, volume: 0.35 });
+        this.tone({ type: "triangle", freqStart: 659, dur: 0.12, volume: 0.35, delay: 0.10 });
+        this.tone({ type: "triangle", freqStart: 784, dur: 0.22, volume: 0.40, delay: 0.20 });
+        break;
+      case "matchStart":
+        this.tone({ type: "square", freqStart: 440, dur: 0.08, volume: 0.30 });
+        this.tone({ type: "square", freqStart: 660, dur: 0.08, volume: 0.30, delay: 0.08 });
+        this.tone({ type: "square", freqStart: 880, dur: 0.14, volume: 0.35, delay: 0.16 });
+        break;
+      case "select":
+        this.tone({ type: "triangle", freqStart: 600, dur: 0.04, volume: 0.18 }); break;
+      case "confirm":
+        this.tone({ type: "square", freqStart: 660, dur: 0.06, volume: 0.30 });
+        this.tone({ type: "square", freqStart: 990, dur: 0.06, volume: 0.30, delay: 0.05 });
+        break;
+      case "projectile":
+        this.tone({ type: "square", freqStart: 800, freqEnd: 1600, dur: 0.08, volume: 0.20 }); break;
+      case "lunge":
+        this.noise({ dur: 0.16, volume: 0.20, filterFreq: 1400, filterQ: 0.7 });
+        this.tone({ type: "sawtooth", freqStart: 220, freqEnd: 440, dur: 0.16, volume: 0.18 });
+        break;
+      case "grab":
+        this.tone({ type: "sawtooth", freqStart: 280, freqEnd: 80, dur: 0.20, volume: 0.30 }); break;
+      case "grabHit":
+        this.tone({ type: "square", freqStart: 90, freqEnd: 60, dur: 0.18, volume: 0.4 });
+        this.noise({ dur: 0.08, volume: 0.18, filterFreq: 600, filterQ: 1, delay: 0.04 });
+        break;
+    }
+  }
+}
+const SFX = new SoundManager();
+
+const W = 1280, H = 720;
+const GROUND_Y = 640;
+const DEATH_BOTTOM = 880, DEATH_LEFT = -180, DEATH_RIGHT = W + 180;
+
+// Global physics + scaling constants (per-character stats override the rest)
+const GRAVITY = 1700;
+const ATTACK_KB_SCALE = 9;     // extra knockback per damage% on victim
+const HITSTUN_BASE = 0.18;
+const ATTACK_DURATION = 0.18;  // hitbox active window — fixed across roster
+
+// Roster — each character has a stat profile. Tweak these to balance.
+//   weight: divides incoming knockback. Heavier = harder to launch.
+//   walkSpeed: ground/air horizontal velocity.
+//   jumpVel / doubleJumpVel: negative-Y impulse for jumps.
+//   attackDmg: damage % added on hit.
+//   attackKbBase: base knockback impulse on hit.
+//   attackRange: hitbox extends this far in front of fighter.
+//   attackCooldown: seconds before this fighter can swing again.
+// Special move types (referenced by character.special.type):
+//   lunge      — dash forward with an active hitbox; closer-the-gap blow.
+//   projectile — fire a moving hitbox that travels until off-screen or hits.
+//   grab       — extend a long, thin hitbox; on hit, snap opponent to fighter + damage.
+const ROSTER = [
+  { id: "berserker", name: "Berserker",  color: 0xd64545, accent: 0xffe066,
+    stats: { weight: 1.30, walkSpeed: 240, jumpVel: -740, doubleJumpVel: -660,
+             attackDmg: 12, attackKbBase: 280, attackRange: 80, attackCooldown: 0.42 },
+    special: { type: "lunge", name: "Rage Lunge", dmg: 20, kbBase: 360,
+               duration: 0.40, cooldown: 1.20, dashSpeed: 740 },
+    // Sprite sheet: 6 horizontal frames at frameW×frameH, in order:
+    //   0=idle, 1=walk, 2=jump, 3=attack, 4=hit, 5=ko
+    sprite: { sheet: "sprites/berserker.png", frameW: 512, frameH: 512, displayH: 140 },
+    blurb: "Slow but heavy hitter. Wins trades."
+  },
+  { id: "john", name: "John", color: 0x4a90d6, accent: 0xfff1b0,
+    stats: { weight: 1.00, walkSpeed: 280, jumpVel: -780, doubleJumpVel: -700,
+             attackDmg:  9, attackKbBase: 230, attackRange: 70, attackCooldown: 0.32 },
+    special: { type: "projectile", name: "Tankard Toss", dmg: 16, kbBase: 280,
+               cooldown: 1.00, projectileSpeed: 420, gravityY: 700,
+               projColor: 0xb87333, projW: 22, projH: 22, spin: true },
+    sprite: { sheet: "sprites/john.png", frameW: 512, frameH: 512, displayH: 140 },
+    blurb: "Lobs a wooden tankard. Hits hard up close."
+  },
+  { id: "froggo", name: "Froggo", color: 0x4ebf68, accent: 0xfff200,
+    stats: { weight: 0.92, walkSpeed: 360, jumpVel: -880, doubleJumpVel: -780,
+             attackDmg: 10, attackKbBase: 220, attackRange: 72, attackCooldown: 0.24,
+             airJumpsMax: 2 },
+    special: { type: "grab", name: "Tongue Pull", dmg: 14, kbBase: 220,
+               cooldown: 0.95, reach: 250, extendTime: 0.18, pullTime: 0.16 },
+    sprite: { sheet: "sprites/froggo.png", frameW: 512, frameH: 512, displayH: 105, feetY: 0.94 },
+    blurb: "Multi-jumps. Tongue-grabs from a distance."
+  },
+  { id: "steve", name: "Steve", color: 0xb86b3a, accent: 0xffffff,
+    stats: { weight: 1.10, walkSpeed: 260, jumpVel: -740, doubleJumpVel: -680,
+             attackDmg: 10, attackKbBase: 240, attackRange: 70, attackCooldown: 0.34 },
+    special: { type: "lunge", name: "Mountain Charge", dmg: 14, kbBase: 280,
+               duration: 0.34, cooldown: 0.95, dashSpeed: 820 },
+    sprite: { sheet: "sprites/steve.png", frameW: 512, frameH: 512, displayH: 150, feetY: 0.94 },
+    blurb: "Bulldozer charge dash."
+  },
+  { id: "chad", name: "Bully Chad", color: 0xe8a534, accent: 0xffffff,
+    stats: { weight: 1.00, walkSpeed: 300, jumpVel: -780, doubleJumpVel: -700,
+             attackDmg:  9, attackKbBase: 240, attackRange: 75, attackCooldown: 0.24 },
+    special: { type: "projectile", name: "Tennis Serve", dmg: 9, kbBase: 200,
+               cooldown: 0.60, projectileSpeed: 820, gravityY: 0,
+               projColor: 0xffd84a, projW: 18, projH: 18, spin: false },
+    sprite: { sheet: "sprites/chad.png", frameW: 288, frameH: 910, displayH: 280, feetY: 0.66, frameTrim: 28 },
+    blurb: "Fast flat tennis ball. Spammy."
+  },
+  { id: "jimmy", name: "Jimmy", color: 0x2c7fc7, accent: 0xe36c1c,
+    stats: { weight: 0.90, walkSpeed: 270, jumpVel: -800, doubleJumpVel: -720,
+             attackDmg:  8, attackKbBase: 220, attackRange: 95, attackCooldown: 0.36,
+             airJumpsMax: 2 },
+    special: { type: "projectile", name: "Paper Plane", dmg: 10, kbBase: 220,
+               cooldown: 0.85, projectileSpeed: 520, gravityY: 220,
+               projColor: 0xffffff, projW: 26, projH: 12, spin: true },
+    sprite: { sheet: "sprites/jimmy.png", frameW: 512, frameH: 512, displayH: 140 },
+    blurb: "Paper plane glides through enemies."
+  },
+];
+
+// Difficulty profiles for the CPU. attackChance is per-frame when in range.
+// "combo" suffix = bonus values applied while opponent is in hitstun.
+const DIFFICULTY = {
+  Easy:   { attackChance: 0.16, attackCdMin: 0.45, attackCdRange: 0.25,
+            comboAttackChance: 0.45, comboCdMin: 0.30, comboCdRange: 0.20,
+            airChase: false, reactionDelay: 0.18, crowd: false, faceLock: false,
+            whiffPunishChance: 0.0, rangeBuffer: 32 },
+  Normal: { attackChance: 0.20, attackCdMin: 0.36, attackCdRange: 0.22,
+            comboAttackChance: 0.55, comboCdMin: 0.26, comboCdRange: 0.16,
+            airChase: true,  reactionDelay: 0.18, crowd: false, faceLock: true,
+            whiffPunishChance: 0.25, rangeBuffer: 24 },
+  Hard:   { attackChance: 0.85, attackCdMin: 0.14, attackCdRange: 0.08,
+            comboAttackChance: 0.99, comboCdMin: 0.08, comboCdRange: 0.06,
+            airChase: true,  reactionDelay: 0.0,  crowd: true,  faceLock: true,
+            whiffPunishChance: 0.95, rangeBuffer: 8 },
+};
+
+// ---- Title scene -------------------------------------------------------------
+
+class TitleScene extends Phaser.Scene {
+  constructor() { super("title"); }
+  create() {
+    this.cameras.main.setBackgroundColor("#08101e");
+    const cx = W / 2;
+    this.add.text(cx, 200, "X-BROS", {
+      fontFamily: "Press Start 2P", fontSize: "120px", color: "#9ad6ff"
+    }).setOrigin(0.5).setShadow(0, 8, "#0b2a55", 0, true, true);
+    this.add.text(cx, 310, "ImagineX Smash", {
+      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffe066"
+    }).setOrigin(0.5);
+
+    // Roster preview row
+    const slotW = 110, gap = 24, total = ROSTER.length * slotW + (ROSTER.length - 1) * gap;
+    let x0 = cx - total / 2 + slotW / 2;
+    ROSTER.forEach((c, i) => {
+      const x = x0 + i * (slotW + gap);
+      this.add.rectangle(x, 440, slotW, 130, c.color).setStrokeStyle(3, c.accent);
+      this.add.text(x, 520, c.name, {
+        fontFamily: "Press Start 2P", fontSize: "10px", color: "#ffffff", align: "center", wordWrap: { width: slotW + 20 }
+      }).setOrigin(0.5, 0);
+    });
+
+    const press = this.add.text(cx, 640, "PRESS ENTER", {
+      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffffff"
+    }).setOrigin(0.5);
+    this.tweens.add({ targets: press, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+
+    this.input.keyboard.once("keydown-ENTER", () => {
+      SFX.play("confirm");
+      this.scene.start("select");
+    });
+  }
+}
+
+// ---- Character select --------------------------------------------------------
+
+class SelectScene extends Phaser.Scene {
+  constructor() { super("select"); }
+
+  preload() {
+    // Same sprite loading as BattleScene so portraits can show real art.
+    // We only load the raw image here; chroma-keying happens once in create.
+    for (const c of ROSTER) {
+      if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
+        this.load.image(c.id + "_raw", c.sprite.sheet);
+      }
+    }
+  }
+
+  create() {
+    BattleScene.prototype.buildSpriteSheets.call(this);  // reuse the chroma-key + slice
+
+    this.cameras.main.setBackgroundColor("#0a1428");
+    const cx = W / 2;
+    this.add.text(cx, 60, "PICK YOUR FIGHTER", {
+      fontFamily: "Press Start 2P", fontSize: "32px", color: "#9ad6ff"
+    }).setOrigin(0.5);
+    this.add.text(cx, 110, "Arrows: choose   Up/Down: difficulty   Z or Enter: fight   Esc: title", {
+      fontFamily: "Press Start 2P", fontSize: "11px", color: "#aabbdd"
+    }).setOrigin(0.5);
+    this.add.text(cx, 132, "In-fight controls:  Arrows + Z (attack) + X (special)   M to mute", {
+      fontFamily: "Press Start 2P", fontSize: "10px", color: "#7788aa"
+    }).setOrigin(0.5);
+
+    // Roster grid (single row, 6 cards)
+    const slotW = 150, slotH = 200, gap = 28;
+    const total = ROSTER.length * slotW + (ROSTER.length - 1) * gap;
+    const x0 = cx - total / 2 + slotW / 2;
+    this.cards = ROSTER.map((c, i) => {
+      const x = x0 + i * (slotW + gap), y = 280;
+      const bg = this.add.rectangle(x, y, slotW, slotH, 0x111c30).setStrokeStyle(3, 0x2a3d60);
+
+      // If we have art, show the idle frame; otherwise the original color swatch.
+      let portrait;
+      if (c.sprite && this.textures.exists(c.id)) {
+        // Tinted backdrop tile so the sprite reads against the dark card
+        this.add.rectangle(x, y - 20, slotW - 30, 110, c.color, 0.18).setStrokeStyle(3, c.accent);
+        portrait = this.add.sprite(x, y - 20, c.id, 0);
+        const aspect = c.sprite.frameW / c.sprite.frameH;
+        const maxH = 100, maxW = slotW - 40;
+        const dH = Math.min(maxH, maxW / aspect);
+        portrait.setDisplaySize(dH * aspect, dH);
+      } else {
+        portrait = this.add.rectangle(x, y - 20, slotW - 30, 110, c.color).setStrokeStyle(3, c.accent);
+      }
+
+      const name = this.add.text(x, y + 60, c.name, {
+        fontFamily: "Press Start 2P", fontSize: "11px", color: "#ffffff",
+        align: "center", wordWrap: { width: slotW - 10 }
+      }).setOrigin(0.5, 0);
+      return { bg, portrait, name, x, y };
+    });
+
+    // P1 cursor + selected info
+    this.p1Index = 0;
+    this.cursor = this.add.rectangle(0, 0, slotW + 12, slotH + 12)
+      .setStrokeStyle(4, 0xffe066).setFillStyle();
+    this.charName = this.add.text(cx, 440, "", {
+      fontFamily: "Press Start 2P", fontSize: "24px", color: "#ffe066"
+    }).setOrigin(0.5);
+    this.charBlurb = this.add.text(cx, 478, "", {
+      fontFamily: "Press Start 2P", fontSize: "12px", color: "#ffffff"
+    }).setOrigin(0.5);
+    this.statText = this.add.text(cx, 520, "", {
+      fontFamily: "Press Start 2P", fontSize: "10px", color: "#aabbdd",
+      align: "center"
+    }).setOrigin(0.5, 0);
+
+    // Difficulty selector
+    this.difficulty = "Normal";
+    this.difficultyLabel = this.add.text(cx, 615, "", {
+      fontFamily: "Press Start 2P", fontSize: "20px", color: "#ffffff"
+    }).setOrigin(0.5);
+    this.add.text(cx, 645, "[Up / Down]", {
+      fontFamily: "Press Start 2P", fontSize: "10px", color: "#778899"
+    }).setOrigin(0.5);
+
+    this.refresh();
+
+    // Inputs
+    const k = this.input.keyboard;
+    this.keyLeft = k.addKey("LEFT");
+    this.keyRight = k.addKey("RIGHT");
+    this.keyUp = k.addKey("UP");
+    this.keyDown = k.addKey("DOWN");
+    this.keyConfirm = k.addKey("Z");
+    this.keyEnter = k.addKey("ENTER");
+    // Require each confirm key to be RELEASED once before it can start a fight,
+    // so a held Enter from the title screen can't skip straight past us.
+    this.enterArmed = false;
+    this.confirmArmed = false;
+    k.on("keydown-ESC", () => this.scene.start("title"));
+  }
+
+  refresh() {
+    const card = this.cards[this.p1Index];
+    this.cursor.x = card.x;
+    this.cursor.y = card.y;
+    const c = ROSTER[this.p1Index];
+    this.charName.setText(c.name);
+    this.charBlurb.setText(c.blurb);
+    const s = c.stats;
+    this.statText.setText(
+      `Weight ${s.weight.toFixed(2)}   Speed ${s.walkSpeed}   Jump ${-s.jumpVel}\n` +
+      `Damage ${s.attackDmg}   Reach ${s.attackRange}   Cooldown ${s.attackCooldown}s\n` +
+      `Special [X]: ${c.special ? c.special.name : "—"}`
+    );
+    this.difficultyLabel.setText(`CPU: ${this.difficulty.toUpperCase()}`);
+    this.difficultyLabel.setColor(
+      this.difficulty === "Easy" ? "#7be680" :
+      this.difficulty === "Hard" ? "#ff7a7a" : "#ffe066"
+    );
+  }
+
+  update() {
+    let changed = false;
+    if (Phaser.Input.Keyboard.JustDown(this.keyLeft)) {
+      this.p1Index = (this.p1Index - 1 + ROSTER.length) % ROSTER.length;
+      changed = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyRight)) {
+      this.p1Index = (this.p1Index + 1) % ROSTER.length;
+      changed = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyUp)) {
+      this.difficulty = nextDiff(this.difficulty, +1);
+      changed = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyDown)) {
+      this.difficulty = nextDiff(this.difficulty, -1);
+      changed = true;
+    }
+    if (changed) {
+      SFX.play("select");
+      this.refresh();
+    }
+
+    if (!this.keyEnter.isDown) this.enterArmed = true;
+    if (!this.keyConfirm.isDown) this.confirmArmed = true;
+    // Always call JustDown so a stale press is consumed even while unarmed.
+    const confirmPressed = Phaser.Input.Keyboard.JustDown(this.keyConfirm);
+    const enterPressed = Phaser.Input.Keyboard.JustDown(this.keyEnter);
+    if ((confirmPressed && this.confirmArmed) || (enterPressed && this.enterArmed)) {
+      SFX.play("confirm");
+      // Pick a CPU character at random, but never the same as P1
+      const otherIdx = pickOtherIndex(this.p1Index);
+      this.scene.start("battle", {
+        p1: ROSTER[this.p1Index],
+        p2: ROSTER[otherIdx],
+        difficulty: this.difficulty,
+      });
+    }
+  }
+}
+
+function nextDiff(cur, dir) {
+  const order = ["Easy", "Normal", "Hard"];
+  let i = order.indexOf(cur);
+  i = (i + dir + order.length) % order.length;
+  return order[i];
+}
+
+function pickOtherIndex(p1Idx) {
+  let i = Math.floor(Math.random() * ROSTER.length);
+  if (i === p1Idx) i = (i + 1) % ROSTER.length;
+  return i;
+}
+
+// ---- Battle scene ------------------------------------------------------------
+
+class BattleScene extends Phaser.Scene {
+  constructor() { super("battle"); }
+
+  init(data) {
+    this.p1Char = data.p1 || ROSTER[0];
+    this.p2Char = data.p2 || ROSTER[1];
+    this.difficulty = data.difficulty || "Normal";
+  }
+
+  preload() {
+    // Load any character sprite sheets that haven't been loaded yet.
+    // Loaded as plain images first; we chroma-key the white background out in create().
+    for (const c of ROSTER) {
+      if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
+        this.load.image(c.id + "_raw", c.sprite.sheet);
+      }
+    }
+  }
+
+  // Convert near-white pixels to transparent and register a spritesheet texture
+  // under the character's id (e.g. "berserker"). One-time work per scene start.
+  buildSpriteSheets() {
+    for (const c of ROSTER) {
+      if (!c.sprite) continue;
+      if (this.textures.exists(c.id)) continue;
+      const rawKey = c.id + "_raw";
+      if (!this.textures.exists(rawKey)) continue;
+      const raw = this.textures.get(rawKey).getSourceImage();
+      const canvas = document.createElement("canvas");
+      canvas.width = raw.width;
+      canvas.height = raw.height;
+      const cctx = canvas.getContext("2d");
+      cctx.drawImage(raw, 0, 0);
+      const imgData = cctx.getImageData(0, 0, canvas.width, canvas.height);
+      const px = imgData.data;
+      // Chroma-key strategy: sample MANY pixels along the top row of the image
+      // (almost always above the characters' heads = pure background) and cluster
+      // them. The top 1-2 clusters are real background colors. This handles:
+      //   - single-color bg (most images)
+      //   - checkerboard "transparent" backgrounds (two-tone, Steve)
+      //   - and refuses to mistake corner-character-pixels for bg (Jimmy's KO
+      //     body in the bottom-right corner was being keyed as black before).
+      const W2 = canvas.width, H2 = canvas.height;
+      const SAMPLES = 32;
+      const distSq = (a, b) => {
+        const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+        return dr * dr + dg * dg + db * db;
+      };
+      const TH = 35 * 35;
+      const samples = [];
+      for (let i = 0; i < SAMPLES; i++) {
+        const x = Math.floor((W2 - 1) * i / (SAMPLES - 1));
+        const idx = x * 4;
+        samples.push([px[idx], px[idx + 1], px[idx + 2]]);
+      }
+      // Cluster samples by color proximity
+      const clusters = [];
+      for (const s of samples) {
+        let matched = false;
+        for (const c of clusters) {
+          if (distSq(c.center, s) < TH) { c.count++; matched = true; break; }
+        }
+        if (!matched) clusters.push({ center: s, count: 1 });
+      }
+      clusters.sort((a, b) => b.count - a.count);
+      // Keep only clusters that captured at least 3 of the 32 samples (≥10% of
+      // top edge). Cap at 2 bg colors so we never key too aggressively.
+      const bgs = clusters.filter(c => c.count >= 3).slice(0, 2).map(c => c.center);
+      if (bgs.length === 0) bgs.push(samples[0]);  // fallback
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i], g = px[i + 1], b = px[i + 2];
+        for (let k = 0; k < bgs.length; k++) {
+          const bg = bgs[k];
+          const dr = r - bg[0], dg = g - bg[1], db = b - bg[2];
+          if (dr * dr + dg * dg + db * db < TH) { px[i + 3] = 0; break; }
+        }
+      }
+      // Optional frame-edge trim: forces a transparent gutter on each frame slot
+      // to kill content that bleeds in from adjacent frames (Chad's racket
+      // overhead in frame 2 was showing up in front of frame 1's walking face).
+      if (c.sprite.frameTrim) {
+        const trim = c.sprite.frameTrim;
+        const fw = c.sprite.frameW;
+        const fh = c.sprite.frameH;
+        const nFrames = Math.floor(W2 / fw);
+        for (let fi = 0; fi < nFrames; fi++) {
+          const leftX = fi * fw;
+          const rightX = (fi + 1) * fw;
+          for (let dx = 0; dx < trim; dx++) {
+            for (let y = 0; y < fh; y++) {
+              px[(y * W2 + leftX + dx) * 4 + 3] = 0;
+              px[(y * W2 + rightX - 1 - dx) * 4 + 3] = 0;
+            }
+          }
+        }
+      }
+      cctx.putImageData(imgData, 0, 0);
+      this.textures.addSpriteSheet(c.id, canvas, {
+        frameWidth: c.sprite.frameW,
+        frameHeight: c.sprite.frameH,
+      });
+    }
+  }
+
+  create() {
+    this.buildSpriteSheets();
+    // Backdrop
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0x1a2a4a, 0x1a2a4a, 0x081828, 0x081828, 1);
+    bg.fillRect(0, 0, W, H);
+
+    // Distant mountains for depth
+    const mtn = this.add.graphics();
+    mtn.fillStyle(0x223759, 1);
+    mtn.fillTriangle(0, 600, 320, 280, 640, 600);
+    mtn.fillTriangle(420, 600, 800, 320, 1180, 600);
+    mtn.fillTriangle(900, 600, 1200, 360, 1500, 600);
+    mtn.fillStyle(0x12203a, 0.55);
+    mtn.fillRect(0, 600, W, 200);
+
+    // Stage: main floor + one floating platform
+    this.stage = this.physics.add.staticGroup();
+    const floor = this.add.rectangle(W / 2, GROUND_Y + 40, W - 100, 80, 0x432d20).setStrokeStyle(3, 0x6b4632);
+    this.physics.add.existing(floor, true);
+    this.stage.add(floor);
+
+    const platform = this.add.rectangle(W / 2, 440, 360, 24, 0x6b4632).setStrokeStyle(3, 0x9b6c4a);
+    this.physics.add.existing(platform, true);
+    this.stage.add(platform);
+
+    // Difficulty label (top center)
+    this.add.text(W / 2, 24, `CPU: ${this.difficulty.toUpperCase()}`, {
+      fontFamily: "Press Start 2P", fontSize: "14px",
+      color: this.difficulty === "Easy" ? "#7be680" :
+             this.difficulty === "Hard" ? "#ff7a7a" : "#ffe066"
+    }).setOrigin(0.5);
+
+    // Fighters
+    this.p1 = new Fighter(this, 360, 400, this.p1Char, "P1");
+    this.p2 = new Fighter(this, W - 360, 400, this.p2Char, "P2");
+    this.physics.add.collider(this.p1.sprite, this.stage);
+    this.physics.add.collider(this.p2.sprite, this.stage);
+
+    this.hud = new HUD(this, this.p1, this.p2);
+
+    // Inputs — P1 is human keyboard, P2 is CPU
+    const k = this.input.keyboard;
+    this.p1Keys = {
+      left: k.addKey("LEFT"), right: k.addKey("RIGHT"), up: k.addKey("UP"),
+      down: k.addKey("DOWN"), attack: k.addKey("Z"), special: k.addKey("X")
+    };
+    this.p1Controller = new HumanController(this.p1Keys);
+    this.p2Controller = new CpuController(this.p2, this.p1, DIFFICULTY[this.difficulty]);
+
+    this.gameOver = false;
+
+    SFX.play("matchStart");
+
+    k.on("keydown-ESC", () => this.scene.start("select"));
+    k.on("keydown-M", () => {
+      const muted = SFX.toggleMute();
+      const txt = this.add.text(W / 2, 60, muted ? "SOUND OFF" : "SOUND ON", {
+        fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffe066"
+      }).setOrigin(0.5);
+      this.tweens.add({ targets: txt, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
+    });
+  }
+
+  update(time, delta) {
+    const dt = delta / 1000;
+    if (!this.gameOver) {
+      const p1Input = this.p1Controller.poll(dt);
+      const p2Input = this.p2Controller.poll(dt);
+      this.p1.tick(dt, p1Input, this.p2);
+      this.p2.tick(dt, p2Input, this.p1);
+
+      if (this.p1.stocks <= 0 || this.p2.stocks <= 0) this.endMatch();
+    }
+    this.hud.tick();
+  }
+
+  endMatch() {
+    this.gameOver = true;
+    // Clean up in-flight projectiles — tickProjectiles stops running now, so
+    // anything mid-air would freeze over the overlay with its spin tween live.
+    for (const f of [this.p1, this.p2]) {
+      for (const p of f.projectiles) p.destroy();
+      f.projectiles.length = 0;
+    }
+    const draw = this.p1.stocks <= 0 && this.p2.stocks <= 0;
+    const winner = this.p1.stocks > 0 ? this.p1 : this.p2;
+    // Fanfare only when the human wins; CPU wins and draws stay quiet.
+    if (!draw && winner === this.p1) SFX.play("victory");
+    const cx = W / 2;
+    this.add.rectangle(cx, H / 2, W, 220, 0x000000, 0.7);
+    this.add.text(cx, H / 2 - 40, draw ? "DRAW!" : `${winner.character.name.toUpperCase()} WINS!`, {
+      fontFamily: "Press Start 2P", fontSize: "44px", color: "#ffe066"
+    }).setOrigin(0.5);
+    this.add.text(cx, H / 2 + 30, "ENTER = rematch    ESC = roster", {
+      fontFamily: "Press Start 2P", fontSize: "14px", color: "#ffffff"
+    }).setOrigin(0.5);
+    this.input.keyboard.once("keydown-ENTER", () =>
+      this.scene.restart({ p1: this.p1Char, p2: this.p2Char, difficulty: this.difficulty })
+    );
+  }
+}
+
+// ---- Controllers -------------------------------------------------------------
+
+// poll(dt) -> {left, right, up, down, jumpPressed, attackPressed}
+// jumpPressed / attackPressed are edge-triggered (one frame per "press").
+
+class HumanController {
+  constructor(keys) {
+    this.keys = keys;
+    // Require Z to be released once so the select-screen confirm press
+    // doesn't bleed in as an instant attack on frame 1.
+    this.attackArmed = false;
+  }
+  poll() {
+    if (!this.keys.attack.isDown) this.attackArmed = true;
+    const attackPressed = Phaser.Input.Keyboard.JustDown(this.keys.attack);
+    return {
+      left:  this.keys.left.isDown,
+      right: this.keys.right.isDown,
+      up:    this.keys.up.isDown,
+      down:  this.keys.down.isDown,
+      jumpPressed:    Phaser.Input.Keyboard.JustDown(this.keys.up),
+      attackPressed:  attackPressed && this.attackArmed,
+      specialPressed: Phaser.Input.Keyboard.JustDown(this.keys.special),
+      face: 0,
+    };
+  }
+}
+
+class CpuController {
+  constructor(self, opponent, cfg) {
+    this.self = self;
+    this.opponent = opponent;
+    this.cfg = cfg;
+    this.attackCooldown = 0;
+    this.jumpHeld = false;
+    this.attackHeld = false;
+    this.specialHeld = false;
+    this.nextWiggleAt = 0;
+    this.wiggleDir = 0;
+    this.reactionAt = 0;          // earliest time we can react to a new in-range opportunity
+  }
+
+  poll(dt) {
+    const t = this.self.scene.time.now / 1000;
+    const me = this.self.sprite;
+    const them = this.opponent.sprite;
+    if (this.self.stocks <= 0) return zeroInput();
+
+    const dx = them.x - me.x;
+    const dy = them.y - me.y;
+    const absDx = Math.abs(dx);
+    const myFacingTowardThem = Math.sign(dx) === this.self.facing;
+    const cfg = this.cfg;
+
+    let left = false, right = false;
+    let wantsJump = false, wantsAttack = false, wantsSpecial = false;
+
+    // Recover toward stage if at the edges
+    const offLeft = me.x < 120;
+    const offRight = me.x > W - 120;
+    if (offLeft)  right = true;
+    if (offRight) left  = true;
+
+    // Spacing target = our reach + difficulty buffer.
+    // Hard uses a small buffer so the bot crowds in tight where its swings reliably connect.
+    const ATTACK_RANGE = this.self.character.stats.attackRange + cfg.rangeBuffer;
+    if (!offLeft && !offRight) {
+      if (absDx > ATTACK_RANGE + 20) {
+        if (dx < 0) left = true; else right = true;
+      } else if (!cfg.crowd && absDx < ATTACK_RANGE - 28) {
+        // Easy/Normal back off when too close so they don't auto-trade.
+        // Hard does NOT back off — it stands in your face.
+        if (dx < 0) right = true; else left = true;
+      } else if (!cfg.crowd) {
+        // Idle wiggle for non-crowding difficulties (less predictable)
+        if (t > this.nextWiggleAt) {
+          this.wiggleDir = Math.random() < 0.5 ? -1 : 1;
+          this.nextWiggleAt = t + 0.4 + Math.random() * 0.6;
+        }
+        if (this.wiggleDir < 0) left = true; else right = true;
+      }
+      // crowd=true with no movement input is fine — just stand and swing.
+    }
+
+    // Jumping: chase up, recover from off-stage
+    const body = me.body;
+    const onGround = body.blocked.down || body.touching.down;
+    const opponentAbove = dy < -90 && absDx < 280;
+    if (opponentAbove && (onGround || (cfg.airChase && this.self.airJumps > 0 && body.velocity.y > -100))) {
+      wantsJump = true;
+    }
+    if (!onGround && me.y > 720 && this.self.airJumps > 0) {
+      wantsJump = true;
+    }
+
+    // Attack decision. Three modes blend in:
+    //   - normal: random chance to swing while in range
+    //   - combo:  opponent in hitstun → much higher chance + shorter cooldown
+    //   - whiff punish: opponent just attacked and is now in their cooldown → lunge in
+    const inRange = absDx < ATTACK_RANGE && Math.abs(dy) < 80;
+    const opponentStunned = t < (this.opponent.hitstunUntil || 0);
+    const opponentSwinging = t < (this.opponent.attackUntil || 0);
+    const opponentRecovering = !opponentSwinging && t < (this.opponent.attackCooldownUntil || 0);
+
+    // We force-face the opponent when in (or near) attack range so wiggling/standing
+    // never ends with us pointed the wrong way. Without this, the bot wastes 50%
+    // of its tick budget facing away from you.
+    const wantFace = (cfg.faceLock && absDx < ATTACK_RANGE + 60) ? Math.sign(dx) : 0;
+
+    let chance, cdMin, cdRng;
+    if (opponentStunned) {
+      chance = cfg.comboAttackChance; cdMin = cfg.comboCdMin; cdRng = cfg.comboCdRange;
+    } else if (opponentRecovering && cfg.whiffPunishChance > 0) {
+      chance = cfg.whiffPunishChance; cdMin = cfg.attackCdMin; cdRng = cfg.attackCdRange;
+    } else {
+      chance = cfg.attackChance; cdMin = cfg.attackCdMin; cdRng = cfg.attackCdRange;
+    }
+
+    if (inRange) {
+      if (this.reactionAt === 0) this.reactionAt = t + cfg.reactionDelay;
+    } else {
+      this.reactionAt = 0;
+    }
+
+    // Facing check uses the post-override facing — if we're force-facing, treat the
+    // attack as facing-correct.
+    const willFace = wantFace !== 0 ? wantFace : this.self.facing;
+    const willFaceTowardThem = Math.sign(dx) === willFace;
+
+    if (inRange && willFaceTowardThem && t >= this.attackCooldown
+        && t >= this.reactionAt && Math.random() < chance) {
+      wantsAttack = true;
+      this.attackCooldown = t + cdMin + Math.random() * cdRng;
+    }
+
+    // ---- Special usage --------------------------------------------------------
+    // The right range for each special depends on its type.
+    const sp = this.self.character.special;
+    const specialReady = sp && t >= this.self.specialCooldownUntil;
+    if (specialReady && !wantsAttack && !inHitstunSelf(this.self, t)) {
+      const willingness = cfg.attackChance;  // reuse difficulty's aggressiveness
+      if (sp.type === "lunge") {
+        // Use lunge when opponent is just outside basic-attack range — close gap fast
+        const lungeMinDx = ATTACK_RANGE + 30;
+        const lungeMaxDx = ATTACK_RANGE + 280;
+        if (absDx > lungeMinDx && absDx < lungeMaxDx
+            && Math.abs(dy) < 90 && willFaceTowardThem
+            && Math.random() < willingness * 0.4) {
+          wantsSpecial = true;
+        }
+      } else if (sp.type === "projectile") {
+        // Use projectiles at mid-to-long range, opponent roughly level
+        const projMinDx = 240, projMaxDx = 900;
+        if (absDx > projMinDx && absDx < projMaxDx
+            && Math.abs(dy) < 120 && willFaceTowardThem
+            && Math.random() < willingness * 0.5) {
+          wantsSpecial = true;
+        }
+      } else if (sp.type === "grab") {
+        // Grab when opponent is in tongue range and not already in basic attack range
+        const grabMinDx = ATTACK_RANGE + 10;
+        const grabMaxDx = sp.reach - 20;
+        if (absDx > grabMinDx && absDx < grabMaxDx
+            && Math.abs(dy) < 70 && willFaceTowardThem
+            && Math.random() < willingness * 0.5) {
+          wantsSpecial = true;
+        }
+      }
+    }
+
+    // Edge-detect for jump + attack + special
+    const jumpPressed = wantsJump && !this.jumpHeld;
+    const attackPressed = wantsAttack && !this.attackHeld;
+    const specialPressed = wantsSpecial && !this.specialHeld;
+    this.jumpHeld = wantsJump;
+    this.attackHeld = wantsAttack;
+    this.specialHeld = wantsSpecial;
+
+    return { left, right, up: wantsJump, down: false,
+             jumpPressed, attackPressed, specialPressed, face: wantFace };
+  }
+}
+
+function zeroInput() {
+  return { left: false, right: false, up: false, down: false,
+           jumpPressed: false, attackPressed: false, specialPressed: false, face: 0 };
+}
+
+function inHitstunSelf(fighter, t) {
+  return t < (fighter.hitstunUntil || 0);
+}
+
+// Flash a fighter for `ms` milliseconds. Uses setTint for sprites, setFillStyle
+// for placeholder rectangles. Restores original look after.
+function flashFighter(fighter, color, ms) {
+  const sprite = fighter.sprite;
+  if (fighter.useSprite) {
+    sprite.setTint(color);
+    fighter.scene.time.delayedCall(ms, () => { if (sprite) sprite.clearTint(); });
+  } else {
+    const orig = sprite.fillColor;
+    sprite.setFillStyle(color);
+    fighter.scene.time.delayedCall(ms, () => { if (sprite) sprite.setFillStyle(orig); });
+  }
+}
+
+// ---- Fighter -----------------------------------------------------------------
+
+class Fighter {
+  constructor(scene, x, y, character, label) {
+    this.scene = scene;
+    this.character = character;
+    this.stats = character.stats;
+    this.label = label;
+    this.damage = 0;
+    this.stocks = 3;
+    this.facing = label === "P1" ? 1 : -1;
+    this.airJumpsMax = character.stats.airJumpsMax || 1;  // multi-jumpers (Froggo, Jimmy) override
+    this.airJumps = this.airJumpsMax;
+    this.hitstunUntil = 0;
+    this.attackUntil = 0;
+    this.attackCooldownUntil = 0;
+    this.activeHitbox = null;
+    this.dashHit = false;         // set at startAttack: true if we were running fast at swing time
+    // Special-move state
+    this.specialCooldownUntil = 0;
+    this.activeSpecial = null;    // {type, endTime, hitbox?, consumed} while a lunge/grab is live
+    this.projectiles = [];        // Projectile entities currently in flight
+    this.pulledUntil = 0;         // when > now, our motion is overridden by a grab
+    // Previous-frame body bottom + x for the floor-tunneling safety net, so it
+    // only fires when we genuinely cross through the floor (not when re-entering
+    // the stage x-range from below after being knocked off).
+    this.prevBodyBottom = null;
+    this.prevX = x;
+
+    // Hit-detection size — kept independent of how the sprite is rendered so a
+    // visually-large sprite doesn't suddenly have a huge hurtbox.
+    this.hitW = 56;
+    this.hitH = 92;
+    const w = this.hitW, h = this.hitH;
+
+    if (character.sprite && scene.textures.exists(character.id)) {
+      // Real character art
+      this.sprite = scene.physics.add.sprite(x, y, character.id, 0);
+      const displayH = character.sprite.displayH || 130;
+      const aspect = character.sprite.frameW / character.sprite.frameH;
+      this.sprite.setDisplaySize(displayH * aspect, displayH);
+      this.useSprite = true;
+      this.eye = null;
+    } else {
+      // Placeholder rectangle (other characters until they get art)
+      this.sprite = scene.add.rectangle(x, y, w, h, character.color).setStrokeStyle(3, character.accent);
+      scene.physics.add.existing(this.sprite);
+      this.useSprite = false;
+      this.eye = scene.add.rectangle(x, y - 16, 14, 6, 0xffffff);
+    }
+
+    const body = this.sprite.body;
+    if (this.useSprite) {
+      // Arcade body sizes/offsets are in SOURCE-image pixels, not display pixels.
+      // So a 56x92 display-pixel body needs to be set in source pixels:
+      //   bodySrcW = displayBodyW / spriteScale
+      const sp = character.sprite;
+      const spriteScale = (sp.displayH || 130) / sp.frameH;
+      const bodySrcW = w / spriteScale;
+      const bodySrcH = h / spriteScale;
+      // Position the body so its bottom sits at the character's feet line.
+      // `feetY` is the fractional Y inside the frame (0..1) where the character's
+      // feet are; defaults to 0.96 (near bottom).
+      const feetFrac = sp.feetY != null ? sp.feetY : 0.96;
+      const offsetX = (sp.frameW - bodySrcW) / 2;
+      const offsetY = sp.frameH * feetFrac - bodySrcH;
+      body.setSize(bodySrcW, bodySrcH, false);
+      body.setOffset(offsetX, offsetY);
+    } else {
+      body.setSize(w, h, true);
+    }
+    body.setMaxVelocity(900, 1500);
+    body.setGravityY(GRAVITY - scene.physics.world.gravity.y);
+    body.setCollideWorldBounds(false);
+
+    this.tag = scene.add.text(x, y - 70, label, {
+      fontFamily: "Press Start 2P", fontSize: "14px", color: "#ffffff"
+    }).setOrigin(0.5);
+  }
+
+  tick(dt, input, opponent) {
+    const t = this.scene.time.now / 1000;
+    const body = this.sprite.body;
+    const onGround = body.blocked.down || body.touching.down;
+    const inHitstun = t < this.hitstunUntil;
+    const attacking = t < this.attackUntil;
+    const inSpecial = this.activeSpecial && t < this.activeSpecial.endTime;
+    const s = this.stats;
+
+    if (onGround) this.airJumps = this.airJumpsMax;
+
+    // Drive active specials (lunge/grab) and in-flight projectiles regardless of input
+    if (inSpecial) this.tickActiveSpecial(t, opponent);
+    else if (this.activeSpecial) this.endActiveSpecial();
+    this.tickProjectiles(dt, opponent);
+
+    // (Grab pull is driven by a tween started in applyGrab; hitstun pins input here.)
+    if (!inHitstun && !inSpecial) {
+      let vx = 0;
+      if (input.left)  { vx -= s.walkSpeed; this.facing = -1; }
+      if (input.right) { vx += s.walkSpeed; this.facing = 1; }
+      if (input.face === -1 || input.face === 1) this.facing = input.face;
+      if (attacking) vx *= 0.3;
+      body.setVelocityX(vx);
+
+      if (input.jumpPressed) {
+        if (onGround) {
+          body.setVelocityY(s.jumpVel);
+          if (this.label === "P1") SFX.play("jump");
+        } else if (this.airJumps > 0) {
+          body.setVelocityY(s.doubleJumpVel);
+          this.airJumps -= 1;
+          if (this.label === "P1") SFX.play("doubleJump");
+        }
+      }
+
+      if (input.attackPressed && t >= this.attackCooldownUntil) {
+        this.startAttack(opponent);
+        SFX.play("attack");
+      }
+      if (input.specialPressed && t >= this.specialCooldownUntil) {
+        this.startSpecial(opponent);
+      }
+    }
+
+    // Hitbox lifetime + hit detection
+    if (this.activeHitbox && t >= this.activeHitbox.expires) {
+      this.activeHitbox.gfx.destroy();
+      this.activeHitbox = null;
+    }
+    if (this.activeHitbox && !this.activeHitbox.consumed) {
+      const hb = this.activeHitbox;
+      hb.gfx.x = this.sprite.x + this.facing * hb.offset;
+      hb.gfx.y = this.sprite.y;
+      const dx = Math.abs(hb.gfx.x - opponent.sprite.x);
+      const dy = Math.abs(hb.gfx.y - opponent.sprite.y);
+      if (dx < (hb.gfx.width / 2 + opponent.hitW / 2) &&
+          dy < (hb.gfx.height / 2 + opponent.hitH / 2)) {
+        this.applyHit(opponent);
+        hb.consumed = true;
+      }
+    }
+
+    // Update sprite frame + facing flip for animated characters
+    if (this.useSprite) {
+      let frame = 0;  // idle
+      if (inHitstun)       frame = 4;
+      else if (attacking || inSpecial) frame = 3;
+      else if (!onGround)  frame = 2;
+      else if (Math.abs(body.velocity.x) > 50) frame = 1;
+      this.sprite.setFrame(frame);
+      this.sprite.setFlipX(this.facing === -1);
+    } else {
+      this.eye.x = this.sprite.x + this.facing * 10;
+      this.eye.y = this.sprite.y - 16;
+    }
+    this.tag.x = this.sprite.x;
+    this.tag.y = this.sprite.y - 70;
+
+    // Safety net: if the body is over the floor footprint but the body bottom
+    // has somehow dropped below the floor surface (rare physics edge case with
+    // sprite bodies + tween-driven position resets), snap them back up. Without
+    // this we occasionally fall straight through the stage mid-match.
+    // Only fire when we genuinely CROSSED the floor this frame (last frame we
+    // were above it while over the stage) — otherwise a fighter knocked off the
+    // edge could drift back under the stage and get a free teleport recovery.
+    if (body && this.sprite.x > 50 && this.sprite.x < W - 50) {
+      const floorTop = GROUND_Y;
+      const bottomNow = body.y + body.height;
+      const crossedFloor = this.prevBodyBottom != null &&
+        this.prevBodyBottom <= floorTop + 6 &&
+        this.prevX > 50 && this.prevX < W - 50;
+      if (crossedFloor && bottomNow > floorTop + 6 && this.sprite.y < DEATH_BOTTOM - 80) {
+        this.sprite.y -= (bottomNow - floorTop);
+        body.setVelocityY(0);
+      }
+    }
+    this.prevBodyBottom = body ? body.y + body.height : null;
+    this.prevX = this.sprite.x;
+
+    if (this.sprite.x < DEATH_LEFT || this.sprite.x > DEATH_RIGHT || this.sprite.y > DEATH_BOTTOM) {
+      this.loseStock();
+    }
+  }
+
+  startAttack(opponent) {
+    const t = this.scene.time.now / 1000;
+    const s = this.stats;
+    this.attackUntil = t + ATTACK_DURATION;
+    this.attackCooldownUntil = t + s.attackCooldown;
+    // Dash-attack bonus: if we were running near top speed when we swing, the
+    // hit deals +25% damage and knockback. This is the main reason walkSpeed matters.
+    this.dashHit = Math.abs(this.sprite.body.velocity.x) > s.walkSpeed * 0.6;
+
+    // Hitbox sized from the character's reach
+    const hbW = s.attackRange, hbH = 50;
+    const offset = hbW / 2 + 18;
+    const hbX = this.sprite.x + this.facing * offset;
+    const hbY = this.sprite.y;
+    const gfx = this.scene.add.rectangle(hbX, hbY, hbW, hbH, 0xffeebb, 0.55).setStrokeStyle(2, 0xffaa33);
+    if (this.useSprite) gfx.setVisible(false);  // sprite has its own swing pose
+    this.activeHitbox = { gfx, expires: t + ATTACK_DURATION, consumed: false, offset };
+
+    // Brief squash recoil — only for rectangle fighters. For sprites, the
+    // absolute scaleX/Y values would multiply the source body size and punch
+    // the character through the floor.
+    if (!this.useSprite) {
+      this.scene.tweens.add({
+        targets: this.sprite, scaleX: 1.15, scaleY: 0.92, duration: 60, yoyo: true
+      });
+    }
+  }
+
+  // ---- Specials --------------------------------------------------------------
+
+  startSpecial(opponent) {
+    const t = this.scene.time.now / 1000;
+    const sp = this.character.special;
+    if (!sp) return;
+    this.specialCooldownUntil = t + sp.cooldown;
+
+    if (sp.type === "lunge") {
+      SFX.play("lunge");
+      // Dash forward with an active hitbox attached to our body
+      const w = sp.dashSpeed;
+      this.sprite.body.setVelocity(this.facing * w, -150);
+      const hbW = this.stats.attackRange + 30, hbH = 64;
+      const offset = hbW / 2 + 16;
+      // Spawn at the real initial position so point-blank hits land on frame 1
+      // (tickActiveSpecial only repositions it from the NEXT frame onward).
+      const gfx = this.scene.add.rectangle(
+        this.sprite.x + this.facing * offset, this.sprite.y, hbW, hbH, 0xff8844, 0.65)
+        .setStrokeStyle(2, 0xffcc55);
+      if (this.useSprite) gfx.setVisible(false);
+      this.activeSpecial = {
+        type: "lunge",
+        endTime: t + sp.duration,
+        hitbox: { gfx, offset, w: hbW, h: hbH },
+        consumed: false,
+        sp,
+      };
+      // Recoil cue
+      if (!this.useSprite) {
+        this.scene.tweens.add({ targets: this.sprite, scaleX: 1.25, scaleY: 0.85, duration: 80, yoyo: true });
+      }
+    }
+    else if (sp.type === "projectile") {
+      SFX.play("projectile");
+      const px = this.sprite.x + this.facing * 50;
+      const py = this.sprite.y - 4;
+      const vx = this.facing * sp.projectileSpeed;
+      const vy = sp.gravityY > 0 ? -60 : 0;
+      const proj = new Projectile(this.scene, this, px, py, vx, vy, sp);
+      this.projectiles.push(proj);
+      // Small forward step + recoil cue
+      this.sprite.body.setVelocityX(this.facing * 60);
+      if (!this.useSprite) {
+        this.scene.tweens.add({ targets: this.sprite, scaleX: 0.9, scaleY: 1.1, duration: 70, yoyo: true });
+      }
+    }
+    else if (sp.type === "grab") {
+      SFX.play("grab");
+      // Long thin reach; if it overlaps opponent during extendTime, snap them in
+      const hbW = sp.reach, hbH = 22;
+      const offset = hbW / 2 + 12;
+      // Spawn at the real initial position so point-blank grabs land on frame 1.
+      const gfx = this.scene.add.rectangle(
+        this.sprite.x + this.facing * offset, this.sprite.y, hbW, hbH, 0xff66aa, 0.6)
+        .setStrokeStyle(2, 0xff99cc);
+      if (this.useSprite) gfx.setVisible(false);
+      this.activeSpecial = {
+        type: "grab",
+        endTime: t + sp.extendTime,
+        hitbox: { gfx, offset, w: hbW, h: hbH },
+        consumed: false,
+        sp,
+      };
+      // Anchor in place while extending
+      this.sprite.body.setVelocityX(0);
+    }
+  }
+
+  tickActiveSpecial(t, opponent) {
+    const a = this.activeSpecial;
+    if (!a) return;
+    if (a.type === "lunge" || a.type === "grab") {
+      const hb = a.hitbox;
+      hb.gfx.x = this.sprite.x + this.facing * hb.offset;
+      hb.gfx.y = this.sprite.y;
+      if (!a.consumed) {
+        const dx = Math.abs(hb.gfx.x - opponent.sprite.x);
+        const dy = Math.abs(hb.gfx.y - opponent.sprite.y);
+        if (dx < (hb.w / 2 + opponent.hitW / 2) &&
+            dy < (hb.h / 2 + opponent.hitH / 2)) {
+          if (a.type === "lunge") {
+            this.applySpecialHit(opponent, a.sp);
+          } else {
+            this.applyGrab(opponent, a.sp);
+          }
+          a.consumed = true;
+        }
+      }
+    }
+  }
+
+  endActiveSpecial() {
+    if (this.activeSpecial && this.activeSpecial.hitbox) {
+      this.activeSpecial.hitbox.gfx.destroy();
+    }
+    this.activeSpecial = null;
+  }
+
+  tickProjectiles(dt, opponent) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      if (p.tick(dt, opponent)) {
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  applySpecialHit(opponent, sp) {
+    const t = this.scene.time.now / 1000;
+    opponent.damage += sp.dmg;
+    const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
+    const rawKb = sp.kbBase + opponent.damage * ATTACK_KB_SCALE;
+    const kb = rawKb / opponent.stats.weight;
+    opponent.sprite.body.setVelocity(dir * kb, -kb * 0.6);
+    opponent.hitstunUntil = t + (HITSTUN_BASE + opponent.damage * 0.003) / opponent.stats.weight;
+    opponent.airJumps = Math.max(opponent.airJumps, 1);
+    flashFighter(opponent, 0xffffff, 80);
+    this.scene.cameras.main.shake(160, 0.007);
+    SFX.play("hit");
+  }
+
+  applyGrab(opponent, sp) {
+    const t = this.scene.time.now / 1000;
+    opponent.damage += sp.dmg;
+    // Pin opponent in hitstun through the pull window + a beat after
+    opponent.hitstunUntil = Math.max(opponent.hitstunUntil, t + sp.pullTime + 0.20);
+
+    // Snap them in front of us — the tongue is a teleport-grab, not a tow rope.
+    // Per-frame velocity pulling was getting clamped by maxVelocity and felt invisible.
+    // Clamp to stay on the floor (floor spans roughly x=50..W-50) so grabs near
+    // an edge don't deposit the victim off-stage.
+    const FLOOR_MARGIN = 90;
+    let destX = this.sprite.x + this.facing * 50;
+    destX = Math.max(FLOOR_MARGIN, Math.min(W - FLOOR_MARGIN, destX));
+    const destY = this.sprite.y;
+    this.scene.tweens.add({
+      targets: opponent.sprite,
+      x: destX, y: destY,
+      duration: Math.max(80, sp.pullTime * 1000 - 30),
+      ease: "Quad.easeIn",
+      onUpdate: () => {
+        // Keep the arcade body in sync with the visual sprite during the tween
+        if (opponent.sprite.body) opponent.sprite.body.reset(opponent.sprite.x, opponent.sprite.y);
+      },
+    });
+
+    // Hit flash on victim
+    flashFighter(opponent, 0xff99cc, 120);
+    SFX.play("grabHit");
+
+    // Visual: shrink the grab hitbox to "retract"
+    if (this.activeSpecial && this.activeSpecial.hitbox) {
+      this.scene.tweens.add({
+        targets: this.activeSpecial.hitbox.gfx,
+        scaleX: 0.1, duration: sp.pullTime * 1000, ease: "Quad.easeIn",
+      });
+    }
+
+    // After the pull resolves, pop them up + away so they don't sit inside us
+    this.scene.time.delayedCall(sp.pullTime * 1000, () => {
+      if (!opponent.sprite || !opponent.sprite.body) return;
+      const dir = this.facing;
+      const kb = (sp.kbBase + opponent.damage * ATTACK_KB_SCALE) / opponent.stats.weight;
+      opponent.sprite.body.setVelocity(dir * kb * 0.55, -kb * 0.5);
+    });
+
+    this.scene.cameras.main.shake(120, 0.005);
+  }
+
+  // ---- Standard light-attack hit --------------------------------------------
+
+  applyHit(opponent) {
+    const s = this.stats;
+    const dashMult = this.dashHit ? 1.25 : 1.0;
+    const dmg = s.attackDmg * dashMult;
+    opponent.damage += dmg;
+    const t = this.scene.time.now / 1000;
+    const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
+    // Knockback scales with victim's accumulated damage, divided by victim's weight.
+    const rawKb = (s.attackKbBase + opponent.damage * ATTACK_KB_SCALE) * dashMult;
+    const kb = rawKb / opponent.stats.weight;
+    opponent.sprite.body.setVelocity(dir * kb, -kb * 0.55);
+    opponent.hitstunUntil = t + (HITSTUN_BASE + opponent.damage * 0.003) / opponent.stats.weight;
+    opponent.airJumps = Math.max(opponent.airJumps, 1);
+
+    flashFighter(opponent, 0xffffff, 80);
+    this.scene.cameras.main.shake(120, 0.005);
+    SFX.play(this.dashHit ? "dashHit" : "hit");
+
+    // Visual feedback for dash hits — make the bonus visible to the player
+    if (this.dashHit) {
+      const txt = this.scene.add.text(this.sprite.x, this.sprite.y - 70, "DASH!", {
+        fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffe066",
+        stroke: "#000000", strokeThickness: 4
+      }).setOrigin(0.5);
+      this.scene.tweens.add({
+        targets: txt, y: txt.y - 36, alpha: 0, duration: 600,
+        onComplete: () => txt.destroy()
+      });
+    }
+  }
+
+  loseStock() {
+    this.stocks -= 1;
+    this.damage = 0;
+    SFX.play("ko");
+    if (this.stocks > 0) {
+      this.sprite.body.setVelocity(0, 0);
+      this.sprite.x = this.label === "P1" ? 360 : W - 360;
+      this.sprite.y = 80;
+      this.hitstunUntil = 0;
+      this.airJumps = this.airJumpsMax;
+      this.prevBodyBottom = null;
+      this.prevX = this.sprite.x;
+    } else {
+      this.sprite.body.setVelocity(0, 0);
+      this.sprite.body.setEnable(false);
+      // Linger on the KO frame briefly before hiding (animated sprites only)
+      if (this.useSprite) this.sprite.setFrame(5);
+      this.scene.time.delayedCall(400, () => {
+        if (this.sprite) this.sprite.setVisible(false);
+        if (this.eye) this.eye.setVisible(false);
+        if (this.tag) this.tag.setVisible(false);
+      });
+    }
+  }
+}
+
+// ---- Projectile --------------------------------------------------------------
+
+class Projectile {
+  constructor(scene, owner, x, y, vx, vy, sp) {
+    this.scene = scene;
+    this.owner = owner;
+    this.sp = sp;
+    this.vx = vx;
+    this.vy = vy;
+    this.dead = false;
+    this.gfx = scene.add.rectangle(x, y, sp.projW, sp.projH, sp.projColor, 1)
+      .setStrokeStyle(2, 0x222222);
+    if (sp.spin) this.spinTween = scene.tweens.add({
+      targets: this.gfx, angle: 360, duration: 400, repeat: -1
+    });
+  }
+
+  // Returns true when the projectile is done and should be removed.
+  tick(dt, opponent) {
+    if (this.dead) return true;
+    this.vy += (this.sp.gravityY || 0) * dt;
+    this.gfx.x += this.vx * dt;
+    this.gfx.y += this.vy * dt;
+
+    // Hit test against the opponent
+    const dx = Math.abs(this.gfx.x - opponent.sprite.x);
+    const dy = Math.abs(this.gfx.y - opponent.sprite.y);
+    if (dx < (this.gfx.width / 2 + opponent.hitW / 2) &&
+        dy < (this.gfx.height / 2 + opponent.hitH / 2)) {
+      this.owner.applySpecialHit(opponent, this.sp);
+      this.destroy();
+      return true;
+    }
+
+    // Out of bounds
+    if (this.gfx.x < -100 || this.gfx.x > W + 100 || this.gfx.y > DEATH_BOTTOM) {
+      this.destroy();
+      return true;
+    }
+    return false;
+  }
+
+  destroy() {
+    this.dead = true;
+    if (this.spinTween) this.spinTween.stop();
+    this.gfx.destroy();
+  }
+}
+
+// ---- HUD ---------------------------------------------------------------------
+
+class HUD {
+  constructor(scene, p1, p2) {
+    this.scene = scene;
+    this.p1 = p1; this.p2 = p2;
+    this.p1Card = this.makeCard(140, H - 90, p1);
+    this.p2Card = this.makeCard(W - 140, H - 90, p2);
+  }
+
+  makeCard(x, y, fighter) {
+    const bg = this.scene.add.rectangle(x, y, 200, 110, 0x000000, 0.55).setStrokeStyle(3, fighter.character.accent);
+    const swatch = this.scene.add.rectangle(x - 75, y - 22, 36, 36, fighter.character.color).setStrokeStyle(2, 0xffffff);
+    const name = this.scene.add.text(x - 50, y - 38, fighter.character.name, {
+      fontFamily: "Press Start 2P", fontSize: "12px", color: "#ffffff"
+    }).setOrigin(0, 0);
+    const dmg = this.scene.add.text(x - 50, y - 18, "0%", {
+      fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffe066"
+    }).setOrigin(0, 0);
+    const stocks = this.scene.add.text(x + 80, y + 30, "", {
+      fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffffff"
+    }).setOrigin(1, 0.5);
+    return { bg, swatch, name, dmg, stocks };
+  }
+
+  tick() {
+    this.p1Card.dmg.setText(Math.floor(this.p1.damage) + "%");
+    this.p2Card.dmg.setText(Math.floor(this.p2.damage) + "%");
+    this.p1Card.dmg.setColor(this.dmgColor(this.p1.damage));
+    this.p2Card.dmg.setColor(this.dmgColor(this.p2.damage));
+    this.p1Card.stocks.setText("x" + this.p1.stocks);
+    this.p2Card.stocks.setText("x" + this.p2.stocks);
+  }
+
+  dmgColor(d) {
+    if (d > 120) return "#ff4040";
+    if (d > 70)  return "#ff9933";
+    if (d > 30)  return "#ffe066";
+    return "#ffffff";
+  }
+}
+
+// ---- Boot --------------------------------------------------------------------
+
+new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: "game",
+  width: W,
+  height: H,
+  backgroundColor: "#000",
+  physics: {
+    default: "arcade",
+    arcade: { gravity: { y: GRAVITY }, debug: false }
+  },
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  },
+  scene: [TitleScene, SelectScene, BattleScene],
+});
+</script>
+</body>
+</html>

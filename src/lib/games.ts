@@ -51,4 +51,17 @@ export const games: Game[] = [
     cartridgeLabelColor: "#ffe066",
     status: "available",
   },
+  {
+    id: "x-bros",
+    title: "X-Bros",
+    description:
+      "ImagineX Smash! A 2D platform fighter starring heroes from across the ImagineX universe — knock your friends off the stage to win.",
+    genre: "Fighter / Party",
+    cover: "/games/x-bros/cover.png",
+    url: "/games/x-bros/index.html",
+    color: "#9ad6ff",
+    cartridgeColor: "#10254a",
+    cartridgeLabelColor: "#ffe066",
+    status: "coming_soon",
+  },
 ];
