@@ -2981,9 +2981,9 @@ function updateSlithertron(dt, now) {
   // Head collision — vulnerable ONLY to a real attack: a stomp from above or
   // a roll. Passive contact (the head diving onto an idle Froggo) hurts Froggo
   // instead, so you can't just stand still and let the boss damage itself.
+  const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
   const headHX = boss.x - 20, headHY = boss.y - 14;
   if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, headHX, headHY, 40, 28)) {
-    const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
     const attacking = froggoAbove || froggo.rolling;
     if (attacking) {
       if (now - boss.hitFlashUntil >= 600) {
@@ -3026,7 +3026,7 @@ function updateSlithertron(dt, now) {
     if (!seg) continue;
     const bx = seg.x - 14, by = seg.y - 12;
     if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, bx, by, 28, 24)) {
-      if (froggo.rolling) continue;  // rolling = immune to body chain
+      if (froggo.rolling || froggoAbove) continue;  // rolling OR stomping the head = immune to body chain
       if (now > froggo.hurtUntil) {
         if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
         scatterDroplets(dropletScore);
