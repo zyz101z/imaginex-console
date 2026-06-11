@@ -2978,28 +2978,42 @@ function updateSlithertron(dt, now) {
   boss.trail.unshift({ x: boss.x, y: boss.y });
   if (boss.trail.length > 80) boss.trail.length = 80;
 
-  // Head collision (vulnerable)
+  // Head collision — vulnerable ONLY to a real attack: a stomp from above or
+  // a roll. Passive contact (the head diving onto an idle Froggo) hurts Froggo
+  // instead, so you can't just stand still and let the boss damage itself.
   const headHX = boss.x - 20, headHY = boss.y - 14;
   if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, headHX, headHY, 40, 28)) {
-    if (now - boss.hitFlashUntil >= 600) {
-      boss.hp -= 1;
-      boss.hitFlashUntil = now + 600;
-      const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
-      if (froggoAbove) {
-        froggo.vy = -520;
-      } else {
-        froggo.vx = (froggo.x < boss.x ? -1 : 1) * 340;
-        froggo.vy = -260;
+    const froggoAbove = (froggo.y + froggo.h) < boss.y + 6;
+    const attacking = froggoAbove || froggo.rolling;
+    if (attacking) {
+      if (now - boss.hitFlashUntil >= 600) {
+        boss.hp -= 1;
+        boss.hitFlashUntil = now + 600;
+        if (froggoAbove) {
+          froggo.vy = -520;
+        } else {
+          froggo.vx = (froggo.x < boss.x ? -1 : 1) * 340;
+          froggo.vy = -260;
+        }
+        sfxBugbotSquish();
+        if (boss.hp <= 0) {
+          boss.defeated = true;
+          onActComplete();
+          return;
+        }
+        boss.state = 'return';
+        boss.stateAt = now;
+        boss.vx = boss.vy = 0;
       }
-      sfxBugbotSquish();
-      if (boss.hp <= 0) {
-        boss.defeated = true;
-        onActComplete();
-        return;
-      }
-      boss.state = 'return';
-      boss.stateAt = now;
-      boss.vx = boss.vy = 0;
+    } else if (now > froggo.hurtUntil) {
+      // Head struck Froggo while he wasn't attacking → Froggo takes the hit.
+      if (dropletScore <= 0) { sfxHurt(); gameOver(); return; }
+      scatterDroplets(dropletScore);
+      dropletScore = 0;
+      froggo.hurtUntil = now + 1200;
+      froggo.vx = -froggo.facing * 280;
+      froggo.vy = -320;
+      sfxHurt();
     }
   }
 
