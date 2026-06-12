@@ -97,12 +97,17 @@ function setupPanelToggle() {
   });
 }
 
-function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer" } = {}) {
-  const players = Array.from({ length: playerCount }, (_, i) => ({
-    name: i < humanCount ? `You${humanCount > 1 ? " " + (i + 1) : ""}` : `CPU ${i - humanCount + 1}`,
-    isAI: i >= humanCount,
-    difficulty,
-  }));
+function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [] } = {}) {
+  const players = Array.from({ length: playerCount }, (_, i) => {
+    let name;
+    if (i < humanCount) {
+      const entered = names[i] && String(names[i]).trim();
+      name = entered || (humanCount > 1 ? `Player ${i + 1}` : "You");
+    } else {
+      name = `CPU ${i - humanCount + 1}`;
+    }
+    return { name, isAI: i >= humanCount, difficulty };
+  });
   state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players });
   autoDistribute(state);
   winReported = false;

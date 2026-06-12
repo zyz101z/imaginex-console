@@ -464,11 +464,13 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     let playerCount = 4;
     let humanCount = 1;
     let difficulty = "officer";
+    const names = ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"];
 
     const card = el("div", { class: "ds-card" });
 
     const playersField = el("div", { class: "ds-field" });
     const humansField = el("div", { class: "ds-field" });
+    const namesField = el("div", { class: "ds-field" });
     const diffField = el("div", { class: "ds-field" });
 
     function renderPlayers() {
@@ -481,6 +483,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           if (humanCount > playerCount) humanCount = playerCount;
           renderPlayers();
           renderHumans();
+          renderNames();
         })
       );
     }
@@ -498,6 +501,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           if (n > playerCount) return;
           humanCount = n;
           renderHumans();
+          renderNames();
         })
       );
       humansField.appendChild(
@@ -506,6 +510,28 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           text: aiCount === 0 ? "All players are human." : `${aiCount} AI opponent${aiCount === 1 ? "" : "s"}.`,
         })
       );
+    }
+
+    // Name inputs — only shown when 2+ humans share the device (hotseat).
+    function renderNames() {
+      namesField.innerHTML = "";
+      if (humanCount < 2) return;
+      namesField.appendChild(el("span", { class: "ds-label", text: "Player names" }));
+      const wrap = el("div", { style: "display:flex;flex-direction:column;gap:8px;" });
+      for (let i = 0; i < humanCount; i++) {
+        const input = el("input", {
+          type: "text",
+          maxlength: "14",
+          value: names[i] || "Player " + (i + 1),
+          placeholder: "Player " + (i + 1),
+          style:
+            "width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);" +
+            "background:var(--bg);color:var(--ink);font:inherit;",
+          onInput: (e) => { names[i] = e.target.value; },
+        });
+        wrap.appendChild(input);
+      }
+      namesField.appendChild(wrap);
     }
 
     function renderDifficulty() {
@@ -525,13 +551,16 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
 
     renderPlayers();
     renderHumans();
+    renderNames();
     renderDifficulty();
 
     const startBtn = el("button", {
       type: "button",
       class: "ds-primary",
       text: "Start Game",
-      onClick: () => onNewGame && onNewGame({ playerCount, humanCount, difficulty }),
+      onClick: () =>
+        onNewGame &&
+        onNewGame({ playerCount, humanCount, difficulty, names: names.slice(0, humanCount) }),
     });
     const helpBtn = el("button", {
       type: "button",
@@ -547,6 +576,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(el("p", { class: "ds-tagline", text: "One nation, many banners. Conquer all 49 states." }));
     card.appendChild(playersField);
     card.appendChild(humansField);
+    card.appendChild(namesField);
     card.appendChild(diffField);
     card.appendChild(el("div", { class: "ds-actions" }, [startBtn, helpBtn]));
 
