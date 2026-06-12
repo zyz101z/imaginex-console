@@ -568,6 +568,7 @@ function GamePlayer({
 const GAME_SCORE_LABELS: Record<string, string> = {
   bloot: "Wins",
   "tennis-world": "REP",
+  "divided-states": "Wins",
 };
 
 function LeaderboardView() {

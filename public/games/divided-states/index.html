@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Divided States</title>
+  <link rel="stylesheet" href="src/ui/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="hud-top"></header>
+    <div id="stage">
+      <main id="board">
+        <svg id="map-svg" viewBox="0 0 1100 740" preserveAspectRatio="xMidYMid meet"></svg>
+        <div id="fx-layer"></div>
+      </main>
+      <aside id="side">
+        <div id="hud-side"></div>
+        <div id="log-root"></div>
+      </aside>
+    </div>
+  </div>
+  <div id="menu-root"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

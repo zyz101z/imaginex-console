@@ -52,6 +52,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "divided-states",
+    title: "Divided States",
+    description:
+      "A Risk-style war of conquest across the real US map. Reinforce, attack with dice, and fortify your way to controlling all 49 states. Battle 2-6 commanders, human or AI.",
+    genre: "Strategy / War",
+    cover: "/games/divided-states/cover.png",
+    url: "/games/divided-states/index.html",
+    color: "#6aa9ff",
+    cartridgeColor: "#16233a",
+    cartridgeLabelColor: "#8af3ff",
+    status: "available",
+  },
+  {
     id: "x-bros",
     title: "X-Bros",
     description:
