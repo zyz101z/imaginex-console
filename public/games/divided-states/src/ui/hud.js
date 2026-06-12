@@ -1,7 +1,8 @@
 // hud.js — top bar + side panel for Divided States.
 // Read-only on GameState. Calls back via handlers. No external deps.
-import { currentPlayerId, playerById, statesOf } from "../engine/gamestate.js";
+import { currentPlayerId, playerById, statesOf, sameTeam } from "../engine/gamestate.js";
 import { findSet } from "../engine/cards.js";
+import { regionStatus, regionBonus } from "../engine/rules.js";
 import { REGIONS } from "../data/regions.js";
 
 const STYLE_ID = "hud-style";
@@ -107,15 +108,36 @@ const HUD_CSS = `
 #hud-side .hud-region .r-prog { font-variant-numeric: tabular-nums; color: var(--ink-dim);
   font-weight: 700; font-size: 11px; flex: 0 0 auto; }
 #hud-side .hud-region.complete .r-prog { color: var(--accent); }
-#hud-side .hud-region .r-bar { height: 4px; border-radius: 3px; background: rgba(0,0,0,0.35);
-  overflow: hidden; }
-#hud-side .hud-region .r-fill { height: 100%; width: 0%; border-radius: 3px;
+#hud-side .hud-region .r-bar { position: relative; height: 4px; border-radius: 3px;
+  background: rgba(0,0,0,0.35); overflow: hidden; }
+/* Backdrop fill = whole team's extent (lighter accent). In FFA this is fully covered
+   by .r-fill-mine, so the bar looks identical to the classic solid fill. */
+#hud-side .hud-region .r-fill { position: absolute; top: 0; left: 0; height: 100%;
+  width: 0%; border-radius: 3px;
   background: linear-gradient(90deg, var(--accent-2), var(--accent));
   transition: width 0.25s ease; }
-#hud-side .hud-region.complete .r-fill { box-shadow: 0 0 8px var(--accent-line); }
+/* Team-mode backdrop tint (only when the row carries .teams). */
+#hud-side .hud-region.teams .r-fill { background: var(--accent-soft);
+  border: 1px solid var(--accent-line); }
+/* "Mine" fill stacked on top = the current player's own extent (solid accent). */
+#hud-side .hud-region .r-fill-mine { position: absolute; top: 0; left: 0; height: 100%;
+  width: 0%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.25s ease; }
+#hud-side .hud-region.complete .r-fill,
+#hud-side .hud-region.complete .r-fill-mine { box-shadow: 0 0 8px var(--accent-line); }
 #hud-side .hud-region .r-bonus { flex: 0 0 auto; color: var(--good); font-weight: 800;
-  font-size: 12px; font-variant-numeric: tabular-nums; min-width: 2.4em; text-align: right; }
+  font-size: 12px; font-variant-numeric: tabular-nums; min-width: 2.4em; text-align: right;
+  white-space: nowrap; }
 #hud-side .hud-region:not(.complete) .r-bonus { color: var(--ink-dim); }
+#hud-side .hud-region .r-bonus .rb-team { color: var(--ink-dim); font-weight: 700;
+  font-size: 11px; }
+/* Contributor breakdown sub-line (team mode + complete only). */
+#hud-side .hud-region .r-share { display: none; margin-top: 4px; font-size: 10px;
+  line-height: 1.4; color: var(--ink-dim); font-weight: 700; }
+#hud-side .hud-region .r-share .rs-who { font-weight: 800; }
+#hud-side .hud-region .r-share .rs-sep { color: var(--line); margin: 0 4px; }
+#hud-side .hud-region .r-share .rs-amt { color: var(--good); }
 
 /* Commanders */
 #hud-side .hud-pl { display: flex; align-items: center; gap: 9px; padding: 7px 9px;
@@ -129,6 +151,12 @@ const HUD_CSS = `
 #hud-side .hud-pl .pl-name .pl-tag { color: var(--ink-dim); font-weight: 600; font-size: 11px; }
 #hud-side .hud-pl .pl-stats { color: var(--ink-dim); font-variant-numeric: tabular-nums;
   font-weight: 700; font-size: 12px; flex: 0 0 auto; letter-spacing: 0.02em; }
+/* Region-bonus badge (team mode only). */
+#hud-side .hud-pl .pl-bonus { flex: 0 0 auto; display: none; align-items: center;
+  font-size: 11px; font-weight: 800; color: var(--good);
+  background: rgba(76,195,106,0.12); border: 1px solid rgba(76,195,106,0.45);
+  border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em; }
 #hud-side .hud-pl.dead { opacity: 0.4; }
 #hud-side .hud-pl.dead .pl-name { text-decoration: line-through; }
 #hud-side .hud-pl.dead .pl-stats { opacity: 0.7; }
@@ -271,7 +299,7 @@ export function createHud({ topEl, sideEl, handlers }) {
   regionBlock.appendChild(
     el("div", "hud-region-hint", "Hover a region to see its states on the map.")
   );
-  const regionRows = {}; // key -> { row, prog, fill }
+  const regionRows = {}; // key -> { row, prog, fill, fillMine, bonus, share }
   for (const key of Object.keys(REGIONS)) {
     const reg = REGIONS[key];
     const row = el("div", "hud-region");
@@ -289,13 +317,17 @@ export function createHud({ topEl, sideEl, handlers }) {
     const prog = el("span", "r-prog", `0/${reg.states.length}`);
     top.append(name, prog);
     const bar = el("div", "r-bar");
+    // Backdrop fill = team extent; "mine" fill = own extent, stacked on top.
     const fill = el("div", "r-fill");
-    bar.appendChild(fill);
-    main.append(top, bar);
+    const fillMine = el("div", "r-fill-mine");
+    bar.append(fill, fillMine);
+    // Contributor breakdown sub-line (hidden unless team mode + complete).
+    const share = el("div", "r-share");
+    main.append(top, bar, share);
     const bonus = el("span", "r-bonus", `+${reg.bonus}`);
     row.append(main, bonus);
     regionBlock.appendChild(row);
-    regionRows[key] = { row, prog, fill };
+    regionRows[key] = { row, prog, fill, fillMine, bonus, share };
   }
 
   // Players block
@@ -412,16 +444,76 @@ export function createHud({ topEl, sideEl, handlers }) {
     }
 
     // ---- Region tracker ----
+    // teamMode here uses the same definition as the Commanders section below:
+    // teams are "in play" iff at least two players share a team.
+    const regDistinctTeams = [...new Set(state.players.map((p) => p.team))];
+    const regTeamMode = regDistinctTeams.length < state.players.length;
+    const myTeam = cur ? cur.team : null;
     for (const key of Object.keys(REGIONS)) {
       const reg = REGIONS[key];
-      let owned = 0;
-      for (const code of reg.states) if (state.owner[code] === pid) owned++;
       const total = reg.states.length;
-      const complete = owned === total;
       const ref = regionRows[key];
-      ref.prog.textContent = `${owned}/${total}`;
-      ref.fill.style.width = (total ? (owned / total) * 100 : 0) + "%";
+
+      // My own extent (states I personally own) — drives the solid "mine" fill.
+      let myOwned = 0;
+      for (const code of reg.states) if (state.owner[code] === pid) myOwned++;
+
+      if (!regTeamMode) {
+        // ----- Free-for-all: identical to the classic look -----
+        const complete = myOwned === total;
+        ref.row.classList.remove("teams");
+        ref.prog.textContent = `${myOwned}/${total}`;
+        const pct = (total ? (myOwned / total) * 100 : 0) + "%";
+        ref.fill.style.width = pct;
+        ref.fillMine.style.width = pct;
+        ref.row.classList.toggle("complete", complete);
+        ref.bonus.textContent = `+${reg.bonus}`;
+        ref.share.style.display = "none";
+        continue;
+      }
+
+      // ----- Team mode -----
+      ref.row.classList.add("teams");
+      const st = regionStatus(state, key);
+      // States held by my whole alliance — drives the lighter backdrop fill.
+      let myTeamOwned = 0;
+      for (const code of reg.states) {
+        const o = state.owner[code];
+        if (o != null && sameTeam(state, o, pid)) myTeamOwned++;
+      }
+      const complete = !!st && st.team === myTeam;
+      ref.prog.textContent = `${myTeamOwned}/${total}`;
+      ref.fill.style.width = (total ? (myTeamOwned / total) * 100 : 0) + "%";
+      ref.fillMine.style.width = (total ? (myOwned / total) * 100 : 0) + "%";
       ref.row.classList.toggle("complete", complete);
+
+      if (complete) {
+        // Your share as the active value, team total muted alongside it.
+        const myShare = (st.shares && st.shares[pid]) || 0;
+        ref.bonus.textContent = "";
+        ref.bonus.appendChild(document.createTextNode(`+${myShare}`));
+        const teamSpan = el("span", "rb-team", ` /${reg.bonus}`);
+        ref.bonus.appendChild(teamSpan);
+        // Contributor breakdown: current player first/emphasized, tinted by color.
+        ref.share.innerHTML = "";
+        const contribIds = Object.keys(st.shares)
+          .filter((oid) => (st.shares[oid] || 0) > 0 || (st.counts[oid] || 0) > 0)
+          .map((oid) => Number(oid))
+          .sort((a, b) => (a === pid ? -1 : b === pid ? 1 : a - b));
+        contribIds.forEach((oid, idx) => {
+          if (idx > 0) ref.share.appendChild(el("span", "rs-sep", "·"));
+          const p = playerById(state, oid);
+          const who = el("span", "rs-who", oid === pid ? "You" : (p ? p.name : `P${oid}`));
+          if (p) who.style.color = p.color;
+          const amt = el("span", "rs-amt", ` +${st.shares[oid] || 0}`);
+          ref.share.append(who, amt);
+        });
+        ref.share.style.display = "block";
+      } else {
+        // Incomplete: muted potential team bonus, same dimmed look as FFA-incomplete.
+        ref.bonus.textContent = `+${reg.bonus}`;
+        ref.share.style.display = "none";
+      }
     }
 
     // ---- Players summary ----
@@ -455,8 +547,9 @@ export function createHud({ topEl, sideEl, handlers }) {
         const tag = el("span", "pl-tag");
         name.append(nameText, tag);
         const stats = el("span", "pl-stats", "");
-        row.append(sw, name, stats);
-        return { row, nameText, tag, stats, sw };
+        const bonus = el("span", "pl-bonus", "");
+        row.append(sw, name, stats, bonus);
+        return { row, nameText, tag, stats, sw, bonus };
       };
 
       if (teamMode) {
@@ -501,6 +594,17 @@ export function createHud({ topEl, sideEl, handlers }) {
       ref.nameText.textContent = p.name;
       ref.tag.textContent = p.isAI ? " AI" : "";
       ref.stats.textContent = `${owned.length} ⬢   ${totalArmies} ⚔`;
+      // Region-bonus badge: team mode only, hidden when zero.
+      if (ref.bonus) {
+        const rb = teamMode ? regionBonus(state, p.id) : 0;
+        if (teamMode && rb > 0) {
+          ref.bonus.textContent = `+${rb}`;
+          ref.bonus.style.display = "inline-flex";
+        } else {
+          ref.bonus.textContent = "";
+          ref.bonus.style.display = "none";
+        }
+      }
       ref.row.classList.toggle("dead", p.alive === false);
       ref.row.classList.toggle("current", p.id === pid && p.alive !== false);
       if (teamMode) {

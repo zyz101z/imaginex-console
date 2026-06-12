@@ -20,6 +20,30 @@ import {
 
 // --- Reinforcements ---
 
+// Per-region ownership + bonus split, for the HUD. Returns null unless ONE team owns the
+// whole region; otherwise { team, total, counts, shares } keyed by owner id. The split
+// mirrors regionBonus exactly (proportional by states held, remainder to the biggest
+// holder, first max wins ties).
+export function regionStatus(s, key) {
+  const r = REGIONS[key];
+  const first = s.owner[r.states[0]];
+  if (first == null) return null;
+  if (!r.states.every((c) => s.owner[c] != null && sameTeam(s, s.owner[c], first))) return null;
+  const counts = {};
+  for (const c of r.states) counts[s.owner[c]] = (counts[s.owner[c]] || 0) + 1;
+  const total = r.states.length;
+  let assigned = 0, topOwner = null, topCount = -1;
+  const shares = {};
+  for (const oid of Object.keys(counts)) {
+    const cnt = counts[oid];
+    shares[oid] = Math.floor((r.bonus * cnt) / total);
+    assigned += shares[oid];
+    if (cnt > topCount) { topCount = cnt; topOwner = oid; }
+  }
+  if (topOwner != null) shares[topOwner] += r.bonus - assigned;
+  return { team: s.players[first].team, total, counts, shares };
+}
+
 // A region's bonus is earned when the player's TEAM collectively owns every state in
 // it, then split among the teammates who hold ≥1 of its states — proportional to how
 // many they hold, with the rounding remainder going to the largest holder. (In a
