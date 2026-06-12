@@ -521,11 +521,15 @@ function GamePlayer({
   return (
     <div className="fixed inset-0 z-50 bg-black">
       {/* Reveal the exit bar only from the top-LEFT corner, so the hover zone never
-          covers a game's own top-right buttons (e.g. Sound / How to Play). */}
-      <div
-        className="absolute top-0 left-0 w-72 h-14 z-20"
-        onMouseEnter={() => setShowExit(true)}
-      />
+          covers a game's own top-right buttons (e.g. Sound / How to Play). Only present
+          while the bar is hidden — otherwise it would sit on top of the Exit button and
+          swallow its clicks. */}
+      {!showExit && (
+        <div
+          className="absolute top-0 left-0 w-72 h-14 z-20"
+          onMouseEnter={() => setShowExit(true)}
+        />
+      )}
       <div
         className={`absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/90 to-transparent transition-opacity duration-300 ${showExit ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
         onMouseLeave={() => setShowExit(false)}
