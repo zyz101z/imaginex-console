@@ -13,16 +13,39 @@ import {
   currentPlayerId,
   playerById,
   alivePlayers,
+  sameTeam,
+  teamsAlive,
   logEvent,
 } from "./gamestate.js";
 
 // --- Reinforcements ---
 
+// A region's bonus is earned when the player's TEAM collectively owns every state in
+// it, then split among the teammates who hold ≥1 of its states — proportional to how
+// many they hold, with the rounding remainder going to the largest holder. (In a
+// free-for-all each player is their own team, so this reduces to the classic rule.)
 export function regionBonus(s, playerId) {
   let bonus = 0;
   for (const key of Object.keys(REGIONS)) {
     const r = REGIONS[key];
-    if (r.states.every((c) => s.owner[c] === playerId)) bonus += r.bonus;
+    // team owns the whole region?
+    if (!r.states.every((c) => s.owner[c] != null && sameTeam(s, s.owner[c], playerId))) continue;
+    // count each contributor's states in this region
+    const counts = {}; // ownerId -> states held in region
+    for (const c of r.states) counts[s.owner[c]] = (counts[s.owner[c]] || 0) + 1;
+    const total = r.states.length;
+    let assigned = 0;
+    let topOwner = null, topCount = -1;
+    const shares = {};
+    for (const oid of Object.keys(counts)) {
+      const cnt = counts[oid];
+      shares[oid] = Math.floor((r.bonus * cnt) / total);
+      assigned += shares[oid];
+      if (cnt > topCount) { topCount = cnt; topOwner = oid; } // first max wins ties
+    }
+    const remainder = r.bonus - assigned;
+    if (topOwner != null) shares[topOwner] += remainder; // leftover to the biggest holder
+    bonus += shares[playerId] || 0;
   }
   return bonus;
 }
@@ -63,7 +86,7 @@ export function legalAttacks(s, playerId) {
   for (const from of statesOf(s, playerId)) {
     if (s.armies[from] < 2) continue;
     for (const to of ADJACENCY[from]) {
-      if (s.owner[to] !== playerId) moves.push({ from, to });
+      if (!sameTeam(s, s.owner[to], playerId)) moves.push({ from, to }); // not self or ally
     }
   }
   return moves;
@@ -73,7 +96,7 @@ export function canAttack(s, playerId, from, to) {
   return (
     s.owner[from] === playerId &&
     s.armies[from] >= 2 &&
-    s.owner[to] !== playerId &&
+    !sameTeam(s, s.owner[to], playerId) && // can't attack self or an ally
     areAdjacent(from, to)
   );
 }
@@ -83,7 +106,7 @@ export function canAttack(s, playerId, from, to) {
 export function executeAttackRound(s, from, to, moveIfCaptured = null) {
   const attacker = s.owner[from];
   const defender = s.owner[to];
-  if (s.owner[from] === s.owner[to]) throw new Error("cannot attack own territory");
+  if (sameTeam(s, attacker, defender)) throw new Error("cannot attack own or allied territory");
   if (!areAdjacent(from, to)) throw new Error(`${from} not adjacent to ${to}`);
   if (s.armies[from] < 2) throw new Error("need >=2 armies to attack");
 
@@ -132,21 +155,24 @@ export function executeAttackUntilDecided(s, from, to, moveIfCaptured = null) {
 
 // --- Fortify ---
 
-// Owned states reachable from `from` through a path of same-owner states.
+// Your own states reachable from `from` for a fortify. The path may run THROUGH
+// allied (same-team) territory, but only your OWN states are valid destinations
+// (through-only — no gifting armies to a teammate). In a free-for-all the team is
+// just you, so this is the classic same-owner reachability.
 export function reachableOwned(s, playerId, from) {
   const seen = new Set([from]);
   const queue = [from];
   while (queue.length) {
     const cur = queue.shift();
     for (const nb of ADJACENCY[cur]) {
-      if (s.owner[nb] === playerId && !seen.has(nb)) {
+      if (!seen.has(nb) && sameTeam(s, s.owner[nb], playerId)) {
         seen.add(nb);
         queue.push(nb);
       }
     }
   }
   seen.delete(from);
-  return [...seen];
+  return [...seen].filter((c) => s.owner[c] === playerId);
 }
 
 export function canFortify(s, from, to, n) {
@@ -194,18 +220,16 @@ export function turnInSet(s, playerId, indices = null) {
 
 // --- Win / turn advance ---
 
+// Last team standing — only one team still has a living player. (With no neutral
+// territories this is identical to "one team owns all 49"; in a free-for-all each
+// player is their own team, so it's the classic last-player-standing.)
 export function checkWinner(s) {
-  const alive = alivePlayers(s);
-  if (alive.length === 1) {
-    s.winner = alive[0].id;
+  const teams = teamsAlive(s);
+  if (teams.length === 1) {
+    s.winningTeam = teams[0];
+    const champ = s.players.find((p) => p.alive && p.team === teams[0]) || alivePlayers(s)[0];
+    s.winner = champ ? champ.id : null;
     return s.winner;
-  }
-  // Domination: someone owns every state.
-  for (const p of s.players) {
-    if (statesOf(s, p.id).length === STATE_CODES.length) {
-      s.winner = p.id;
-      return s.winner;
-    }
   }
   return null;
 }

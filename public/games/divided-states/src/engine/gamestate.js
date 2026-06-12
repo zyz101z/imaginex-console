@@ -41,6 +41,8 @@ export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
       color: p.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length],
       isAI: p.isAI !== undefined ? p.isAI : true,
       difficulty: p.difficulty || "officer",
+      // Team id. Default = own index → every player on their own team (free-for-all).
+      team: p.team !== undefined && p.team !== null ? p.team : i,
       cards: [],
       alive: true,
     })),
@@ -55,6 +57,7 @@ export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
     discard: [],
     setsTurnedIn: 0,
     winner: null,
+    winningTeam: null,
     turnNumber: 0,
     log: [],
   };
@@ -70,6 +73,16 @@ export const armiesOf = (s, code) => s.armies[code];
 export const statesOf = (s, playerId) =>
   STATE_CODES.filter((c) => s.owner[c] === playerId);
 export const alivePlayers = (s) => s.players.filter((p) => p.alive);
+
+// --- Teams ---
+// Two players are allies if they share a team. A player is always their own ally.
+export const sameTeam = (s, a, b) =>
+  a != null && b != null && s.players[a] && s.players[b] && s.players[a].team === s.players[b].team;
+export const teamOf = (s, playerId) => s.players[playerId].team;
+export const teammates = (s, playerId) =>
+  s.players.filter((p) => p.team === s.players[playerId].team).map((p) => p.id);
+// Distinct teams that still have at least one living player.
+export const teamsAlive = (s) => [...new Set(s.players.filter((p) => p.alive).map((p) => p.team))];
 
 export function logEvent(s, msg) {
   s.log.push({ turn: s.turnNumber, msg });

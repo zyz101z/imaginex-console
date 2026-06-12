@@ -3,7 +3,7 @@
 
 import {
   createGame, autoDistribute, currentPlayer, currentPlayerId, playerById, statesOf,
-  allStatesClaimed, unclaimedStates, draftPick, STARTING_ARMIES, playerCount,
+  allStatesClaimed, unclaimedStates, draftPick, STARTING_ARMIES, playerCount, sameTeam,
 } from "./engine/gamestate.js";
 import {
   beginTurn, placeArmies, endReinforcement, legalAttacks, executeAttackRound,
@@ -100,7 +100,7 @@ function setupPanelToggle() {
   });
 }
 
-function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random" } = {}) {
+function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random", teams = null } = {}) {
   const players = Array.from({ length: playerCount }, (_, i) => {
     let name;
     if (i < humanCount) {
@@ -109,7 +109,9 @@ function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer",
     } else {
       name = `CPU ${i - humanCount + 1}`;
     }
-    return { name, isAI: i >= humanCount, difficulty };
+    // teams[] = team index per player; null/absent => everyone on their own team (FFA).
+    const team = Array.isArray(teams) && teams[i] != null ? teams[i] : i;
+    return { name, isAI: i >= humanCount, difficulty, team };
   });
   state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players });
   winReported = false;
@@ -228,13 +230,13 @@ function updateSelectable() {
     ui.map.setSelectable(statesOf(state, pid));
   } else if (state.phase === "attack") {
     if (selFrom) {
-      const targets = ADJACENCY[selFrom].filter((c) => state.owner[c] !== pid);
+      const targets = ADJACENCY[selFrom].filter((c) => !sameTeam(state, state.owner[c], pid));
       ui.map.setSelectable([selFrom, ...targets]);
       ui.map.setHighlights(targets, "attack");
       ui.map.setHighlights([selFrom], "selected");
     } else {
       ui.map.setSelectable(statesOf(state, pid).filter((c) => state.armies[c] >= 2 &&
-        ADJACENCY[c].some((n) => state.owner[n] !== pid)));
+        ADJACENCY[c].some((n) => !sameTeam(state, state.owner[n], pid))));
     }
   } else if (state.phase === "fortify") {
     if (selFrom) {
@@ -285,7 +287,7 @@ function handleStateClick(code) {
       if (state.owner[code] === pid && state.armies[code] >= 2) { selFrom = code; updateSelectable(); }
     } else if (code === selFrom) {
       selFrom = null; updateSelectable();
-    } else if (state.owner[code] !== pid && ADJACENCY[selFrom].includes(code)) {
+    } else if (!sameTeam(state, state.owner[code], pid) && ADJACENCY[selFrom].includes(code)) {
       humanAttack(selFrom, code);
     } else if (state.owner[code] === pid && state.armies[code] >= 2) {
       selFrom = code; updateSelectable();
@@ -376,7 +378,7 @@ async function aiTurn() {
   }
   if (state.reinforcementsRemaining > 0) { // safety: dump any remainder on a border
     const owned = statesOf(state, pid);
-    const b = owned.find((c) => ADJACENCY[c].some((n) => state.owner[n] !== pid)) || owned[0];
+    const b = owned.find((c) => ADJACENCY[c].some((n) => !sameTeam(state, state.owner[n], pid))) || owned[0];
     if (b) placeArmies(state, pid, b, state.reinforcementsRemaining);
   }
   endReinforcement(state);

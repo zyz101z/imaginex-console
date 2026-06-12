@@ -10,13 +10,14 @@
 import { ADJACENCY } from "../data/adjacency.js";
 import { REGIONS } from "../data/regions.js";
 import { winProbability } from "../engine/combat.js";
-import { statesOf, playerById, unclaimedStates } from "../engine/gamestate.js";
+import { statesOf, playerById, unclaimedStates, sameTeam } from "../engine/gamestate.js";
 import { legalAttacks, reachableOwned } from "../engine/rules.js";
 import { findSet } from "../engine/cards.js";
 
 // ---------- board helpers ----------
-const enemyNeighbors = (s, c, pid) => ADJACENCY[c].filter((n) => s.owner[n] !== pid);
-const isBorder = (s, c, pid) => ADJACENCY[c].some((n) => s.owner[n] !== pid);
+// "Enemy" = not us and not an ally (so allied borders aren't treated as threats).
+const enemyNeighbors = (s, c, pid) => ADJACENCY[c].filter((n) => !sameTeam(s, s.owner[n], pid));
+const isBorder = (s, c, pid) => ADJACENCY[c].some((n) => !sameTeam(s, s.owner[n], pid));
 const borderStates = (s, pid) => statesOf(s, pid).filter((c) => isBorder(s, c, pid));
 const threat = (s, c, pid) => enemyNeighbors(s, c, pid).reduce((a, n) => a + s.armies[n], 0);
 

@@ -203,6 +203,55 @@ const CSS = `
 }
 #menu-root .ds-link:hover { color: var(--accent); }
 
+/* ----- Team assignment rows ----- */
+#menu-root .ds-team-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0;
+}
+#menu-root .ds-team-row .ds-team-name {
+  flex: 0 0 auto;
+  min-width: 92px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#menu-root .ds-team-row .ds-seg {
+  flex: 1 1 auto;
+  padding: 4px;
+}
+#menu-root .ds-team-row .ds-seg button {
+  padding: 6px 4px;
+  min-width: 30px;
+}
+
+/* ----- Team victory members ----- */
+#menu-root .ds-win-members {
+  list-style: none;
+  margin: 6px 0 2px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: ds-fade-up 0.45s 0.22s ease-out both;
+}
+#menu-root .ds-win-members li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 800;
+}
+#menu-root .ds-win-members .ds-win-dot {
+  width: 12px; height: 12px;
+  margin-right: 0;
+}
+
 /* ----- Win overlay ----- */
 #menu-root .ds-win .ds-card,
 #menu-root .ds-card.ds-win { text-align: center; }
@@ -465,13 +514,21 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     let humanCount = 1;
     let difficulty = "officer";
     let setup = "random";
+    let teamsOn = false;
+    const teams = [0, 1, 2, 3, 4, 5];
     const names = ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"];
+
+    // Label for player i (matches the in-game labelling: humans use their name, AIs are "CPU n").
+    function playerLabel(i) {
+      return i < humanCount ? (names[i] || "Player " + (i + 1)) : "CPU " + (i - humanCount + 1);
+    }
 
     const card = el("div", { class: "ds-card" });
 
     const playersField = el("div", { class: "ds-field" });
     const humansField = el("div", { class: "ds-field" });
     const namesField = el("div", { class: "ds-field" });
+    const teamsField = el("div", { class: "ds-field" });
     const diffField = el("div", { class: "ds-field" });
     const setupField = el("div", { class: "ds-field" });
 
@@ -483,9 +540,14 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
         segmented(opts, playerCount, (n) => {
           playerCount = n;
           if (humanCount > playerCount) humanCount = playerCount;
+          // Clamp any team assignments that are now out of range.
+          for (let i = 0; i < teams.length; i++) {
+            if (teams[i] > playerCount - 1) teams[i] = 0;
+          }
           renderPlayers();
           renderHumans();
           renderNames();
+          renderTeams();
         })
       );
     }
@@ -504,6 +566,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           humanCount = n;
           renderHumans();
           renderNames();
+          renderTeams();
         })
       );
       humansField.appendChild(
@@ -529,11 +592,58 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           style:
             "width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);" +
             "background:var(--bg);color:var(--ink);font:inherit;",
-          onInput: (e) => { names[i] = e.target.value; },
+          onInput: (e) => { names[i] = e.target.value; renderTeams(); },
         });
         wrap.appendChild(input);
       }
       namesField.appendChild(wrap);
+    }
+
+    // Team assignment — off by default; when on, one row per player picks a team (A..).
+    function renderTeams() {
+      teamsField.innerHTML = "";
+      teamsField.appendChild(el("span", { class: "ds-label", text: "Teams" }));
+      teamsField.appendChild(
+        segmented(
+          [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+          teamsOn ? "on" : "off",
+          (v) => {
+            const turningOn = v === "on" && !teamsOn;
+            teamsOn = v === "on";
+            if (turningOn) {
+              // Default to two even teams split down the middle.
+              const half = Math.ceil(playerCount / 2);
+              for (let i = 0; i < playerCount; i++) teams[i] = i < half ? 0 : 1;
+            }
+            renderTeams();
+          }
+        )
+      );
+
+      if (teamsOn) {
+        const k = Math.min(playerCount, 4);
+        const teamOpts = [];
+        for (let t = 0; t < k; t++) {
+          teamOpts.push({ value: t, label: String.fromCharCode(65 + t) });
+        }
+        for (let i = 0; i < playerCount; i++) {
+          const row = el("div", { class: "ds-team-row" });
+          row.appendChild(el("span", { class: "ds-team-name", text: playerLabel(i) }));
+          row.appendChild(
+            segmented(teamOpts, teams[i], (t) => {
+              teams[i] = t;
+              renderTeams();
+            })
+          );
+          teamsField.appendChild(row);
+        }
+        teamsField.appendChild(
+          el("div", {
+            class: "ds-hint",
+            text: "Allies can't attack each other and share region bonuses.",
+          })
+        );
+      }
     }
 
     function renderSetup() {
@@ -574,6 +684,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     renderPlayers();
     renderHumans();
     renderNames();
+    renderTeams();
     renderDifficulty();
     renderSetup();
 
@@ -583,7 +694,14 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       text: "Start Game",
       onClick: () =>
         onNewGame &&
-        onNewGame({ playerCount, humanCount, difficulty, setup, names: names.slice(0, humanCount) }),
+        onNewGame({
+          playerCount,
+          humanCount,
+          difficulty,
+          setup,
+          names: names.slice(0, humanCount),
+          teams: teamsOn ? teams.slice(0, playerCount) : null,
+        }),
     });
     const helpBtn = el("button", {
       type: "button",
@@ -600,6 +718,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(playersField);
     card.appendChild(humansField);
     card.appendChild(namesField);
+    card.appendChild(teamsField);
     card.appendChild(diffField);
     card.appendChild(setupField);
     card.appendChild(el("div", { class: "ds-actions" }, [startBtn, helpBtn]));
@@ -609,6 +728,54 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
 
   function showWin(state) {
     const card = el("div", { class: "ds-card ds-win" });
+
+    // Team victory — multiple players sharing the winning team.
+    const members =
+      state && state.players && state.winningTeam != null
+        ? state.players.filter((p) => p && p.team === state.winningTeam)
+        : [];
+
+    if (members.length > 1) {
+      const distinct = [...new Set(state.players.map((p) => p.team))];
+      const letter = String.fromCharCode(65 + distinct.indexOf(state.winningTeam));
+
+      card.appendChild(el("p", { class: "ds-win-eyebrow", text: "Total Domination" }));
+      card.appendChild(el("h1", { class: "ds-win-banner", text: "Team " + letter + " Victory" }));
+
+      const list = el("ul", { class: "ds-win-members" });
+      for (const p of members) {
+        const c = p.color || "var(--accent)";
+        const dot = el("span", { class: "ds-win-dot" });
+        dot.style.background = c;
+        dot.style.color = c;
+        const item = el("li", {}, [dot, p.name || "Unknown"]);
+        item.style.color = c;
+        list.appendChild(item);
+      }
+      card.appendChild(list);
+
+      const memberNames = members.map((p) => p.name || "Unknown");
+      const phrase =
+        memberNames.length === 2
+          ? memberNames.join(" & ")
+          : memberNames.slice(0, -1).join(", ") + " & " + memberNames[memberNames.length - 1];
+      card.appendChild(
+        el("p", { class: "ds-win-sub", text: phrase + " conquer the nation!" })
+      );
+      card.appendChild(
+        el("div", { class: "ds-actions" }, [
+          el("button", {
+            type: "button",
+            class: "ds-primary",
+            text: "New Game",
+            onClick: () => showStart(),
+          }),
+        ])
+      );
+      mount(card);
+      return;
+    }
+
     const winner =
       state && state.players && state.winner != null
         ? state.players.find((p) => p && p.id === state.winner) || state.players[state.winner]

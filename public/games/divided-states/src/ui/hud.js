@@ -136,6 +136,21 @@ const HUD_CSS = `
   box-shadow: inset 2px 0 0 var(--accent); }
 #hud-side .hud-pl.current .pl-name { color: var(--ink); }
 
+/* Team grouping (only when teams are in play) */
+#hud-side .hud-team { margin-top: 9px; }
+#hud-side .hud-team:first-child { margin-top: 0; }
+#hud-side .hud-team-hd { display: flex; align-items: center; gap: 8px; padding: 2px 4px 5px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--ink-dim); }
+#hud-side .hud-team-hd .th-name { flex: 0 0 auto; }
+#hud-side .hud-team-hd .th-line { flex: 1 1 auto; height: 1px;
+  background: linear-gradient(90deg, var(--line), transparent); }
+#hud-side .hud-team-hd .th-total { flex: 0 0 auto; font-variant-numeric: tabular-nums;
+  font-weight: 700; letter-spacing: 0.04em; }
+#hud-side .hud-team.defeated .hud-team-hd { opacity: 0.4; }
+#hud-side .hud-team.defeated .hud-team-hd .th-name { text-decoration: line-through; }
+#hud-side .hud-team .hud-pl { margin-left: 7px; }
+
 /* Action buttons */
 #hud-side .hud-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 2px; }
 #hud-side .hud-actions button { width: 100%; padding: 11px 14px; font-weight: 800;
@@ -410,9 +425,28 @@ export function createHud({ topEl, sideEl, handlers }) {
     }
 
     // ---- Players summary ----
-    if (!playerRows || playerRows.length !== state.players.length) {
+    // Teams are "in play" iff at least two players share a team.
+    const distinctTeams = [...new Set(state.players.map((p) => p.team))];
+    const teamMode = distinctTeams.length < state.players.length;
+    // Distinct teams in *player order* drive the A/B/C lettering.
+    const teamOrder = teamMode
+      ? state.players.reduce((acc, p) => {
+          if (!acc.includes(p.team)) acc.push(p.team);
+          return acc;
+        }, [])
+      : null;
+
+    // Rebuild the list DOM when the layout shape changes (count or team mode).
+    // Signature captures mode + each player's team so regrouping repaints cleanly.
+    const layoutSig =
+      (teamMode ? "T:" + state.players.map((p) => p.team).join(",") : "F") +
+      "|" + state.players.length;
+    if (!playerRows || playerRows.sig !== layoutSig) {
       playersList.innerHTML = "";
-      playerRows = state.players.map((p) => {
+      const refs = [];
+      refs.sig = layoutSig;
+
+      const mkPlayerRow = (p) => {
         const row = el("div", "hud-pl");
         const sw = el("span", "pl-swatch");
         sw.style.background = p.color;
@@ -422,10 +456,42 @@ export function createHud({ topEl, sideEl, handlers }) {
         name.append(nameText, tag);
         const stats = el("span", "pl-stats", "");
         row.append(sw, name, stats);
-        playersList.appendChild(row);
         return { row, nameText, tag, stats, sw };
-      });
+      };
+
+      if (teamMode) {
+        const groups = []; // parallel to teamOrder: { wrap, total }
+        teamOrder.forEach((teamId, ti) => {
+          const wrap = el("div", "hud-team");
+          const hd = el("div", "hud-team-hd");
+          const thName = el("span", "th-name", "Team " + String.fromCharCode(65 + ti));
+          const thLine = el("span", "th-line");
+          const thTotal = el("span", "th-total", "");
+          hd.append(thName, thLine, thTotal);
+          wrap.appendChild(hd);
+          state.players.forEach((p, i) => {
+            if (p.team !== teamId) return;
+            const ref = mkPlayerRow(p);
+            wrap.appendChild(ref.row);
+            refs[i] = ref;
+          });
+          playersList.appendChild(wrap);
+          groups.push({ wrap, total: thTotal });
+        });
+        refs.teamGroups = groups;
+      } else {
+        state.players.forEach((p, i) => {
+          const ref = mkPlayerRow(p);
+          playersList.appendChild(ref.row);
+          refs[i] = ref;
+        });
+      }
+      playerRows = refs;
     }
+
+    // Per-player updates (refs are index-aligned in both modes).
+    const teamStates = teamMode ? distinctTeams.map(() => 0) : null;
+    const teamAlive = teamMode ? distinctTeams.map(() => false) : null;
     state.players.forEach((p, i) => {
       const ref = playerRows[i];
       const owned = statesOf(state, p.id);
@@ -437,7 +503,20 @@ export function createHud({ topEl, sideEl, handlers }) {
       ref.stats.textContent = `${owned.length} ⬢   ${totalArmies} ⚔`;
       ref.row.classList.toggle("dead", p.alive === false);
       ref.row.classList.toggle("current", p.id === pid && p.alive !== false);
+      if (teamMode) {
+        const ti = teamOrder.indexOf(p.team);
+        teamStates[ti] += owned.length;
+        if (p.alive !== false) teamAlive[ti] = true;
+      }
     });
+
+    // Team header totals + defeated dimming.
+    if (teamMode && playerRows.teamGroups) {
+      playerRows.teamGroups.forEach((g, ti) => {
+        g.total.textContent = `${teamStates[ti]} ⬢`;
+        g.wrap.classList.toggle("defeated", !teamAlive[ti]);
+      });
+    }
 
     // ---- Phase action buttons ----
     endReinforceBtn.style.display = phase === "reinforce" ? "" : "none";
