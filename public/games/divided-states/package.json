@@ -1,0 +1,9 @@
+{
+  "name": "divided-states",
+  "version": "0.1.0",
+  "description": "Risk-like browser strategy game on the US map (49 states).",
+  "type": "module",
+  "scripts": {
+    "test": "node test/engine.test.mjs"
+  }
+}
