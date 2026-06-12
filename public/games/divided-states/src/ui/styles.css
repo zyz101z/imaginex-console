@@ -115,6 +115,9 @@ html, body {
   color: var(--ink-dim);
 }
 
+/* Map-expand toggle button — only shown on small screens (media query below). */
+#panel-toggle { display: none; }
+
 /* ---- Tablet / touch (e.g. iPad): keep the phase action button (End Turn etc.)
    always visible without scrolling. Desktop (mouse, wide) is untouched. ---- */
 @media (max-width: 1200px) {
@@ -145,6 +148,40 @@ html, body {
   }
   /* Slightly larger touch targets for the action buttons on touch screens. */
   #hud-side .hud-actions button { padding: 14px 14px; }
+
+  /* The map-expand toggle (bottom-left; End Turn bar is bottom-right, so no clash). */
+  #panel-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    z-index: 60;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    box-shadow: var(--shadow-2);
+  }
+  #panel-toggle.active { border-color: var(--accent); color: var(--accent); }
+
+  /* Smooth collapse, and let the map area fill the freed space. */
+  #side { transition: width 0.22s ease, flex-basis 0.22s ease; }
+
+  /* Collapsed: hide the side panel so the map fills the screen. The fixed End Turn
+     bar stays visible (positioned to the viewport, not clipped by the panel). */
+  #app.panel-hidden #side {
+    flex-basis: 0;
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-left: none;
+    box-shadow: none;
+  }
 }
 
 /* ---- Menu overlay ---- */

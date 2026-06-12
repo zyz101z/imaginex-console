@@ -66,7 +66,35 @@ function init() {
   ui.log = createLog({ root: $("log-root") });
   ui.fx = createCombatFx({ layer: $("fx-layer"), svg: $("map-svg") });
   ui.menus = createMenus({ root: $("menu-root"), onNewGame: startNewGame, onShowHelp: () => ui.menus.showHelp() });
+  setupPanelToggle();
   ui.menus.showStart();
+}
+
+// Mobile/tablet only (the button is hidden on desktop via CSS): a toggle that
+// collapses the side panel so the map fills the screen. Default = collapsed (big map);
+// the choice is remembered. The End Turn bar stays pinned even when collapsed.
+function setupPanelToggle() {
+  const app = $("app");
+  const btn = document.createElement("button");
+  btn.id = "panel-toggle";
+  btn.type = "button";
+  btn.setAttribute("aria-label", "Toggle info panel");
+  app.appendChild(btn);
+
+  let collapsed = true; // default: maximize the map on small screens
+  try { const v = localStorage.getItem("ds_panel_collapsed"); if (v !== null) collapsed = v === "1"; } catch {}
+  const apply = () => {
+    app.classList.toggle("panel-hidden", collapsed);
+    btn.classList.toggle("active", collapsed);
+    btn.textContent = collapsed ? "▣ Info" : "✕ Map";
+  };
+  apply();
+  btn.addEventListener("click", () => {
+    collapsed = !collapsed;
+    try { localStorage.setItem("ds_panel_collapsed", collapsed ? "1" : "0"); } catch {}
+    apply();
+    if (ui.audio) ui.audio.play("click");
+  });
 }
 
 function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer" } = {}) {
