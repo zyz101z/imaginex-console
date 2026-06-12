@@ -160,6 +160,8 @@
         #quest-screen, #shop-screen {
             justify-content: flex-start;
             padding-top: 20px;
+            padding-bottom: 20px;
+            box-sizing: border-box;
         }
 
         #quest-timer {
@@ -174,7 +176,13 @@
             flex-direction: column;
             gap: 15px;
             overflow-y: auto;
-            max-height: 400px;
+            -webkit-overflow-scrolling: touch; /* iOS momentum scroll */
+            overscroll-behavior: contain;
+            /* Fill the space between the header and CLOSE button instead of a fixed
+               height, so the list never overruns the 600px stage (which clips the
+               bottom items + CLOSE on shorter/touch viewports like iPad). */
+            flex: 1 1 auto;
+            min-height: 0;
             padding-right: 5px;
         }
         
