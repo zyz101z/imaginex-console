@@ -352,7 +352,11 @@ function resolveAttack(from, to, moveIfCaptured) {
 
 // ---- Placeholder AI (greedy). Real AI is Phase 4. ----
 async function runTurn() {
-  if (!state || state.phase === "gameover") { if (state?.winner != null) finishGame(); return; }
+  if (!state) return;
+  // Human-wipeout takes priority over an AI "win": if the CPU that eliminated the last
+  // human is also the sole survivor, the player should see Defeat, not the CPU's Victory.
+  if (humansWipedOut()) { busy = false; refresh(); finishDefeat(); return; }
+  if (state.phase === "gameover") { if (state.winner != null) finishGame(); return; }
   const p = currentPlayer(state);
   if (!p.isAI) { refresh(); return; } // hand control to the human
   busy = true;
@@ -360,8 +364,18 @@ async function runTurn() {
   await sleep(350);
   await aiTurn();
   busy = false;
-  if (state.phase !== "gameover") { endTurn(state); refresh(); await runTurn(); }
-  else { refresh(); finishGame(); }
+  if (humansWipedOut()) { refresh(); finishDefeat(); return; }
+  if (state.phase === "gameover") { refresh(); finishGame(); return; }
+  endTurn(state); refresh(); await runTurn();
+}
+
+// True once at least one human was in the game and none remain alive.
+const humansWipedOut = () =>
+  !!state && state.players.some((p) => !p.isAI) && !state.players.some((p) => !p.isAI && p.alive);
+
+function finishDefeat() {
+  ui.audio.play("eliminate");
+  ui.menus.showDefeat(state);
 }
 
 async function aiTurn() {

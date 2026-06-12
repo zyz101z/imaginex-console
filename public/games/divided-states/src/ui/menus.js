@@ -277,6 +277,13 @@ const CSS = `
   text-shadow: 0 4px 30px rgba(79,195,247,0.25);
   animation: ds-fade-up 0.45s 0.1s ease-out both;
 }
+/* Defeat re-tints the same victory layout in danger-red. */
+#menu-root .ds-card.ds-defeat .ds-win-banner {
+  background: linear-gradient(180deg, #fff, var(--bad, #e2545f));
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: 0 4px 30px rgba(226,84,95,0.25);
+}
 #menu-root .ds-win-name {
   margin: 0;
   font-size: 36px;
@@ -809,6 +816,36 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     mount(card);
   }
 
+  // Shown when every human commander has been eliminated but no overall winner has
+  // emerged yet (the AIs would otherwise play on among themselves unseen).
+  function showDefeat(state) {
+    const card = el("div", { class: "ds-card ds-win ds-defeat" });
+    card.appendChild(el("p", { class: "ds-win-eyebrow", text: "The War Is Lost" }));
+    card.appendChild(el("h1", { class: "ds-win-banner", text: "Defeat" }));
+
+    let sub = "Your forces have been driven from the map.";
+    if (state && state.players && state.owner) {
+      const counts = {};
+      for (const code in state.owner) counts[state.owner[code]] = (counts[state.owner[code]] || 0) + 1;
+      const top = state.players
+        .filter((p) => p && p.alive)
+        .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))[0];
+      if (top) sub = `${top.name || "The enemy"} commands the most territory now.`;
+    }
+    card.appendChild(el("p", { class: "ds-win-sub", text: sub }));
+    card.appendChild(
+      el("div", { class: "ds-actions" }, [
+        el("button", {
+          type: "button",
+          class: "ds-primary",
+          text: "New Game",
+          onClick: () => showStart(),
+        }),
+      ])
+    );
+    mount(card);
+  }
+
   function showHelp(onBack) {
     const card = el("div", { class: "ds-card ds-help" });
     card.innerHTML = `
@@ -913,5 +950,5 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     root.innerHTML = "";
   }
 
-  return { showStart, showWin, showHelp, hide };
+  return { showStart, showWin, showDefeat, showHelp, hide };
 }
