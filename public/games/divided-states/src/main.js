@@ -175,8 +175,8 @@ function humanTurnInCards() {
 async function humanAttack(from, to) {
   busy = true;
   const { rounds, captured } = resolveAttack(from, to, state.armies[from] - 1);
-  await ui.fx.playAttack(from, to, rounds, { onRoll: () => ui.audio.play("dice") });
-  if (captured) { await ui.fx.playCapture(to); ui.audio.play("capture"); }
+  await ui.fx.playAttack(from, to, rounds, { onRoll: () => { ui.audio.play("dice"); ui.audio.play("gunfire"); } });
+  if (captured) { await ui.fx.playCapture(to); ui.audio.play("explosion"); }
   selFrom = null;
   busy = false;
   refresh();
@@ -242,8 +242,8 @@ async function aiTurn() {
     const mv = ai.chooseAttack(state, pid, diff);
     if (!mv) break;
     const { rounds, captured } = resolveAttack(mv.from, mv.to, state.armies[mv.from] - 1);
-    await ui.fx.playAttack(mv.from, mv.to, rounds, { fast: true, onRoll: () => ui.audio.play("dice") });
-    if (captured) { await ui.fx.playCapture(mv.to); ui.audio.play("capture"); }
+    await ui.fx.playAttack(mv.from, mv.to, rounds, { fast: true, onRoll: () => { ui.audio.play("dice"); ui.audio.play("gunfire"); } });
+    if (captured) { await ui.fx.playCapture(mv.to); ui.audio.play("explosion"); }
     refresh();
     await sleep(110);
   }

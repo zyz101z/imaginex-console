@@ -117,6 +117,27 @@ export function createAudio() {
       noise(0.27, 0.06, { gain: 0.40, cutoff: 800 }); // settle thud
     },
 
+    // Rifle volley — a rapid burst of gunshots when an attack is fought. Each shot
+    // is a bright noise "crack" plus a short low "thump" body, fired in quick succession.
+    gunfire() {
+      const shots = [0.0, 0.06, 0.12, 0.19, 0.27];
+      for (let i = 0; i < shots.length; i++) {
+        const t = shots[i];
+        const g = 0.5 - i * 0.035;
+        noise(t, 0.045, { gain: g, cutoff: 1400, filterType: 'highpass' }); // crack
+        tone([175, 60], t, 0.05, { type: 'triangle', gain: g * 0.55 });     // thump body
+      }
+    },
+
+    // Explosion / artillery boom — a sharp blast transient over a low rumble and a
+    // sub-bass drop. Used when a territory falls (capture).
+    explosion() {
+      noise(0.0, 0.06, { gain: 0.6, cutoff: 2200, filterType: 'highpass' }); // blast crack
+      noise(0.0, 0.55, { gain: 0.5, cutoff: 360, filterType: 'lowpass' });   // low rumble
+      tone([130, 28], 0.0, 0.5, { type: 'sine', gain: 0.5 });                // sub boom
+      tone([95, 42], 0.02, 0.28, { type: 'triangle', gain: 0.28 });          // mid body
+    },
+
     // Soft short "place" tick — reinforcing a state.
     reinforce() {
       tone([220, 330], 0.0, 0.09, { type: 'sine', gain: 0.45 });
