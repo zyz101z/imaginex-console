@@ -115,6 +115,38 @@ html, body {
   color: var(--ink-dim);
 }
 
+/* ---- Tablet / touch (e.g. iPad): keep the phase action button (End Turn etc.)
+   always visible without scrolling. Desktop (mouse, wide) is untouched. ---- */
+@media (max-width: 1200px) {
+  /* The HUD info fills the panel and scrolls on its own; the battle log is hidden
+     here to make room (it's history, non-essential on a small screen). */
+  #hud-side {
+    flex: 1 1 auto;
+    min-height: 0;
+    border-bottom: none;
+    padding-bottom: 6px;
+  }
+  #log-root { display: none; }
+  /* extra space at the bottom so the last content scrolls clear of the fixed bar */
+  #hud-side { padding-bottom: 76px; }
+  /* Pin the phase action buttons to the bottom of the side panel — ALWAYS visible
+     (fixed, not sticky, so it stays put no matter where you've scrolled). */
+  #hud-side .hud-actions {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    width: 332px;            /* matches the side-panel width */
+    margin: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--panel-2);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.45);
+    z-index: 50;
+  }
+  /* Slightly larger touch targets for the action buttons on touch screens. */
+  #hud-side .hud-actions button { padding: 14px 14px; }
+}
+
 /* ---- Menu overlay ---- */
 #menu-root:empty { display: none; }
 #menu-root {
