@@ -1,7 +1,10 @@
 // Controller: owns the GameState and the turn loop; wires the engine to the
 // (Opus-built) UI modules and a placeholder greedy AI (real AI = Phase 4).
 
-import { createGame, autoDistribute, currentPlayer, currentPlayerId, playerById, statesOf } from "./engine/gamestate.js";
+import {
+  createGame, autoDistribute, currentPlayer, currentPlayerId, playerById, statesOf,
+  placeInitialArmies, allStatesClaimed, unclaimedStates, draftPick,
+} from "./engine/gamestate.js";
 import {
   beginTurn, placeArmies, endReinforcement, legalAttacks, executeAttackRound,
   reachableOwned, fortify, turnInSet, endTurn, reinforcementCount,
@@ -97,7 +100,7 @@ function setupPanelToggle() {
   });
 }
 
-function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [] } = {}) {
+function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random" } = {}) {
   const players = Array.from({ length: playerCount }, (_, i) => {
     let name;
     if (i < humanCount) {
@@ -109,12 +112,52 @@ function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer",
     return { name, isAI: i >= humanCount, difficulty };
   });
   state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players });
-  autoDistribute(state);
   winReported = false;
   ui.menus.hide();
-  beginTurn(state);
-  refresh();
-  runTurn();
+  if (setup === "draft") {
+    // Interactive claim: players take turns picking unclaimed states, then armies
+    // are scattered and play begins. (Random setup skips straight to play.)
+    state.phase = "draft";
+    state.turnPointer = 0;
+    refresh();
+    runDraft();
+  } else {
+    autoDistribute(state);
+    beginTurn(state);
+    refresh();
+    runTurn();
+  }
+}
+
+const advanceDraftPicker = () => { state.turnPointer = (state.turnPointer + 1) % state.order.length; };
+
+// Drive the interactive draft: AI picks automatically; a human picks by clicking an
+// unclaimed state (see handleStateClick). When every state is claimed, scatter the
+// starting armies and start the game.
+async function runDraft() {
+  if (allStatesClaimed(state)) {
+    placeInitialArmies(state);
+    state.turnPointer = 0;
+    beginTurn(state);
+    refresh();
+    await runTurn();
+    return;
+  }
+  const p = currentPlayer(state);
+  if (p.isAI) {
+    busy = true;
+    refresh();
+    await sleep(300);
+    const code = ai.draftPick(state, currentPlayerId(state), p.difficulty);
+    if (code) { draftPick(state, currentPlayerId(state), code); ui.audio.play("reinforce"); }
+    advanceDraftPicker();
+    busy = false;
+    refresh();
+    await runDraft();
+  } else {
+    busy = false;
+    refresh(); // updateSelectable highlights the unclaimed states for the human picker
+  }
 }
 
 function refresh() {
@@ -129,6 +172,11 @@ const humanActive = () => state && !busy && !currentPlayer(state).isAI && state.
 function updateSelectable() {
   if (!state) return;
   ui.map.setHighlights([], "selected");
+  if (state.phase === "draft") {
+    const p = currentPlayer(state);
+    ui.map.setSelectable(!busy && p && !p.isAI ? unclaimedStates(state) : null);
+    return;
+  }
   if (!humanActive()) { ui.map.setSelectable(null); return; }
   const pid = currentPlayerId(state);
   if (state.phase === "reinforce") {
@@ -159,6 +207,16 @@ function updateSelectable() {
 
 // ---- Human interaction ----
 function handleStateClick(code) {
+  // Draft: the current human picks an unclaimed state.
+  if (state && state.phase === "draft") {
+    if (busy || currentPlayer(state).isAI || state.owner[code] !== null) return;
+    draftPick(state, currentPlayerId(state), code);
+    ui.audio.play("reinforce");
+    advanceDraftPicker();
+    refresh();
+    runDraft();
+    return;
+  }
   if (!humanActive()) return;
   const pid = currentPlayerId(state);
   if (state.phase === "reinforce") {

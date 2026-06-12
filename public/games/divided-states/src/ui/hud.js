@@ -155,6 +155,7 @@ const HUD_CSS = `
 
 const PHASE_LABEL = {
   setup: "Setup",
+  draft: "Draft",
   reinforce: "Reinforce",
   attack: "Attack",
   fortify: "Fortify",
@@ -454,6 +455,8 @@ export function createHud({ topEl, sideEl, handlers }) {
       wait.textContent =
         phase === "gameover"
           ? "Game over."
+          : phase === "draft"
+          ? (isAI ? `${cur ? cur.name : "AI"} is drafting…` : "Your pick — tap a territory on the map")
           : isAI
           ? `${cur ? cur.name : "AI"} is commanding…`
           : "…";

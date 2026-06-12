@@ -10,7 +10,7 @@
 import { ADJACENCY } from "../data/adjacency.js";
 import { REGIONS } from "../data/regions.js";
 import { winProbability } from "../engine/combat.js";
-import { statesOf, playerById } from "../engine/gamestate.js";
+import { statesOf, playerById, unclaimedStates } from "../engine/gamestate.js";
 import { legalAttacks, reachableOwned } from "../engine/rules.js";
 import { findSet } from "../engine/cards.js";
 
@@ -44,6 +44,29 @@ const TIER = {
   general: { attackMin: 0.6, floor: 0.42, regionW: 16, elimW: 14, concentrate: true },
 };
 const cfg = (diff) => TIER[diff] || TIER.officer;
+
+// ---------- draft (interactive claim) ----------
+// Choose an unclaimed state to grab: cluster with what we already own and build
+// toward whole regions. Recruit drafts more randomly.
+export function draftPick(s, pid, diff) {
+  const unclaimed = unclaimedStates(s);
+  if (!unclaimed.length) return null;
+  let best = null, bestScore = -Infinity;
+  for (const code of unclaimed) {
+    // adjacency to our own states -> keeps our territory connected
+    let score = ADJACENCY[code].filter((n) => s.owner[n] === pid).length * 6;
+    // region foothold -> reward progressing toward a full region's bonus
+    for (const k in REGIONS) {
+      const r = REGIONS[k];
+      if (!r.states.includes(code)) continue;
+      score += r.states.filter((x) => s.owner[x] === pid).length * 3;
+      score += Math.max(0, 9 - r.states.length) * 0.4; // small regions are easier to finish
+    }
+    score += s._rng() * (diff === "recruit" ? 12 : 3); // randomness; recruit leans on it
+    if (score > bestScore) { bestScore = score; best = code; }
+  }
+  return best;
+}
 
 // ---------- card policy ----------
 // Whether to trade a set NOW (the caller checks a set actually exists). Recruit only

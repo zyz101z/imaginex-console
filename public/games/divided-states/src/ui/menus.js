@@ -464,6 +464,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     let playerCount = 4;
     let humanCount = 1;
     let difficulty = "officer";
+    let setup = "random";
     const names = ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"];
 
     const card = el("div", { class: "ds-card" });
@@ -472,6 +473,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     const humansField = el("div", { class: "ds-field" });
     const namesField = el("div", { class: "ds-field" });
     const diffField = el("div", { class: "ds-field" });
+    const setupField = el("div", { class: "ds-field" });
 
     function renderPlayers() {
       playersField.innerHTML = "";
@@ -534,6 +536,26 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       namesField.appendChild(wrap);
     }
 
+    function renderSetup() {
+      setupField.innerHTML = "";
+      setupField.appendChild(el("span", { class: "ds-label", text: "Starting territories" }));
+      setupField.appendChild(
+        segmented(
+          [{ value: "random", label: "Random" }, { value: "draft", label: "Draft" }],
+          setup,
+          (v) => { setup = v; renderSetup(); }
+        )
+      );
+      setupField.appendChild(
+        el("div", {
+          class: "ds-hint",
+          text: setup === "draft"
+            ? "Draft — take turns picking your starting states (more strategic)."
+            : "Random — states are dealt out instantly (quick games).",
+        })
+      );
+    }
+
     function renderDifficulty() {
       diffField.innerHTML = "";
       diffField.appendChild(el("span", { class: "ds-label", text: "AI difficulty" }));
@@ -553,6 +575,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     renderHumans();
     renderNames();
     renderDifficulty();
+    renderSetup();
 
     const startBtn = el("button", {
       type: "button",
@@ -560,7 +583,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       text: "Start Game",
       onClick: () =>
         onNewGame &&
-        onNewGame({ playerCount, humanCount, difficulty, names: names.slice(0, humanCount) }),
+        onNewGame({ playerCount, humanCount, difficulty, setup, names: names.slice(0, humanCount) }),
     });
     const helpBtn = el("button", {
       type: "button",
@@ -578,6 +601,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(humansField);
     card.appendChild(namesField);
     card.appendChild(diffField);
+    card.appendChild(setupField);
     card.appendChild(el("div", { class: "ds-actions" }, [startBtn, helpBtn]));
 
     mount(card);

@@ -85,19 +85,13 @@ export function draftPick(s, playerId, code) {
   s.armies[code] = 1;
 }
 
-// Quick random distribution — used by tests and as the "random" claim fallback.
-// Assigns every state round-robin, 1 army each, then scatters the remaining
-// starting armies onto each player's owned states.
-export function autoDistribute(s) {
-  const codes = shuffle([...STATE_CODES], s._rng);
-  codes.forEach((code, i) => {
-    const pid = s.order[i % s.order.length];
-    s.owner[code] = pid;
-    s.armies[code] = 1;
-  });
+// Scatter each player's remaining starting armies across the states they already
+// own (each owned state already has 1). Used after both random and draft claims.
+export function placeInitialArmies(s) {
   const total = STARTING_ARMIES[playerCount(s)] || 30;
   for (const p of s.players) {
     const owned = statesOf(s, p.id);
+    if (!owned.length) continue;
     let extra = total - owned.length;
     while (extra > 0) {
       const code = owned[Math.floor(s._rng() * owned.length)];
@@ -105,4 +99,24 @@ export function autoDistribute(s) {
       extra--;
     }
   }
+}
+
+// Quick random distribution — used by tests and as the "random" claim option.
+// Assigns every state round-robin (1 army each), then scatters starting armies.
+export function autoDistribute(s) {
+  const codes = shuffle([...STATE_CODES], s._rng);
+  codes.forEach((code, i) => {
+    const pid = s.order[i % s.order.length];
+    s.owner[code] = pid;
+    s.armies[code] = 1;
+  });
+  placeInitialArmies(s);
+}
+
+// All states still unclaimed? (used to detect the end of an interactive draft)
+export function allStatesClaimed(s) {
+  return STATE_CODES.every((c) => s.owner[c] !== null);
+}
+export function unclaimedStates(s) {
+  return STATE_CODES.filter((c) => s.owner[c] === null);
 }
