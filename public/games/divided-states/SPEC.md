@@ -243,3 +243,35 @@ wires to the engine correctly, a full bug sweep, and a balance/playability sanit
 ## 9. Stretch Goals
 - Online/hotseat multiplayer; save/resume; map editor; alternate maps (world, single-state counties);
   fog-of-war / capital secrecy; campaign vs escalating AI; stats/leaderboard (could reuse ImagineX's).
+
+## 10. Team Mode (designed 2026-06-12, not yet built)
+
+Optional alliances. Decisions below are locked.
+
+- **Team assignment:** fully flexible — each player is put on a team at game start (2v2, 3v3, 2v2v2,
+  2v1v1, etc.). "No teams" (everyone their own team) = current free-for-all.
+- **Win = LAST TEAM STANDING:** a team wins when all other teams are eliminated (every rival player at
+  0 states). NOTE: with no neutral territories this is *identical* to "one team owns all 49" — they
+  trigger at the same instant. The "last team standing" framing is chosen so it still reads right if we
+  ever add surrender / neutral states.
+- **No attacking teammates:** `legalAttacks` excludes states owned by a teammate (same-team check).
+- **Fortify = THROUGH-ONLY (no gifting):** the fortify path may route *across* a teammate's territory,
+  but the destination must be one of YOUR OWN states. You cannot drop armies onto a teammate's state.
+  (Lets you reinforce your own cut-off states behind a partner's lines; can't just hand over armies.)
+- **Region bonuses = team-shared, split PROPORTIONALLY:** a region's bonus is earned when the TEAM
+  collectively owns every state in it. The bonus is split among the teammates who hold ≥1 of its states,
+  proportional to how many they hold, with any rounding remainder going to the largest holder; zero-
+  holders get nothing. Total bonus per region is unchanged (a region is worth the same to a team as to a
+  solo player — just divided), so it stays balanced. (e.g. Northeast +5, 9 states: A1 holds 5 → +3,
+  A2 holds 4 → +2.)
+- **AI (v1):** team-aware — won't attack teammates and treats teammate borders as friendly (so
+  `enemyNeighbors`/`isBorder`/`threat` use a not-same-team check). Plays independently otherwise;
+  *coordinated* teammate strategy (ganging up on one rival) is a deferred stretch.
+- **UI:** team-assignment control on the start screen; in-game team indicator (e.g. a ring/badge on a
+  player's color); commanders panel grouped by team; "Team X wins!" victory screen.
+
+**Implementation sketch:** add `team` to each player + a `sameTeam(s, a, b)` helper; replace
+owner-equality "enemy" checks with not-same-team in `legalAttacks`, the AI's enemy/border/threat helpers,
+and the win check; add team-aware reachability for fortify (BFS over own+teammate states, destinations =
+own only); compute the proportional region split in `reinforcementCount`. Effort ≈ a solid session or
+two; the UI (team assignment + indicators) is the larger half, engine changes are small/contained.
