@@ -5,6 +5,12 @@ Hawaii out of play). Lives in the ImagineX console; deploys to www.imaginex.game
 
 ---
 
+## 2026-06-12 — Touch fix: region highlight on iPad
+- Region Control rows now **tap-to-pin** on touch devices (iPad has no hover, so tapping
+  a region previously highlighted nothing). Tap a region to highlight its states on the
+  map; tap again (or another region) to switch/clear. The pinned row shows an accent bar.
+  Desktop hover is unchanged.
+
 ## 2026-06-12 — Team Mode
 
 Full alliance play, built in four shipped batches.

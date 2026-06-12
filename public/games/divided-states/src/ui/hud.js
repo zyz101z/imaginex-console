@@ -96,6 +96,9 @@ const HUD_CSS = `
 #hud-side .hud-region + .hud-region { margin-top: 2px; }
 #hud-side .hud-region:hover { background: var(--accent-soft);
   border-color: var(--accent-line); }
+/* Tap-pinned region (touch): a clear, persistent active state + left accent bar. */
+#hud-side .hud-region.pinned { background: var(--accent-soft);
+  border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 #hud-side .hud-region-hint { font-size: 10px; line-height: 1.4; color: var(--ink-dim);
   margin: -2px 0 8px; font-style: italic; }
 #hud-side .hud-region.complete { background: var(--accent-soft);
@@ -297,19 +300,30 @@ export function createHud({ topEl, sideEl, handlers }) {
   const regionBlock = el("div", "hud-block");
   regionBlock.appendChild(el("h3", null, "Region Control"));
   regionBlock.appendChild(
-    el("div", "hud-region-hint", "Hover a region to see its states on the map.")
+    el("div", "hud-region-hint", "Tap or hover a region to highlight its states on the map.")
   );
   const regionRows = {}; // key -> { row, prog, fill, fillMine, bonus, share }
+  // Region highlighting works two ways: hover (desktop mouse) and TAP-TO-PIN (touch,
+  // e.g. iPad — which has no hover). A tapped region stays pinned until tapped again or
+  // another region is tapped; `stuckRegion` is the source of truth on touch and gates
+  // the hover handlers so a pin isn't cleared by stray synthetic mouse events.
+  let stuckRegion = null;
   for (const key of Object.keys(REGIONS)) {
     const reg = REGIONS[key];
     const row = el("div", "hud-region");
-    // Hover listeners are attached to the persistent row DOM (built once),
-    // so they survive every render() repaint.
+    // Listeners are attached to the persistent row DOM (built once), so they survive
+    // every render() repaint.
     row.addEventListener("mouseenter", () => {
-      if (h.onRegionHover) h.onRegionHover(key);
+      if (h.onRegionHover && !stuckRegion) h.onRegionHover(key);
     });
     row.addEventListener("mouseleave", () => {
-      if (h.onRegionHover) h.onRegionHover(null);
+      if (h.onRegionHover && !stuckRegion) h.onRegionHover(null);
+    });
+    row.addEventListener("click", () => {
+      if (!h.onRegionHover) return;
+      stuckRegion = stuckRegion === key ? null : key; // toggle / switch the pin
+      for (const k in regionRows) regionRows[k].row.classList.toggle("pinned", k === stuckRegion);
+      h.onRegionHover(stuckRegion);
     });
     const main = el("div", "r-main");
     const top = el("div", "r-top");
