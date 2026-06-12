@@ -264,9 +264,13 @@ Optional alliances. Decisions below are locked.
   holders get nothing. Total bonus per region is unchanged (a region is worth the same to a team as to a
   solo player — just divided), so it stays balanced. (e.g. Northeast +5, 9 states: A1 holds 5 → +3,
   A2 holds 4 → +2.)
-- **AI (v1):** team-aware — won't attack teammates and treats teammate borders as friendly (so
-  `enemyNeighbors`/`isBorder`/`threat` use a not-same-team check). Plays independently otherwise;
-  *coordinated* teammate strategy (ganging up on one rival) is a deferred stretch.
+- **AI:** team-aware — won't attack teammates and treats teammate borders as friendly (so
+  `enemyNeighbors`/`isBorder`/`threat` use a not-same-team check). **Coordinated** at Officer+ (only when
+  the AI has a living ally, so free-for-all is unchanged): allies draft/attack toward *shared* regions, and
+  Generals additionally **focus-fire** — every ally independently derives the same target (the enemy team
+  closest to elimination: fewest states, tie-broken by armies then id) and reinforces/fortifies that shared
+  front. No AI-to-AI messaging; convergence is emergent from the deterministic target rule. Recruit stays
+  uncoordinated.
 - **UI:** team-assignment control on the start screen; in-game team indicator (e.g. a ring/badge on a
   player's color); commanders panel grouped by team; "Team X wins!" victory screen.
 
