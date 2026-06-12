@@ -26,11 +26,12 @@ export function shuffle(arr, rng) {
   return arr;
 }
 
-// Escalating bonus by number of sets already turned in (globally): 4,6,8,10,12,15,+5...
+// Modest, CAPPED bonus so cards are a helpful boost but never a battle-deciding
+// swing: 3,4,5,6,7,8, then capped at 8 (was an unbounded 4,6,8,10,12,15,+5...).
 export function setBonus(setsAlreadyTurnedIn) {
-  const table = [4, 6, 8, 10, 12, 15];
+  const table = [3, 4, 5, 6, 7, 8];
   if (setsAlreadyTurnedIn < table.length) return table[setsAlreadyTurnedIn];
-  return 15 + 5 * (setsAlreadyTurnedIn - (table.length - 1));
+  return 8; // cap
 }
 
 // Is this trio of cards a valid set? (3 same symbol, or one of each, wilds substitute.)

@@ -92,7 +92,7 @@ ok(winProbability(5, 5) < winProbability(5, 3), "more defenders => lower win pro
 // ---------- 4. Cards ----------
 ok(buildDeck().length === 51, "deck = 49 states + 2 wilds");
 ok(buildDeck().filter((c) => c.wild).length === 2, "deck has 2 wilds");
-ok(JSON.stringify([0, 1, 2, 3, 4, 5, 6, 7].map(setBonus)) === JSON.stringify([4, 6, 8, 10, 12, 15, 20, 25]), "set bonus escalation");
+ok(JSON.stringify([0, 1, 2, 3, 4, 5, 6, 7].map(setBonus)) === JSON.stringify([3, 4, 5, 6, 7, 8, 8, 8]), "set bonus escalation (capped)");
 ok(isValidSet([{ symbol: "recruits" }, { symbol: "recruits" }, { symbol: "recruits" }]), "three-of-a-kind is a set");
 ok(isValidSet([{ symbol: "recruits" }, { symbol: "cavalry" }, { symbol: "artillery" }]), "one-of-each is a set");
 ok(isValidSet([{ wild: true }, { symbol: "recruits" }, { symbol: "recruits" }]), "wild completes a set");
