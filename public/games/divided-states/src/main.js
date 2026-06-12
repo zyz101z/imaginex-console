@@ -3,7 +3,7 @@
 
 import {
   createGame, autoDistribute, currentPlayer, currentPlayerId, playerById, statesOf,
-  placeInitialArmies, allStatesClaimed, unclaimedStates, draftPick,
+  allStatesClaimed, unclaimedStates, draftPick, STARTING_ARMIES, playerCount,
 } from "./engine/gamestate.js";
 import {
   beginTurn, placeArmies, endReinforcement, legalAttacks, executeAttackRound,
@@ -136,11 +136,7 @@ const advanceDraftPicker = () => { state.turnPointer = (state.turnPointer + 1) %
 // starting armies and start the game.
 async function runDraft() {
   if (allStatesClaimed(state)) {
-    placeInitialArmies(state);
-    state.turnPointer = 0;
-    beginTurn(state);
-    refresh();
-    await runTurn();
+    startPlacement(); // each player now places their remaining starting armies
     return;
   }
   const p = currentPlayer(state);
@@ -160,6 +156,50 @@ async function runDraft() {
   }
 }
 
+// Initial army placement (after a draft): each player in turn places their remaining
+// starting armies on their own states. Human clicks; AI auto-places by its plan.
+function startPlacement() {
+  state.phase = "placement";
+  state._placeIdx = 0;
+  refresh();
+  runPlacement();
+}
+
+async function runPlacement() {
+  if (state._placeIdx >= state.order.length) {
+    // everyone has placed — begin the game
+    state.turnPointer = 0;
+    beginTurn(state);
+    refresh();
+    await runTurn();
+    return;
+  }
+  const pid = state.order[state._placeIdx];
+  state.turnPointer = state._placeIdx;
+  state.reinforcementsRemaining = Math.max(
+    0, (STARTING_ARMIES[playerCount(state)] || 30) - statesOf(state, pid).length);
+  const p = playerById(state, pid);
+  if (p.isAI || state.reinforcementsRemaining <= 0) {
+    busy = true;
+    refresh();
+    await sleep(300);
+    for (const { code, n } of ai.planReinforcements(state, pid, p.difficulty)) {
+      if (n > 0 && state.owner[code] === pid) placeArmies(state, pid, code, Math.min(n, state.reinforcementsRemaining));
+    }
+    if (state.reinforcementsRemaining > 0) { // safety: dump any remainder
+      const owned = statesOf(state, pid);
+      if (owned.length) placeArmies(state, pid, owned[0], state.reinforcementsRemaining);
+    }
+    state._placeIdx++;
+    busy = false;
+    refresh();
+    await runPlacement();
+  } else {
+    busy = false;
+    refresh(); // updateSelectable highlights the human's own states
+  }
+}
+
 function refresh() {
   ui.map.render(state);
   ui.hud.render(state);
@@ -175,6 +215,11 @@ function updateSelectable() {
   if (state.phase === "draft") {
     const p = currentPlayer(state);
     ui.map.setSelectable(!busy && p && !p.isAI ? unclaimedStates(state) : null);
+    return;
+  }
+  if (state.phase === "placement") {
+    const p = currentPlayer(state);
+    ui.map.setSelectable(!busy && p && !p.isAI ? statesOf(state, currentPlayerId(state)) : null);
     return;
   }
   if (!humanActive()) { ui.map.setSelectable(null); return; }
@@ -215,6 +260,17 @@ function handleStateClick(code) {
     advanceDraftPicker();
     refresh();
     runDraft();
+    return;
+  }
+  // Initial placement: the current human places a starting army on one of their states.
+  if (state && state.phase === "placement") {
+    if (busy || currentPlayer(state).isAI) return;
+    const pid = currentPlayerId(state);
+    if (state.owner[code] !== pid || state.reinforcementsRemaining <= 0) return;
+    placeArmies(state, pid, code, 1);
+    ui.audio.play("reinforce");
+    if (state.reinforcementsRemaining <= 0) { state._placeIdx++; runPlacement(); }
+    else refresh();
     return;
   }
   if (!humanActive()) return;

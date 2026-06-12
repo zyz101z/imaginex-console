@@ -156,6 +156,7 @@ const HUD_CSS = `
 const PHASE_LABEL = {
   setup: "Setup",
   draft: "Draft",
+  placement: "Place Armies",
   reinforce: "Reinforce",
   attack: "Attack",
   fortify: "Fortify",
@@ -333,7 +334,7 @@ export function createHud({ topEl, sideEl, handlers }) {
     else if (phase === "fortify" || phase === "fortifyDone") tPhase.classList.add("act-fortify");
     turnNum.textContent = String(state.turnNumber);
 
-    if (phase === "reinforce") {
+    if (phase === "reinforce" || phase === "placement") {
       const n = state.reinforcementsRemaining | 0;
       rfNum.textContent = String(n);
       tReinforce.style.display = "inline-flex";
@@ -457,6 +458,8 @@ export function createHud({ topEl, sideEl, handlers }) {
           ? "Game over."
           : phase === "draft"
           ? (isAI ? `${cur ? cur.name : "AI"} is drafting…` : "Your pick — tap a territory on the map")
+          : phase === "placement"
+          ? (isAI ? `${cur ? cur.name : "AI"} is placing armies…` : "Place your armies — tap your states")
           : isAI
           ? `${cur ? cur.name : "AI"} is commanding…`
           : "…";
