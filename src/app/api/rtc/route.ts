@@ -36,6 +36,33 @@ export async function POST(req: Request) {
   const code =
     typeof body?.code === "string" && /^[A-Z2-9]{4}$/.test(body.code) ? body.code : null;
 
+  // ICE config for clients: STUN always; TURN relay servers when the Metered Open Relay
+  // key is configured (Vercel env: METERED_TURN_APP + METERED_TURN_KEY). Cached 20 min.
+  if (action === "ice") {
+    const fallback = [{ urls: "stun:stun.l.google.com:19302" }];
+    const app = process.env.METERED_TURN_APP;
+    const key = process.env.METERED_TURN_KEY;
+    if (!app || !key) return NextResponse.json({ iceServers: fallback, turn: false });
+    try {
+      const cached = await redis.get(`rtc:iceservers`);
+      if (typeof cached === "string" && cached.length > 2) {
+        return NextResponse.json({ iceServers: JSON.parse(cached), turn: true });
+      }
+      const r = await fetch(
+        `https://${app}.metered.live/api/v1/turn/credentials?apiKey=${key}`,
+        { headers: { accept: "application/json" } },
+      );
+      if (!r.ok) throw new Error("metered " + r.status);
+      const servers = (await r.json()) as Array<{ urls: string }>;
+      if (!Array.isArray(servers) || !servers.length) throw new Error("empty");
+      const ice = [...fallback, ...servers];
+      await redis.set(`rtc:iceservers`, JSON.stringify(ice), { ex: 1200 });
+      return NextResponse.json({ iceServers: ice, turn: true });
+    } catch {
+      return NextResponse.json({ iceServers: fallback, turn: false });
+    }
+  }
+
   if (action === "host") {
     if (!sdp) return bad("missing sdp");
     for (let i = 0; i < 6; i++) {

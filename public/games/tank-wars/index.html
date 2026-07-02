@@ -137,6 +137,7 @@
     <p class="subtitle">BETA &bull; CONNECTION TEST</p>
     <div id="onlineHome">
       <button class="btn teal" id="btnRtcHost">CREATE GAME CODE</button>
+      <p id="rtcRelayHint" style="color:#5f7099;font-size:11px;margin:0 0 10px;"></p>
       <p style="color:#5f7099;font-size:12px;margin:14px 0 6px;">&mdash; or join with a friend's code &mdash;</p>
       <div class="row">
         <input id="rtcJoinCode" maxlength="4" autocomplete="off" placeholder="CODE"
@@ -1634,16 +1635,24 @@ function rtcCleanup() {
   rtcEl('onlineHome').classList.remove('hidden');
   rtcEl('onlineStatus').classList.add('hidden');
 }
-// STUN finds the direct path; the free TURN relay is the fallback for networks that
-// block P2P (hotel WiFi / cellular CGNAT / school firewalls — the 'stuck at
-// connecting' failure mode from the first remote test).
-const RTC_CFG = { iceServers: [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:openrelay.metered.ca:80' },
-  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-] };
+// STUN finds the direct path; TURN relay is the fallback for networks that block P2P
+// (hotel WiFi / cellular CGNAT — the 'stuck at connecting' failure). Relay servers are
+// minted by /api/rtc {action:'ice'} from Metered Open Relay when its key is configured
+// (the legacy hardcoded openrelay creds are DEAD — verified empirically: 0 relay grants).
+let rtcIce = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+let rtcTurnOK = false, rtcIceLoaded = false;
+async function rtcLoadIce() {
+  try {
+    const r = await rtcApi({ action: 'ice' });
+    if (r && Array.isArray(r.iceServers) && r.iceServers.length) {
+      rtcIce = { iceServers: r.iceServers };
+      rtcTurnOK = !!r.turn;
+    }
+  } catch (e) {}
+  rtcIceLoaded = true;
+  const hint = rtcEl('rtcRelayHint');
+  if (hint) hint.textContent = rtcTurnOK ? 'relay server: READY' : 'relay server: not configured — direct connections only';
+}
 let rtcFailTimer = null;
 function rtcArmFailTimer() {
   if (rtcFailTimer) clearTimeout(rtcFailTimer);
@@ -1661,7 +1670,7 @@ function rtcCandSummary(desc) {
   return kinds.length ? kinds.join(' + ') : 'none';
 }
 function rtcNewPC() {
-  const pc = new RTCPeerConnection(RTC_CFG);
+  const pc = new RTCPeerConnection(rtcIce);
   pc.oniceconnectionstatechange = () => {
     if (pc !== rtcPC) return;
     const st = pc.iceConnectionState;
@@ -1728,6 +1737,7 @@ async function rtcHost() {
   rtcShowStatus('····');
   rtcSetState('Creating room…');
   try {
+    if (!rtcIceLoaded) await rtcLoadIce();
     rtcPC = rtcNewPC();
     rtcWireChannel(rtcPC.createDataChannel('game'));
     await rtcPC.setLocalDescription(await rtcPC.createOffer());
@@ -1755,6 +1765,7 @@ async function rtcJoin(code) {
   rtcShowStatus(code);
   rtcSetState('Looking up room…');
   try {
+    if (!rtcIceLoaded) await rtcLoadIce();
     const { sdp } = await rtcApi({ action: 'join', code });
     rtcPC = rtcNewPC();
     rtcPC.ondatachannel = (ev) => rtcWireChannel(ev.channel);
@@ -1769,7 +1780,7 @@ async function rtcJoin(code) {
     rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).' : ('Error: ' + e.message));
   }
 }
-document.getElementById('btnOnline').onclick = () => { audioInit(); show('menu', false); show('online', true); };
+document.getElementById('btnOnline').onclick = () => { audioInit(); rtcLoadIce(); show('menu', false); show('online', true); };
 document.getElementById('btnOnlineBack').onclick = () => { rtcCleanup(); show('online', false); show('menu', true); };
 document.getElementById('btnRtcHost').onclick = () => rtcHost();
 document.getElementById('btnRtcJoin').onclick = () => {
