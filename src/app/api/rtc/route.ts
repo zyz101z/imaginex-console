@@ -47,25 +47,34 @@ export async function POST(req: Request) {
       const reason = !app && !key ? "no env vars" : !app ? "missing METERED_TURN_APP" : "missing METERED_TURN_KEY";
       return NextResponse.json({ iceServers: fallback, turn: false, reason });
     }
+    // tolerate the full domain being pasted as the app name ("foo.metered.live" -> "foo")
+    const appName = app.replace(/\.metered\.live.*$/i, "").replace(/^https?:\/\//i, "").trim();
+    let step = "start";
     try {
-      const cached = await redis.get(`rtc:iceservers`);
+      step = "cache-read";
+      const cached = await redis.get(`rtc:iceservers`).catch(() => null);
       if (typeof cached === "string" && cached.length > 2) {
         return NextResponse.json({ iceServers: JSON.parse(cached), turn: true });
       }
+      step = "metered-fetch";
       const r = await fetch(
-        `https://${app}.metered.live/api/v1/turn/credentials?apiKey=${key}`,
+        `https://${appName}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(key)}`,
         { headers: { accept: "application/json" } },
       );
-      if (!r.ok) throw new Error("metered http " + r.status);
-      const servers = (await r.json()) as Array<{ urls: string }>;
-      if (!Array.isArray(servers) || !servers.length) throw new Error("metered returned no servers");
+      step = "metered-body";
+      const bodyText = await r.text();
+      if (!r.ok) throw new Error("metered http " + r.status + ": " + bodyText.slice(0, 120));
+      const servers = JSON.parse(bodyText) as Array<{ urls: string }>;
+      if (!Array.isArray(servers) || !servers.length)
+        throw new Error("metered returned no servers: " + bodyText.slice(0, 120));
       const ice = [...fallback, ...servers];
-      await redis.set(`rtc:iceservers`, JSON.stringify(ice), { ex: 1200 });
+      step = "cache-write";
+      await redis.set(`rtc:iceservers`, JSON.stringify(ice), { ex: 1200 }).catch(() => {});
       return NextResponse.json({ iceServers: ice, turn: true });
     } catch (e) {
       return NextResponse.json({
         iceServers: fallback, turn: false,
-        reason: e instanceof Error ? e.message : "fetch failed",
+        reason: "step=" + step + " err=" + String(e).slice(0, 200),
       });
     }
   }
