@@ -79,6 +79,7 @@
       <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
       <button class="btn" id="btnAce">QUICK &bull; ACE</button>
     </div>
+    <button class="btn" id="btnOnline" style="background:linear-gradient(180deg,#b3bcff,#8a96f5);">ONLINE VS &nbsp;<span style="font-size:11px;vertical-align:2px;">BETA</span></button>
     <button class="btn ghost" id="btnGarage">GARAGE &mdash; TANKS &amp; SHELLS</button>
     <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
     <p class="tag" id="winTag"></p>
@@ -127,6 +128,29 @@
       <p><span class="k">P</span> pause</p>
     </div>
     <button class="btn ghost" id="btnHelpBack">BACK</button>
+  </div>
+</div>
+
+<div id="online" class="overlay hidden">
+  <div class="panel">
+    <h1 class="title" style="font-size:28px;">ONLINE VS</h1>
+    <p class="subtitle">BETA &bull; CONNECTION TEST</p>
+    <div id="onlineHome">
+      <button class="btn teal" id="btnRtcHost">CREATE GAME CODE</button>
+      <p style="color:#5f7099;font-size:12px;margin:14px 0 6px;">&mdash; or join with a friend's code &mdash;</p>
+      <div class="row">
+        <input id="rtcJoinCode" maxlength="4" autocomplete="off" placeholder="CODE"
+          style="flex:1;min-width:0;background:#1a2440;border:1px solid #3a4a70;border-radius:10px;color:#dfe8ff;font-size:22px;font-weight:800;letter-spacing:6px;text-align:center;padding:12px;text-transform:uppercase;outline:none;">
+        <button class="btn" id="btnRtcJoin" style="flex:1;margin:0;">JOIN</button>
+      </div>
+    </div>
+    <div id="onlineStatus" class="hidden">
+      <p id="rtcCode" style="font-size:44px;letter-spacing:10px;color:#ffd166;font-weight:900;margin:6px 0;"></p>
+      <p id="rtcState" style="color:#9fb3d9;font-size:14px;min-height:20px;"></p>
+      <p id="rtcPing" style="font-size:30px;color:#4de3c2;font-weight:900;margin:10px 0;"></p>
+      <p id="rtcNote" class="tag" style="margin-top:4px;"></p>
+    </div>
+    <button class="btn ghost" id="btnOnlineBack">BACK</button>
   </div>
 </div>
 
@@ -1585,6 +1609,136 @@ document.getElementById('btnMenu').onclick = () => {
   musicStop(false);
   show('victory', false); mode = 'menu'; tanks = []; shells = []; beams = []; genMaze(); updateWinTag(); show('menu', true);
 };
+
+// ============================== ONLINE VS (Phase 1: connect + RTT test) ==============================
+// WebRTC P2P with non-trickle ICE; signaling via /api/rtc (Vercel edge + Upstash).
+// Phase 1 ships an honest CONNECTION TEST (live ping) so remote play can be validated
+// before the gameplay netcode (phases 2-3, see MULTIPLAYER_PLAN.md) lands.
+let rtcPC = null, rtcDC = null, rtcPollTimer = null, rtcPingTimer = null, rtcPings = [];
+function rtcEl(id) { return document.getElementById(id); }
+function rtcSetState(msg) { rtcEl('rtcState').textContent = msg; }
+function rtcShowStatus(codeText) {
+  rtcEl('onlineHome').classList.add('hidden');
+  rtcEl('onlineStatus').classList.remove('hidden');
+  rtcEl('rtcCode').textContent = codeText || '';
+  rtcEl('rtcPing').textContent = '';
+  rtcEl('rtcNote').textContent = '';
+}
+function rtcCleanup() {
+  if (rtcPollTimer) { clearInterval(rtcPollTimer); rtcPollTimer = null; }
+  if (rtcPingTimer) { clearInterval(rtcPingTimer); rtcPingTimer = null; }
+  if (rtcDC) { try { rtcDC.close(); } catch (e) {} rtcDC = null; }
+  if (rtcPC) { try { rtcPC.close(); } catch (e) {} rtcPC = null; }
+  rtcPings = [];
+  rtcEl('onlineHome').classList.remove('hidden');
+  rtcEl('onlineStatus').classList.add('hidden');
+}
+function rtcNewPC() {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  pc.onconnectionstatechange = () => {
+    if (pc !== rtcPC) return;
+    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      rtcSetState('Connection lost.');
+      rtcEl('rtcPing').textContent = '';
+    }
+  };
+  return pc;
+}
+function rtcWaitIce(pc) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') return resolve();
+    const to = setTimeout(resolve, 3500);   // partial candidate sets still usually connect
+    pc.addEventListener('icegatheringstatechange', () => {
+      if (pc.iceGatheringState === 'complete') { clearTimeout(to); resolve(); }
+    });
+  });
+}
+async function rtcApi(payload) {
+  const res = await fetch('/api/rtc', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error || ('http ' + res.status));
+  }
+  return res.json();
+}
+function rtcWireChannel(dc) {
+  rtcDC = dc;
+  dc.onopen = () => {
+    rtcSetState('CONNECTED! Measuring ping…');
+    sfx.powerup();
+    rtcPingTimer = setInterval(() => {
+      if (dc.readyState === 'open') { try { dc.send(JSON.stringify({ t: 'ping', ts: performance.now() })); } catch (e) {} }
+    }, 1000);
+  };
+  dc.onmessage = (ev) => {
+    let m = null;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.t === 'ping') { try { dc.send(JSON.stringify({ t: 'pong', ts: m.ts })); } catch (e) {} }
+    else if (m.t === 'pong') {
+      rtcPings.push(performance.now() - m.ts);
+      if (rtcPings.length > 5) rtcPings.shift();
+      const avg = rtcPings.reduce((a, b) => a + b, 0) / rtcPings.length;
+      rtcSetState('CONNECTED');
+      rtcEl('rtcPing').textContent = 'ping ' + Math.round(avg) + ' ms';
+      rtcEl('rtcNote').textContent = (avg < 60 ? 'Excellent link — battles will feel great.' :
+        avg < 120 ? 'Good link — solid for battles.' :
+        'High latency — playable, may feel a little soft.') + '  Online battles land in the next update.';
+    }
+  };
+  dc.onclose = () => { if (rtcDC === dc) rtcSetState('Channel closed.'); };
+}
+async function rtcHost() {
+  rtcCleanup();
+  rtcShowStatus('····');
+  rtcSetState('Creating room…');
+  try {
+    rtcPC = rtcNewPC();
+    rtcWireChannel(rtcPC.createDataChannel('game'));
+    await rtcPC.setLocalDescription(await rtcPC.createOffer());
+    await rtcWaitIce(rtcPC);
+    const { code } = await rtcApi({ action: 'host', sdp: JSON.stringify(rtcPC.localDescription) });
+    rtcEl('rtcCode').textContent = code;
+    rtcSetState('Share this code — waiting for your opponent…');
+    const pc = rtcPC;
+    rtcPollTimer = setInterval(async () => {
+      try {
+        const { sdp } = await rtcApi({ action: 'poll', code });
+        if (sdp && pc === rtcPC && !pc.currentRemoteDescription) {
+          clearInterval(rtcPollTimer); rtcPollTimer = null;
+          rtcSetState('Opponent found — connecting…');
+          await pc.setRemoteDescription(JSON.parse(sdp));
+        }
+      } catch (e) {}
+    }, 1500);
+  } catch (e) { rtcSetState('Error: ' + e.message); }
+}
+async function rtcJoin(code) {
+  rtcCleanup();
+  rtcShowStatus(code);
+  rtcSetState('Looking up room…');
+  try {
+    const { sdp } = await rtcApi({ action: 'join', code });
+    rtcPC = rtcNewPC();
+    rtcPC.ondatachannel = (ev) => rtcWireChannel(ev.channel);
+    await rtcPC.setRemoteDescription(JSON.parse(sdp));
+    await rtcPC.setLocalDescription(await rtcPC.createAnswer());
+    rtcSetState('Connecting…');
+    await rtcWaitIce(rtcPC);
+    await rtcApi({ action: 'answer', code, sdp: JSON.stringify(rtcPC.localDescription) });
+  } catch (e) {
+    rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).' : ('Error: ' + e.message));
+  }
+}
+document.getElementById('btnOnline').onclick = () => { audioInit(); show('menu', false); show('online', true); };
+document.getElementById('btnOnlineBack').onclick = () => { rtcCleanup(); show('online', false); show('menu', true); };
+document.getElementById('btnRtcHost').onclick = () => rtcHost();
+document.getElementById('btnRtcJoin').onclick = () => {
+  const code = (rtcEl('rtcJoinCode').value || '').toUpperCase().trim();
+  if (/^[A-Z2-9]{4}$/.test(code)) rtcJoin(code);
+  else rtcEl('rtcJoinCode').value = '';
+};
 const soundBtn = document.getElementById('soundBtn');
 function syncSoundBtn() {
   soundBtn.innerHTML = muted ? '&#9834; OFF' : '&#9834; ON';
@@ -1630,6 +1784,33 @@ if (/(\?|&)demo=1/.test(location.search)) {
   renderGarage(); show('menu', false); show('garage', true);
 } else if (/(\?|&)screen=campaign/.test(location.search)) {
   renderCampaign(); show('menu', false); show('campaign', true);
+} else if (/(\?|&)rtctest=1/.test(location.search)) {
+  // WebRTC LOOPBACK self-test (headless-verifiable): two peers in this page, wired
+  // directly (no signaling server) — proves the channel + ping plumbing end-to-end.
+  (async () => {
+    show('menu', false); show('online', true);
+    rtcShowStatus('LOOP');
+    rtcSetState('Loopback test running…');
+    try {
+      const a = new RTCPeerConnection(), b = new RTCPeerConnection();
+      a.onicecandidate = (e) => { if (e.candidate) b.addIceCandidate(e.candidate).catch(() => {}); };
+      b.onicecandidate = (e) => { if (e.candidate) a.addIceCandidate(e.candidate).catch(() => {}); };
+      rtcPC = a;
+      rtcWireChannel(a.createDataChannel('game'));
+      b.ondatachannel = (ev) => {
+        ev.channel.onmessage = (m) => {
+          try {
+            const d = JSON.parse(m.data);
+            if (d.t === 'ping') ev.channel.send(JSON.stringify({ t: 'pong', ts: d.ts }));
+          } catch (e) {}
+        };
+      };
+      await a.setLocalDescription(await a.createOffer());
+      await b.setRemoteDescription(a.localDescription);
+      await b.setLocalDescription(await b.createAnswer());
+      await a.setRemoteDescription(b.localDescription);
+    } catch (e) { rtcSetState('LOOPBACK FAILED: ' + e.message); }
+  })();
 }
 
 requestAnimationFrame(frame);
