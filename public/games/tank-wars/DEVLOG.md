@@ -1,6 +1,14 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
+0. **⏳ TURN relay: waiting on USER 5-min task** (2026-07-02 remote test failed: symmetric
+   NAT both sides + legacy openrelay creds are DEAD — empirically 0 relay grants). Wired:
+   `/api/rtc {action:'ice'}` mints TURN creds from Metered Open Relay (20GB/mo free) when
+   Vercel env vars **METERED_TURN_APP** (app subdomain) + **METERED_TURN_KEY** (API key)
+   exist; ONLINE VS screen shows "relay server: READY / not configured". USER steps:
+   dashboard.metered.ca signup (free, no card) → create app → copy app name + API key →
+   Vercel project settings → Environment Variables → add both → redeploy. Then re-run the
+   remote test; expect "network paths ready: ... + relay" on both ends.
 1. **MULTIPLAYER PHASE 2** (see MULTIPLAYER_PLAN.md): host-authoritative snapshot sync
    over the Phase-1 DataChannel (20/s state down, 30/s inputs up, interpolation).
    Then Phase 3 client-side prediction (REQUIRED for the remote 50-100ms use case).
