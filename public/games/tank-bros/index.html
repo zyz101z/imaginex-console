@@ -71,9 +71,10 @@
       <p><b>Destroy the other tank!</b> Shells <b>bounce off walls</b> — and yes, your own shell
       can come back and get you. First to <b>5 rounds</b> wins the match.</p>
       <p><b>Player 1</b> (amber): <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span>
-      drive &nbsp;&bull;&nbsp; <span class="k">SPACE</span> or <span class="k">F</span> fire</p>
+      press where you want to go (combine keys for diagonals) &nbsp;&bull;&nbsp; <span class="k">SPACE</span> or <span class="k">F</span> fire</p>
       <p><b>Player 2</b> (teal): <span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span>
-      drive &nbsp;&bull;&nbsp; <span class="k">ENTER</span> or <span class="k">M</span> fire</p>
+      press where you want to go &nbsp;&bull;&nbsp; <span class="k">ENTER</span> or <span class="k">M</span> fire</p>
+      <p style="color:#8fa5cf">Your tank shoots the way it's facing — tap a direction to aim.</p>
       <p><b>Touch (solo):</b> left side of the screen steers, tap the right side to fire.</p>
       <p><b>Power-ups:</b> <b style="color:#ffd166">&#9650; TRIPLE</b> 3-way spread &nbsp;&bull;&nbsp;
       <b style="color:#ff6b6b">&#9889; RAPID</b> fast fire &nbsp;&bull;&nbsp;
@@ -104,8 +105,8 @@ const W = 960, H = 640;
 const COLS = 15, ROWS = 10, CELL = 64;
 const WALL_T = 8;
 const HUD_H = 0;                 // HUD is drawn over the arena top edge
-const TANK_R = 14;
-const TANK_SPEED = 150, TANK_ROT = 3.7;
+const TANK_R = 13;
+const TANK_SPEED = 150, TANK_ROT = 5.2;
 const SHELL_R = 4, SHELL_SPEED = 265, SHELL_LIFE = 9, MAX_SHELLS = 4, FIRE_CD = 0.36;
 const ROUNDS_TO_WIN = 5;
 const SUDDEN_DEATH_AT = 26;      // seconds into a round
@@ -529,24 +530,22 @@ function moveTank(t, dist) {
   const steps = Math.ceil(Math.abs(dist) / 6);
   const step = dist / steps;
   for (let i = 0; i < steps; i++) {
-    // x then y separately => wall sliding
     t.x += Math.cos(t.a) * step;
-    resolveTankWalls(t, true, false);
     t.y += Math.sin(t.a) * step;
-    resolveTankWalls(t, false, true);
+    // Full-normal iterative pushout: sliding along faces comes free (tangential motion
+    // is preserved), and corner contacts DEFLECT the tank around wall end-caps instead
+    // of stalling it — the old per-axis resolve made doorway lips feel like glue.
+    for (let iter = 0; iter < 3; iter++) {
+      let hitAny = false;
+      for (const r of wallRects) {
+        const hit = circleRectPush(t.x, t.y, TANK_R, r);
+        if (hit) { t.x += hit.nx * hit.push; t.y += hit.ny * hit.push; hitAny = true; }
+      }
+      if (!hitAny) break;
+    }
   }
   t.x = Math.max(TANK_R, Math.min(W - TANK_R, t.x));
   t.y = Math.max(TANK_R, Math.min(H - TANK_R, t.y));
-}
-function resolveTankWalls(t, doX, doY) {
-  for (const r of wallRects) {
-    const hit = circleRectPush(t.x, t.y, TANK_R, r);
-    if (hit) {
-      if (doX && doY) { t.x += hit.nx * hit.push; t.y += hit.ny * hit.push; }
-      else if (doX) t.x += hit.nx * hit.push;
-      else t.y += hit.ny * hit.push;
-    }
-  }
 }
 function updateShells(dt) {
   for (let i = shells.length - 1; i >= 0; i--) {
@@ -654,32 +653,35 @@ function powerColor(kind) {
 
 // ============================== UPDATE ==============================
 function controlHuman(t, dt, scheme) {
-  let fwd = 0, rot = 0, fire = false;
+  // DIRECTIONAL drive: press where you want to go (8-way); the tank auto-rotates
+  // toward it and drives once roughly aligned. Same scheme as touch and far easier
+  // than rotate-to-steer tank controls (playtest feedback: "hard to drive").
+  let dx = 0, dy = 0, fire = false;
   if (scheme === 0) {
-    if (keys['KeyW']) fwd += 1;
-    if (keys['KeyS']) fwd -= 1;
-    if (keys['KeyA']) rot -= 1;
-    if (keys['KeyD']) rot += 1;
+    if (keys['KeyW']) dy -= 1;
+    if (keys['KeyS']) dy += 1;
+    if (keys['KeyA']) dx -= 1;
+    if (keys['KeyD']) dx += 1;
     fire = keys['KeyF'] || keys['Space'];
-    // touch steering (solo): stick angle = desired heading
-    if (touchState.steer) {
-      const ta = touchState.steer;
-      const d = angDiff(t.a, ta);
-      rot = Math.abs(d) < 0.08 ? 0 : Math.sign(d);
-      fwd = Math.abs(d) < 1.1 ? 1 : 0;
-    }
     if (touchState.fire) fire = true;
   } else {
-    if (keys['ArrowUp']) fwd += 1;
-    if (keys['ArrowDown']) fwd -= 1;
-    if (keys['ArrowLeft']) rot -= 1;
-    if (keys['ArrowRight']) rot += 1;
+    if (keys['ArrowUp']) dy -= 1;
+    if (keys['ArrowDown']) dy += 1;
+    if (keys['ArrowLeft']) dx -= 1;
+    if (keys['ArrowRight']) dx += 1;
     fire = keys['Enter'] || keys['KeyM'];
   }
+  let target = null;
+  if (dx !== 0 || dy !== 0) target = Math.atan2(dy, dx);
+  if (scheme === 0 && touchState.steer != null) target = touchState.steer;
   const speedMul = t.power === 'rapid' ? 1.12 : 1;
-  t.a += rot * TANK_ROT * dt;
   const ox = t.x, oy = t.y;
-  if (fwd !== 0) moveTank(t, fwd * TANK_SPEED * speedMul * dt);
+  if (target !== null) {
+    const d = angDiff(t.a, target);
+    const rot = TANK_ROT * dt;
+    if (Math.abs(d) <= rot) t.a = target; else t.a += Math.sign(d) * rot;
+    if (Math.abs(d) < 1.15) moveTank(t, TANK_SPEED * speedMul * dt * (Math.abs(d) < 0.5 ? 1 : 0.7));
+  }
   t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
   if (fire) fireShell(t);
 }
