@@ -412,6 +412,8 @@ function endRound() {
   }
 }
 function endMatch() {
+  phase = 'matchover'; phaseT = 0;   // terminal state — without this, the roundover
+  // branch re-entered endMatch EVERY FRAME: fanfare × 60/s (awful ringing) + unbounded confetti.
   const w = tanks[0].score >= ROUNDS_TO_WIN ? tanks[0] : tanks[1];
   const humanWon = (w.i === 0) || twoPlayer;
   document.getElementById('winName').textContent =
@@ -722,6 +724,10 @@ function update(dt) {
 
   if (phase === 'countdown') {
     if (phaseT >= 1.8) { phase = 'play'; phaseT = 0; sfx.go(); }
+    return;
+  }
+  if (phase === 'matchover') {
+    updateParticles(dt);   // confetti keeps drifting behind the victory panel
     return;
   }
   if (phase === 'roundover') {
