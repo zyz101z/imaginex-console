@@ -372,11 +372,44 @@ let music = null;
 try { music = new Audio('music.mp3'); music.loop = true; music.preload = 'auto'; } catch (e) { music = null; }
 const MUSIC_VOL = 0.3;
 let musicFade = null;
+let musicUnlocked = false;
+// Browsers only let audio START inside a user gesture. The online GUEST's match starts
+// from a NETWORK message (no gesture) -> silently blocked. unlock() runs a muted
+// play/pause inside the ONLINE VS button clicks so later programmatic plays are allowed.
+function musicUnlock() {
+  if (!music || musicUnlocked) return;
+  const v = music.volume;
+  music.volume = 0;
+  const pr = music.play();
+  if (pr && pr.then) {
+    pr.then(() => {
+      musicUnlocked = true;
+      music.pause();
+      try { music.currentTime = 0; } catch (e) {}
+      music.volume = v;
+    }).catch(() => { music.volume = v; });
+  } else { musicUnlocked = true; music.pause(); music.volume = v; }
+}
 function musicPlay() {
   if (!music) return;
   clearInterval(musicFade); musicFade = null;
   music.volume = MUSIC_VOL; music.muted = muted;
-  if (music.paused) { try { music.currentTime = 0; } catch (e) {} music.play().catch(() => {}); }
+  if (music.paused) {
+    try { music.currentTime = 0; } catch (e) {}
+    const pr = music.play();
+    if (pr && pr.catch) pr.catch(() => {
+      // still blocked -> start on the player's first real input instead
+      const kick = () => {
+        if (mode === 'play' && music.paused && phase !== 'matchover') music.play().catch(() => {});
+        window.removeEventListener('keydown', kick);
+        window.removeEventListener('mousedown', kick);
+        window.removeEventListener('touchstart', kick);
+      };
+      window.addEventListener('keydown', kick);
+      window.addEventListener('mousedown', kick);
+      window.addEventListener('touchstart', kick);
+    });
+  }
 }
 function musicStop(fade) {
   if (!music || music.paused) return;
@@ -2132,11 +2165,12 @@ function netAbort(msg) {
   rtcCleanup();
 }
 
-document.getElementById('btnOnline').onclick = () => { audioInit(); rtcLoadIce(); show('menu', false); show('online', true); };
+document.getElementById('btnOnline').onclick = () => { audioInit(); musicUnlock(); rtcLoadIce(); show('menu', false); show('online', true); };
 document.getElementById('btnOnlineBack').onclick = () => { rtcCleanup(); show('online', false); show('menu', true); };
-document.getElementById('btnRtcHost').onclick = () => rtcHost();
-document.getElementById('btnRtcStart').onclick = () => { startOnlineMatch(); };
+document.getElementById('btnRtcHost').onclick = () => { musicUnlock(); rtcHost(); };
+document.getElementById('btnRtcStart').onclick = () => { musicUnlock(); startOnlineMatch(); };
 document.getElementById('btnRtcJoin').onclick = () => {
+  musicUnlock();
   const code = (rtcEl('rtcJoinCode').value || '').toUpperCase().trim();
   if (/^[A-Z2-9]{4}$/.test(code)) rtcJoin(code);
   else rtcEl('rtcJoinCode').value = '';
