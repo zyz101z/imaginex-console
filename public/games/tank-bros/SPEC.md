@@ -18,10 +18,15 @@ single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-
   - ■ **BIG SHOT** — single fat slow shell that smashes through 2 walls and eats enemy shells
 
 ## Controls
-- **DIRECTIONAL drive** (v1.1, 2026-07-01): press where you want to go (8-way; diagonals
-  combine); tank auto-rotates toward it (5.2 rad/s) and drives once within ~66°. Changed
-  from rotate-to-steer after playtest feedback ("hard to drive") — matches touch + kid
-  expectations. Aiming = facing = last direction pressed.
+- **INSTANT directional drive** (v1.2, 2026-07-01): press where you want to go (8-way) and
+  the tank moves that way THE SAME FRAME — the hull swivel is cosmetic (HULL_SNAP 11 rad/s,
+  aligns in ~0.15s) and never gates movement. Plus Pac-Man-style **corner assist**: when a
+  wall mostly blocks you but an opening is ≤26px to the side (probe ladder 9/17/26px at
+  TANK_R-2), the tank auto-slides into it — doorways don't demand pixel alignment.
+  History: v1.0 rotate-to-steer → "hard to drive"; v1.1 auto-rotate-then-drive → still
+  arced/swooped ("turns weird") because movement waited on alignment. v1.2 = movement
+  follows input instantly; only the sprite turns. AI unchanged (TANK_ROT 5.2 = its aim
+  limiter). Aiming = facing = last direction pressed.
 - P1 (amber): WASD + Space/F · P2 (teal): Arrows + Enter/M
 - Touch (solo): left half = steer toward finger, right half = fire
 - P pauses; auto-pause on window blur

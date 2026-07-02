@@ -106,7 +106,8 @@ const COLS = 15, ROWS = 10, CELL = 64;
 const WALL_T = 8;
 const HUD_H = 0;                 // HUD is drawn over the arena top edge
 const TANK_R = 13;
-const TANK_SPEED = 150, TANK_ROT = 5.2;
+const TANK_SPEED = 150, TANK_ROT = 5.2;   // TANK_ROT = AI swivel (their aim-speed limiter)
+const HULL_SNAP = 11;                     // human hull swivel — cosmetic, snappy
 const SHELL_R = 4, SHELL_SPEED = 265, SHELL_LIFE = 9, MAX_SHELLS = 4, FIRE_CD = 0.36;
 const ROUNDS_TO_WIN = 5;
 const SUDDEN_DEATH_AT = 26;      // seconds into a round
@@ -526,12 +527,12 @@ function tryAIFire(t, foe, dt, rookie) {
 }
 
 // ============================== MOVEMENT / PHYSICS ==============================
-function moveTank(t, dist) {
-  const steps = Math.ceil(Math.abs(dist) / 6);
-  const step = dist / steps;
+function moveTankVec(t, dx, dy) {
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(dist / 6));
   for (let i = 0; i < steps; i++) {
-    t.x += Math.cos(t.a) * step;
-    t.y += Math.sin(t.a) * step;
+    t.x += dx / steps;
+    t.y += dy / steps;
     // Full-normal iterative pushout: sliding along faces comes free (tangential motion
     // is preserved), and corner contacts DEFLECT the tank around wall end-caps instead
     // of stalling it — the old per-axis resolve made doorway lips feel like glue.
@@ -546,6 +547,14 @@ function moveTank(t, dist) {
   }
   t.x = Math.max(TANK_R, Math.min(W - TANK_R, t.x));
   t.y = Math.max(TANK_R, Math.min(H - TANK_R, t.y));
+}
+function moveTank(t, dist) {   // drive along current facing (AI steering uses this)
+  moveTankVec(t, Math.cos(t.a) * dist, Math.sin(t.a) * dist);
+}
+function circleBlocked(x, y, r) {
+  if (x < r || x > W - r || y < r || y > H - r) return true;
+  for (const rct of wallRects) if (circleRectPush(x, y, r, rct)) return true;
+  return false;
 }
 function updateShells(dt) {
   for (let i = shells.length - 1; i >= 0; i--) {
@@ -677,10 +686,31 @@ function controlHuman(t, dt, scheme) {
   const speedMul = t.power === 'rapid' ? 1.12 : 1;
   const ox = t.x, oy = t.y;
   if (target !== null) {
+    // Movement is INSTANT in the pressed direction — no waiting for the hull to line
+    // up (that made travel arc/swoop: "turns weird, hard to go where I want").
+    // The hull swivel below is purely cosmetic and fast.
+    const step = TANK_SPEED * speedMul * dt;
+    const fx = Math.cos(target), fy = Math.sin(target);
+    moveTankVec(t, fx * step, fy * step);
+    // Corner assist (Pac-Man style): if a wall mostly blocked us but there's an
+    // opening a few px to the side, slide toward it so doorways don't demand
+    // pixel-perfect alignment.
+    const moved = Math.hypot(t.x - ox, t.y - oy);
+    if (moved < step * 0.45) {
+      outer: for (const off of [9, 17, 26]) {                     // probe ladder: near openings win
+        for (const s of [1, -1]) {
+          const nx = t.x - fy * s * off, ny = t.y + fx * s * off; // off px to the side...
+          if (!circleBlocked(nx + fx * 10, ny + fy * 10, TANK_R - 2)) { // ...forward clears there
+            moveTankVec(t, -fy * s * step, fx * s * step);        // slide into the opening
+            break outer;
+          }
+        }
+      }
+    }
+    // cosmetic hull snap toward heading (fast; aiming follows almost instantly)
     const d = angDiff(t.a, target);
-    const rot = TANK_ROT * dt;
+    const rot = HULL_SNAP * dt;
     if (Math.abs(d) <= rot) t.a = target; else t.a += Math.sign(d) * rot;
-    if (Math.abs(d) < 1.15) moveTank(t, TANK_SPEED * speedMul * dt * (Math.abs(d) < 0.5 ? 1 : 0.7));
   }
   t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
   if (fire) fireShell(t);
