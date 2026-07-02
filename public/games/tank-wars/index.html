@@ -295,6 +295,17 @@ let matchCfg = { mode: 'quick', aiLevel: 'rookie', roundsToWin: 5, arena: 'maze'
 let aiParams = AI_LEVELS.rookie;
 let matchScrap = 0;              // scrap earned so far this match (rounds + bonus)
 let shiftTimer = 0;              // 'shifting' arena wall churn
+let roundArena = 'maze';         // the arena actually generated THIS round ('mix' rotates)
+const ARENA_LABELS = { maze: 'CLASSIC MAZE', dense: 'DENSE MAZE', pillars: 'PILLAR FIELD',
+                       corridors: 'THE LONG HALLS', shifting: 'SHIFTING WALLS' };
+function pickArena() {   // weighted rotation for quick/online play
+  const r = Math.random();
+  if (r < 0.30) return 'maze';
+  if (r < 0.50) return 'dense';
+  if (r < 0.70) return 'pillars';
+  if (r < 0.90) return 'corridors';
+  return 'shifting';
+}
 // Online multiplayer state (Phases 2+3). net.role: null (offline) | 'host' | 'guest'.
 const net = {
   role: null, dcGame: null, dcFast: null,
@@ -797,7 +808,7 @@ function startMatch(cfg) {
     mode: cfg.mode || 'quick',
     aiLevel: cfg.aiLevel || 'rookie',
     roundsToWin: cfg.roundsToWin || (cfg.mode === 'campaign' ? 3 : 5),
-    arena: cfg.arena || 'maze',
+    arena: cfg.arena || 'mix',   // quick/online rotate arenas per round; campaign passes its own
     playerTank: profile.owned[profile.tank] ? profile.tank : 'scout',
     foeTank: cfg.foeTank || 'scout',
     battle: cfg.battle || null,
@@ -811,7 +822,8 @@ function startMatch(cfg) {
   show('garage', false); show('campaign', false); show('online', false);
 }
 function startRound() {
-  genMaze(matchCfg.arena);
+  roundArena = matchCfg.arena === 'mix' ? pickArena() : matchCfg.arena;
+  genMaze(roundArena);
   spawnTanks();
   shells = []; beams = []; particles = []; treads = []; powerup = null; confetti = [];
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
@@ -1191,7 +1203,7 @@ function update(dt) {
 
   roundTime += dt;
   // 'shifting' arena (THE GENERAL): walls crumble AND regrow every few seconds
-  if (matchCfg.arena === 'shifting' && !suddenDeath) {
+  if (roundArena === 'shifting' && net.role !== 'guest' && !suddenDeath) {
     shiftTimer -= dt;
     if (shiftTimer <= 0) {
       shiftTimer = 6;
@@ -1374,6 +1386,7 @@ function render() {
       const n = Math.ceil(1.5 - phaseT);
       const label = phaseT < 1.5 ? String(Math.max(1, n)) : 'GO!';
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
+      drawBanner(ARENA_LABELS[roundArena] || '', '#8fa5cf', 20, H / 2 + 64);
       if (!render._lastCount || render._lastCount !== label) { render._lastCount = label; label === 'GO!' ? sfx.go() : sfx.count(); }
     } else render._lastCount = null;
     if (phase === 'roundover' && banner) drawBanner(banner, bannerCol, 46);
@@ -1971,7 +1984,7 @@ function netSendRound() {
   if (net.role !== 'host' || matchCfg.mode !== 'online') return;
   netSendGame({
     t: 'round', round: roundNum, rw: matchCfg.roundsToWin,
-    sc: [tanks[0].score, tanks[1].score], walls: packWalls(),
+    sc: [tanks[0].score, tanks[1].score], walls: packWalls(), ar: roundArena,
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind]),
   });
   net.wallsDirty = false;
@@ -1994,6 +2007,7 @@ function netHostTick() {
 function gmGuestRound(m) {
   matchCfg = { mode: 'online', aiLevel: 'rookie', roundsToWin: m.rw, arena: 'net',
                playerTank: m.tk[1][3], foeTank: m.tk[0][3], battle: null };
+  roundArena = m.ar || 'maze';
   unpackWalls(m.walls);
   tanks = [makeTank(0, 0, 0, m.tk[0][3]), makeTank(1, 0, 0, m.tk[1][3])];
   for (let i = 0; i < 2; i++) { tanks[i].x = m.tk[i][0]; tanks[i].y = m.tk[i][1]; tanks[i].a = m.tk[i][2]; }
