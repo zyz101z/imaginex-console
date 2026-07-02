@@ -17,19 +17,23 @@ CLIENT-SIDE PREDICTION (phase 3) mandatory, not optional._
   is a renderer + input-sender with a locally-predicted own-tank.
 
 ## Phases
+_(2+3 SHIPPED 2026-07-02, commit `f1e8e44` — verified by the two-VM NETSIM harness
+(scratchpad netsim.js pattern; recreate from this plan + DEVLOG if lost): host+guest as
+separate vm contexts over mock latency-80ms channels, 29 checks incl. 0.0px
+prediction-vs-authority divergence.)_
 1. ✅ **Connection (this phase):** ONLINE VS (BETA) menu → CREATE GAME CODE / JOIN.
    Full handshake → DataChannel open → live RTT readout on both ends (ping/pong 1/s).
    Ships as an honest "connection test" so the remote link can be validated this week.
    Signaling API: POST /api/rtc {action: host|join|answer|poll, code?, sdp?}.
-2. **Playable sync (naive):** host streams full-state snapshots 20/s (tanks, shells,
+2. ✅ **Playable sync:** host streams full-state snapshots 20/s (tanks, shells,
    walls-diff, phase/banner); guest sends inputs 30/s; guest renders snapshots with
    ~100ms interpolation. Rounds/maze/power-ups all host-driven (maze sent as wall arrays
    at round start). Playable on LAN; guest's own tank will feel laggy over internet — known.
-3. **Client-side prediction + reconciliation:** guest simulates own tank locally
+3. ✅ **Client-side prediction + reconciliation:** guest simulates own tank locally
    (instant feel), tags inputs with sequence numbers, host echoes last-processed seq +
    authoritative position, guest replays pending inputs on top; smooth small corrections.
    Local-predicted shell spawn on fire. THIS is what makes 50-100ms feel good.
-4. **Polish/edges:** disconnect/rejoin flow, "opponent left" UX, RTT/quality indicator
+4. **Polish/edges (REMAINING):** disconnect/rejoin flow, "opponent left" UX, RTT/quality indicator
    in-match, round-boundary resync, cross-device test protocol (dad+son), scrap award
    for online wins (+10/round +50 match, no campaign interaction).
 

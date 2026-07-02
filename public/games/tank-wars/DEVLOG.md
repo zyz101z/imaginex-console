@@ -29,6 +29,7 @@
 ## Session log — 2026-07-02
 | Ver | Commit | What |
 |---|---|---|
+| MP-2/3 | `f1e8e44` | **ONLINE MULTIPLAYER PLAYABLE:** host-authoritative sim + 20/s snapshots (unordered 'fast' channel) + guest interpolation (~110ms, id-matched shells) + CLIENT-SIDE PREDICTION w/ input-replay reconciliation (own tank instant at any latency) + round/match/scrap/rematch/disconnect flow. Host picks own garage tank; guest's hello carries theirs; enemy = real human via ONLINE VS → START BATTLE (host). Verified: NETSIM two-VM harness @80ms — 29 checks, 0.0px prediction divergence. Offline untouched (59+6 green) |
 | MP-1 | `5c9a3d5` | **Online multiplayer Phase 1:** ONLINE VS (BETA) menu → room codes → WebRTC P2P DataChannel (non-trickle ICE, Google STUN) + live ping readout & link verdict. New `/api/rtc` edge route (Upstash, 4-char codes, 5-min TTL) — live-tested end-to-end via curl (host/join/answer/poll + 404s). `?rtctest=1` loopback self-test (headless-verified: channel opens). Plan: MULTIPLAYER_PLAN.md |
 | v2.1 | `c6de31b` | **Mobile controls rebuilt** (was: "really bad"). Root cause: steering angle was finger-relative-to-TANK → haywire when tank reached the finger; zero visual affordance. Now: floating virtual joystick (anchors under thumb on left 45%, absolute screen direction like keyboard, 10px deadzone, analog throttle 0.35–1.0 by deflection) + visible FIRE button (any right-side touch still fires) + overlay shows during countdown so thumbs pre-position. Tests 54→59 (T15: steer/throttle/deadzone/full-stop). `?touchdemo=1` screenshot hook |
 
