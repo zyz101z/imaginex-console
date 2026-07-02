@@ -114,7 +114,8 @@
       — press where you want to go (combine keys for diagonals)</p>
       <p><b>Fire:</b> <span class="k">SPACE</span> <span class="k">F</span> <span class="k">ENTER</span> or <span class="k">M</span></p>
       <p style="color:#8fa5cf">Your tank shoots the way it's facing — tap a direction to aim.</p>
-      <p><b>Touch:</b> left side of the screen steers, tap the right side to fire.</p>
+      <p><b>Touch:</b> press the left side — a joystick appears under your thumb (tilt more
+      to drive faster). Hold the <b style="color:#ff8f8f">FIRE</b> button on the right to shoot.</p>
       <p><b>Power-ups:</b> <b style="color:#ffd166">&#9650; TRIPLE</b> 3-way spread &nbsp;&bull;&nbsp;
       <b style="color:#ff6b6b">&#9889; RAPID</b> fast fire &nbsp;&bull;&nbsp;
       <b style="color:#4de3c2">&#11044; SHIELD</b> blocks one hit &nbsp;&bull;&nbsp;
@@ -259,7 +260,12 @@ let winReported = false;
 let confetti = [];
 
 const keys = {};
-let touchState = { active:false, steer:null, steerId:-1, fire:false };
+// Touch: floating virtual joystick (left side) + fire (right side / FIRE button).
+// steer = ABSOLUTE screen direction of the stick (matches keyboard directional drive);
+// speedMul = analog throttle from stick deflection. v1 steered by finger-relative-to-TANK
+// angle, which went haywire whenever the tank reached your finger ("really bad" — fixed).
+let touchState = { active:false, joyId:-1, ax:0, ay:0, kx:0, ky:0, steer:null, speedMul:1, fire:0 };
+const JOY_DEAD = 10, JOY_MAX = 52;
 
 // persistent
 let totalWins = 0;
@@ -1007,10 +1013,10 @@ function controlHuman(t, dt, scheme) {
     if (keys['ArrowRight']) dx += 1;
     fire = keys['Enter'] || keys['KeyM'];
   }
-  let target = null;
+  let target = null, throttle = 1;
   if (dx !== 0 || dy !== 0) target = Math.atan2(dy, dx);
-  if (scheme === 0 && touchState.steer != null) target = touchState.steer;
-  const speedMul = t.power === 'rapid' ? 1.12 : 1;
+  if (scheme === 0 && touchState.steer != null) { target = touchState.steer; throttle = touchState.speedMul; }
+  const speedMul = (t.power === 'rapid' ? 1.12 : 1) * throttle;
   const ox = t.x, oy = t.y;
   if (target !== null) {
     // Movement is INSTANT in the pressed direction — no waiting for the hull to line
@@ -1256,12 +1262,43 @@ function render() {
       ctx.fillStyle = c.col; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
       ctx.restore();
     }
-    // touch hints
-    if (touchState.active && phase === 'play') {
-      ctx.globalAlpha = 0.25; ctx.fillStyle = '#9fb3d9';
-      ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('steer', W * 0.25, H - 14);
-      ctx.fillText('tap to fire', W * 0.75, H - 14);
+    // touch controls: floating joystick + FIRE button (shown during the countdown too,
+    // so thumbs can get into position before GO)
+    if (touchState.active && (phase === 'play' || phase === 'countdown') && tanks[0] && !tanks[0].isAI) {
+      ctx.save();
+      if (touchState.joyId !== -1) {
+        // joystick base + knob under the thumb
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = '#9fb3d9'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(touchState.ax, touchState.ay, JOY_MAX, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = '#9fb3d9';
+        ctx.beginPath(); ctx.arc(touchState.ax, touchState.ay, JOY_MAX, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = P1_COL; ctx.shadowColor = P1_COL; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(touchState.ax + touchState.kx, touchState.ay + touchState.ky, 22, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // idle hint ring, bottom-left
+        ctx.globalAlpha = 0.14;
+        ctx.strokeStyle = '#9fb3d9'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(110, H - 110, JOY_MAX, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#9fb3d9'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('DRIVE', 110, H - 106);
+      }
+      // FIRE button, bottom-right (any right-side touch fires; this is the affordance)
+      const fx = W - 84, fy = H - 84, pressed = touchState.fire > 0;
+      ctx.globalAlpha = pressed ? 0.85 : 0.3;
+      ctx.fillStyle = pressed ? '#ff6b6b' : '#1a2440';
+      ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 3;
+      if (pressed) { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = 18; }
+      ctx.beginPath(); ctx.arc(fx, fy, 52, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(fx, fy, 52, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = pressed ? 1 : 0.55;
+      ctx.fillStyle = pressed ? '#ffffff' : '#ff8f8f';
+      ctx.font = '900 17px "Arial Black", Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('FIRE', fx, fy + 1);
+      ctx.restore();
       ctx.globalAlpha = 1;
     }
   }
@@ -1416,35 +1453,47 @@ function canvasPos(touch) {
   const r = canvas.getBoundingClientRect();
   return { x: (touch.clientX - r.left) / r.width * W, y: (touch.clientY - r.top) / r.height * H };
 }
+function applyJoy(p) {
+  // stick vector from the anchor, clamped to JOY_MAX, with a deadzone
+  let dx = p.x - touchState.ax, dy = p.y - touchState.ay;
+  const m = Math.hypot(dx, dy);
+  if (m > JOY_MAX) { dx *= JOY_MAX / m; dy *= JOY_MAX / m; }
+  touchState.kx = dx; touchState.ky = dy;
+  if (m < JOY_DEAD) { touchState.steer = null; touchState.speedMul = 1; return; }
+  touchState.steer = Math.atan2(dy, dx);                               // absolute screen direction
+  touchState.speedMul = Math.min(1, Math.max(0.35, m / JOY_MAX));      // analog throttle
+}
 canvas.addEventListener('touchstart', (e) => {
   e.preventDefault(); audioInit();
   touchState.active = true;
   for (const t of e.changedTouches) {
     const p = canvasPos(t);
-    if (p.x < W / 2 && touchState.steerId === -1) {
-      touchState.steerId = t.identifier;
-      const tank = tanks[0];
-      if (tank) touchState.steer = Math.atan2(p.y - tank.y, p.x - tank.x);
-    } else touchState.fire = true;
+    if (p.x < W * 0.45 && touchState.joyId === -1) {
+      // floating joystick: anchors wherever the thumb lands on the left side
+      touchState.joyId = t.identifier;
+      touchState.ax = p.x; touchState.ay = p.y;
+      applyJoy(p);
+    } else touchState.fire++;
   }
 }, { passive: false });
 canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
   for (const t of e.changedTouches) {
-    if (t.identifier === touchState.steerId) {
-      const p = canvasPos(t);
-      const tank = tanks[0];
-      if (tank && Math.hypot(p.x - tank.x, p.y - tank.y) > 24) touchState.steer = Math.atan2(p.y - tank.y, p.x - tank.x);
-    }
+    if (t.identifier === touchState.joyId) applyJoy(canvasPos(t));
   }
 }, { passive: false });
 function touchEnd(e) {
   e.preventDefault();
   for (const t of e.changedTouches) {
-    if (t.identifier === touchState.steerId) { touchState.steerId = -1; touchState.steer = null; }
-    else touchState.fire = false;
+    if (t.identifier === touchState.joyId) {
+      touchState.joyId = -1; touchState.steer = null; touchState.speedMul = 1;
+      touchState.kx = 0; touchState.ky = 0;
+    } else touchState.fire = Math.max(0, touchState.fire - 1);
   }
-  if (e.touches.length === 0) { touchState.steerId = -1; touchState.steer = null; touchState.fire = false; }
+  if (e.touches.length === 0) {
+    touchState.joyId = -1; touchState.steer = null; touchState.speedMul = 1;
+    touchState.kx = 0; touchState.ky = 0; touchState.fire = 0;
+  }
 }
 canvas.addEventListener('touchend', touchEnd, { passive: false });
 canvas.addEventListener('touchcancel', touchEnd, { passive: false });
@@ -1571,6 +1620,12 @@ genMaze();
 if (/(\?|&)demo=1/.test(location.search)) {
   startMatch({ mode: 'quick', aiLevel: 'ace' });
   tanks[0].isAI = true;
+} else if (/(\?|&)touchdemo=1/.test(location.search)) {
+  // screenshot hook: start a match with the touch UI forced visible (joystick engaged + FIRE pressed)
+  startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  touchState.active = true; touchState.joyId = 99;
+  touchState.ax = 150; touchState.ay = H - 140; touchState.kx = 36; touchState.ky = -18;
+  touchState.steer = Math.atan2(-18, 36); touchState.speedMul = 0.8; touchState.fire = 1;
 } else if (/(\?|&)screen=garage/.test(location.search)) {
   renderGarage(); show('menu', false); show('garage', true);
 } else if (/(\?|&)screen=campaign/.test(location.search)) {
