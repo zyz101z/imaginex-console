@@ -1,7 +1,16 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-0. **⏳ TURN relay: waiting on USER 5-min task** (2026-07-02 remote test failed: symmetric
+0. **✅ TURN relay RESOLVED 2026-07-02 (`ff606e4`)** — saga: legacy openrelay creds dead
+   (0 relay grants, verified empirically) → Metered signup → dashboard Secret Key kept
+   401ing ("Invalid API Key") → user pasted the dashboard's STATIC ICE-servers array →
+   verified in harness (relay granted @7.9s!) → wired server-side as the floor in
+   /api/rtc (mint path still preferred if the key ever works). The 7.9s allocation also
+   forced ICE gather window 6.5s→11s (would have cut relay from the SDP). Live endpoint
+   confirmed: turn:true, mode:static, 4 relay urls. LESSONS: (a) ALWAYS empirically test
+   TURN/ICE configs via the phone-home harness (scratchpad turntest2.html pattern);
+   (b) budget >8s for relay allocation. ⏳ NEXT: user+son remote connection test.
+   (superseded) **⏳ TURN relay: waiting on USER 5-min task** (2026-07-02 remote test failed: symmetric
    NAT both sides + legacy openrelay creds are DEAD — empirically 0 relay grants). Wired:
    `/api/rtc {action:'ice'}` mints TURN creds from Metered Open Relay (20GB/mo free) when
    Vercel env vars **METERED_TURN_APP** (app subdomain) + **METERED_TURN_KEY** (API key)
