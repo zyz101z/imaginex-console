@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Tank Bros</title>
+<title>Tank Wars</title>
 <style>
   html, body { margin:0; padding:0; background:#070b14; height:100%; overflow:hidden;
     font-family:'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-user-select:none; user-select:none;
@@ -45,7 +45,7 @@
 
 <div id="menu" class="overlay">
   <div class="panel">
-    <h1 class="title">TANK BROS</h1>
+    <h1 class="title">TANK WARS</h1>
     <p class="subtitle">2-PLAYER MAZE BATTLE</p>
     <button class="btn" id="btn1p">&#9658;&nbsp; 1 PLAYER &nbsp;vs AI</button>
     <button class="btn teal" id="btn2p">&#9658;&#9658;&nbsp; 2 PLAYERS &nbsp;one keyboard</button>
@@ -152,9 +152,9 @@ let touchState = { active:false, steer:null, steerId:-1, fire:false };
 
 // persistent
 let totalWins = 0;
-try { totalWins = parseInt(localStorage.getItem('tankbros_wins') || '0', 10) || 0; } catch (e) {}
+try { totalWins = parseInt(localStorage.getItem('tankwars_wins') || '0', 10) || 0; } catch (e) {}
 let muted = false;
-try { muted = localStorage.getItem('tankbros_muted') === '1'; } catch (e) {}
+try { muted = localStorage.getItem('tankwars_muted') === '1'; } catch (e) {}
 
 // ============================== AUDIO (procedural) ==============================
 let AC = null, masterGain = null;
@@ -431,8 +431,8 @@ function endMatch() {
   if (humanWon && !winReported) {
     winReported = true;
     totalWins++;
-    try { localStorage.setItem('tankbros_wins', String(totalWins)); } catch (e) {}
-    try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tank-bros', score: totalWins }, '*'); } catch (e) {}
+    try { localStorage.setItem('tankwars_wins', String(totalWins)); } catch (e) {}
+    try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tank-wars', score: totalWins }, '*'); } catch (e) {}
     updateWinTag();
   }
 }
@@ -1081,7 +1081,7 @@ const soundBtn = document.getElementById('soundBtn');
 function syncSoundBtn() { soundBtn.innerHTML = muted ? '&#9834; OFF' : '&#9834; ON'; if (masterGain) masterGain.gain.value = muted ? 0 : 0.5; }
 soundBtn.onclick = () => {
   muted = !muted;
-  try { localStorage.setItem('tankbros_muted', muted ? '1' : '0'); } catch (e) {}
+  try { localStorage.setItem('tankwars_muted', muted ? '1' : '0'); } catch (e) {}
   audioInit(); syncSoundBtn();
 };
 syncSoundBtn();

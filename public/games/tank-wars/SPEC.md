@@ -1,4 +1,8 @@
-# TANK BROS — design + dev notes
+# TANK WARS — design + dev notes
+
+_Renamed from "Tank Bros" 2026-07-01 (user request); cover art replaced with user-made
+TankWars.png (original at D:\ImagineX\TankWars.png; shipped as compressed cover.jpg).
+Ids/keys renamed: gameId tank-bros→tank-wars, localStorage tankbros_*→tankwars_*._
 
 Classic maze-tank duel (Tank Trouble / Atari Combat lineage), built 2026-07-01 as a
 single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-keyboard
@@ -48,8 +52,8 @@ single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-
   resolution split per-axis for sliding.
 - Procedural WebAudio SFX (fire/bounce/boom/powerup/countdown/fanfare), mute button
   top-right (console exit-bar owns the top-LEFT hover zone — keep it clear).
-- Score reporting: cumulative human **match wins** in localStorage `tankbros_wins`,
-  posted as `{type:'imaginex-score', gameId:'tank-bros', score}` on match victory
+- Score reporting: cumulative human **match wins** in localStorage `tankwars_wins`,
+  posted as `{type:'imaginex-score', gameId:'tank-wars', score}` on match victory
   (any human winner: P1 in solo, either player in 2P).
 - `?demo=1` auto-starts an AI-vs-AI match (headless screenshot hook).
 

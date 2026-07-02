@@ -65,13 +65,13 @@ export const games: Game[] = [
     status: "available",
   },
   {
-    id: "tank-bros",
-    title: "Tank Bros",
+    id: "tank-wars",
+    title: "Tank Wars",
     description:
       "Classic maze-tank battle! Shells bounce off walls — dodge, trap, and outsmart your rival. Grab power-ups, survive sudden death, first to 5 wins. Play a friend on one keyboard or take on the AI.",
     genre: "Arcade / Versus",
-    cover: "/games/tank-bros/cover.svg",
-    url: "/games/tank-bros/index.html",
+    cover: "/games/tank-wars/cover.jpg",
+    url: "/games/tank-wars/index.html",
     color: "#ffb347",
     cartridgeColor: "#241505",
     cartridgeLabelColor: "#ffd166",
