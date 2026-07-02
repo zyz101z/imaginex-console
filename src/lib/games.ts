@@ -65,6 +65,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "tank-bros",
+    title: "Tank Bros",
+    description:
+      "Classic maze-tank battle! Shells bounce off walls — dodge, trap, and outsmart your rival. Grab power-ups, survive sudden death, first to 5 wins. Play a friend on one keyboard or take on the AI.",
+    genre: "Arcade / Versus",
+    cover: "/games/tank-bros/cover.svg",
+    url: "/games/tank-bros/index.html",
+    color: "#ffb347",
+    cartridgeColor: "#241505",
+    cartridgeLabelColor: "#ffd166",
+    status: "available",
+  },
+  {
     id: "x-bros",
     title: "X-Bros",
     description:

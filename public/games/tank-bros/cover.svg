@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1536" width="1024" height="1536">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101a30"/>
+      <stop offset="0.5" stop-color="#0a0e1a"/>
+      <stop offset="1" stop-color="#060910"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff8c42"/>
+    </linearGradient>
+    <filter id="glowAmber" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowTeal" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowSoft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1536" fill="url(#bg)"/>
+
+  <!-- faint floor grid -->
+  <g stroke="#3c507c" stroke-opacity="0.14" stroke-width="2">
+    <path d="M0 128H1024M0 256H1024M0 384H1024M0 512H1024M0 640H1024M0 768H1024M0 896H1024M0 1024H1024M0 1152H1024M0 1280H1024M0 1408H1024"/>
+    <path d="M128 0V1536M256 0V1536M384 0V1536M512 0V1536M640 0V1536M768 0V1536M896 0V1536"/>
+  </g>
+
+  <!-- maze walls -->
+  <g stroke="#44547a" stroke-width="14" stroke-linecap="round" filter="url(#glowSoft)" stroke-opacity="0.9">
+    <path d="M128 512H384"/>
+    <path d="M384 512V768"/>
+    <path d="M640 640H896"/>
+    <path d="M640 640V896"/>
+    <path d="M128 1024H320"/>
+    <path d="M704 1088V1280"/>
+    <path d="M512 896H640"/>
+    <path d="M256 640V832"/>
+    <path d="M768 384V512"/>
+    <path d="M512 384H768"/>
+  </g>
+
+  <!-- bouncing shell trail -->
+  <g fill="none" stroke="#f4f8ff" stroke-width="6" stroke-dasharray="4 22" stroke-linecap="round" opacity="0.8">
+    <path d="M300 1180 L 210 780 L 560 700 L 500 980"/>
+  </g>
+  <circle cx="500" cy="980" r="13" fill="#f4f8ff" filter="url(#glowSoft)"/>
+
+  <!-- explosion burst -->
+  <g filter="url(#glowAmber)">
+    <path d="M512 560 l22 -58 14 44 46 -34 -18 52 56 0 -46 34 50 26 -60 6 22 54 -50 -36 -14 56 -22 -56 -44 40 16 -58 -58 4 48 -32 -46 -30 58 -4 z"
+          fill="#ffd166" opacity="0.92"/>
+    <circle cx="512" cy="560" r="26" fill="#fff5d6"/>
+  </g>
+
+  <!-- P2 teal tank (top right, aiming down-left) -->
+  <g transform="translate(800,490) rotate(135)" filter="url(#glowTeal)">
+    <rect x="-70" y="-58" width="140" height="26" rx="8" fill="#173042"/>
+    <rect x="-70" y="32" width="140" height="26" rx="8" fill="#173042"/>
+    <rect x="-62" y="-36" width="124" height="72" rx="14" fill="#4de3c2"/>
+    <circle cx="0" cy="0" r="30" fill="#0e1526" stroke="#4de3c2" stroke-width="6"/>
+    <rect x="24" y="-11" width="96" height="22" rx="6" fill="#4de3c2"/>
+  </g>
+
+  <!-- P1 amber tank (bottom left, aiming up-right) -->
+  <g transform="translate(280,1240) rotate(-45)" filter="url(#glowAmber)">
+    <rect x="-82" y="-68" width="164" height="30" rx="9" fill="#3a2410"/>
+    <rect x="-82" y="38" width="164" height="30" rx="9" fill="#3a2410"/>
+    <rect x="-72" y="-42" width="144" height="84" rx="16" fill="#ffb347"/>
+    <circle cx="0" cy="0" r="35" fill="#0e1526" stroke="#ffb347" stroke-width="7"/>
+    <rect x="28" y="-13" width="112" height="26" rx="7" fill="#ffb347"/>
+  </g>
+
+  <!-- power-up chip -->
+  <g transform="translate(830,1150)" filter="url(#glowSoft)">
+    <circle r="34" fill="none" stroke="#c792ea" stroke-width="6"/>
+    <rect x="-13" y="-13" width="26" height="26" fill="#c792ea"/>
+  </g>
+
+  <!-- TITLE -->
+  <g text-anchor="middle" font-family="'Arial Black', Arial, sans-serif" font-weight="900">
+    <text x="512" y="180" font-size="150" fill="#060910" opacity="0.9" transform="translate(6,8)">TANK</text>
+    <text x="512" y="180" font-size="150" fill="url(#title)" filter="url(#glowAmber)">TANK</text>
+    <text x="512" y="330" font-size="150" fill="#060910" opacity="0.9" transform="translate(6,8)">BROS</text>
+    <text x="512" y="330" font-size="150" fill="url(#title)" filter="url(#glowAmber)">BROS</text>
+    <text x="512" y="400" font-size="34" letter-spacing="14" fill="#7fd8c8">2-PLAYER MAZE BATTLE</text>
+  </g>
+
+  <!-- footer -->
+  <g text-anchor="middle" font-family="Arial, sans-serif">
+    <text x="512" y="1452" font-size="30" font-weight="800" letter-spacing="8" fill="#8fa5cf">FIRST TO 5 WINS</text>
+    <text x="512" y="1496" font-size="22" letter-spacing="4" fill="#5f7099">IMAGINEX ARCADE</text>
+  </g>
+
+  <!-- frame -->
+  <rect x="14" y="14" width="996" height="1508" rx="18" fill="none" stroke="#2a3b5e" stroke-width="4"/>
+</svg>

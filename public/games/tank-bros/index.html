@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Tank Bros</title>
+<style>
+  html, body { margin:0; padding:0; background:#070b14; height:100%; overflow:hidden;
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-user-select:none; user-select:none;
+    touch-action:none; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  canvas { display:block; background:#0a0e1a; box-shadow:0 0 60px rgba(40,80,160,0.25); border-radius:6px; }
+  .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:10; }
+  .panel { background:rgba(10,16,30,0.92); border:1px solid #2a3b5e; border-radius:16px; padding:34px 44px;
+    text-align:center; color:#dfe8ff; box-shadow:0 0 50px rgba(30,70,150,0.35); max-width:560px; max-height:86vh; overflow:auto; }
+  .title { font-size:52px; font-weight:900; letter-spacing:4px; margin:0 0 4px;
+    background:linear-gradient(180deg,#ffd166,#ff8c42); -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 30px rgba(255,160,60,0.25); }
+  .subtitle { color:#7fd8c8; letter-spacing:6px; font-size:13px; font-weight:700; margin:0 0 26px; }
+  .btn { display:block; width:100%; box-sizing:border-box; margin:10px 0; padding:14px 18px; font-size:18px; font-weight:800;
+    letter-spacing:1px; color:#0a0e1a; background:linear-gradient(180deg,#ffd166,#ffb347); border:none; border-radius:10px;
+    cursor:pointer; transition:transform .08s, box-shadow .08s; }
+  .btn:hover { transform:translateY(-2px); box-shadow:0 6px 22px rgba(255,180,70,0.35); }
+  .btn.teal { background:linear-gradient(180deg,#7df0dc,#4de3c2); }
+  .btn.ghost { background:transparent; border:1px solid #2a3b5e; color:#9fb3d9; font-weight:600; }
+  .btn.ghost:hover { border-color:#4de3c2; color:#dfe8ff; box-shadow:none; }
+  .row { display:flex; gap:10px; }
+  .row .btn { flex:1; }
+  .help { text-align:left; font-size:14px; line-height:1.65; color:#b9c8e8; }
+  .help b { color:#ffd166; }
+  .help .k { display:inline-block; background:#1a2440; border:1px solid #3a4a70; border-radius:5px; padding:1px 7px;
+    font-size:12px; font-weight:700; color:#dfe8ff; margin:0 1px; }
+  .hidden { display:none !important; }
+  .winTitle { font-size:40px; font-weight:900; letter-spacing:2px; margin:0 0 6px; }
+  .winSub { color:#9fb3d9; margin:0 0 22px; font-size:15px; }
+  #soundBtn { position:fixed; top:10px; right:12px; z-index:20; background:rgba(15,22,40,0.85); color:#9fb3d9;
+    border:1px solid #2a3b5e; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  #soundBtn:hover { color:#dfe8ff; border-color:#4de3c2; }
+  .tag { font-size:12px; color:#5f7099; margin-top:18px; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="960" height="640"></canvas></div>
+<button id="soundBtn">&#9834; ON</button>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1 class="title">TANK BROS</h1>
+    <p class="subtitle">2-PLAYER MAZE BATTLE</p>
+    <button class="btn" id="btn1p">&#9658;&nbsp; 1 PLAYER &nbsp;vs AI</button>
+    <button class="btn teal" id="btn2p">&#9658;&#9658;&nbsp; 2 PLAYERS &nbsp;one keyboard</button>
+    <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
+    <p class="tag" id="winTag"></p>
+  </div>
+</div>
+
+<div id="diff" class="overlay hidden">
+  <div class="panel">
+    <h1 class="title" style="font-size:34px;">CHOOSE AI</h1>
+    <p class="subtitle">HOW TOUGH?</p>
+    <button class="btn teal" id="btnRookie">ROOKIE &nbsp;&#9733;</button>
+    <button class="btn" id="btnAce">ACE &nbsp;&#9733;&#9733;&#9733;</button>
+    <button class="btn ghost" id="btnDiffBack">BACK</button>
+  </div>
+</div>
+
+<div id="helpBox" class="overlay hidden">
+  <div class="panel">
+    <h1 class="title" style="font-size:30px;">HOW TO PLAY</h1>
+    <div class="help">
+      <p><b>Destroy the other tank!</b> Shells <b>bounce off walls</b> — and yes, your own shell
+      can come back and get you. First to <b>5 rounds</b> wins the match.</p>
+      <p><b>Player 1</b> (amber): <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span>
+      drive &nbsp;&bull;&nbsp; <span class="k">SPACE</span> or <span class="k">F</span> fire</p>
+      <p><b>Player 2</b> (teal): <span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span>
+      drive &nbsp;&bull;&nbsp; <span class="k">ENTER</span> or <span class="k">M</span> fire</p>
+      <p><b>Touch (solo):</b> left side of the screen steers, tap the right side to fire.</p>
+      <p><b>Power-ups:</b> <b style="color:#ffd166">&#9650; TRIPLE</b> 3-way spread &nbsp;&bull;&nbsp;
+      <b style="color:#ff6b6b">&#9889; RAPID</b> fast fire &nbsp;&bull;&nbsp;
+      <b style="color:#4de3c2">&#11044; SHIELD</b> blocks one hit &nbsp;&bull;&nbsp;
+      <b style="color:#c792ea">&#9632; BIG SHOT</b> smashes through walls</p>
+      <p>Camp too long and <b>SUDDEN DEATH</b> starts crumbling the maze...</p>
+      <p><span class="k">P</span> pause</p>
+    </div>
+    <button class="btn ghost" id="btnHelpBack">BACK</button>
+  </div>
+</div>
+
+<div id="victory" class="overlay hidden">
+  <div class="panel">
+    <h1 class="winTitle" id="winName">PLAYER 1 WINS!</h1>
+    <p class="winSub" id="winScore">5 — 3</p>
+    <button class="btn" id="btnRematch">REMATCH</button>
+    <button class="btn ghost" id="btnMenu">MAIN MENU</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ============================== CONSTANTS ==============================
+const W = 960, H = 640;
+const COLS = 15, ROWS = 10, CELL = 64;
+const WALL_T = 8;
+const HUD_H = 0;                 // HUD is drawn over the arena top edge
+const TANK_R = 14;
+const TANK_SPEED = 150, TANK_ROT = 3.7;
+const SHELL_R = 4, SHELL_SPEED = 265, SHELL_LIFE = 9, MAX_SHELLS = 4, FIRE_CD = 0.36;
+const ROUNDS_TO_WIN = 5;
+const SUDDEN_DEATH_AT = 26;      // seconds into a round
+const POWERUP_EVERY = [6.5, 10]; // seconds range
+const POWERUP_LIFE = 12;
+const P1_COL = '#ffb347', P2_COL = '#4de3c2';
+const P1_GLOW = 'rgba(255,179,71,0.5)', P2_GLOW = 'rgba(77,227,194,0.5)';
+
+// ============================== STATE ==============================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let dpr = 1;
+
+let mode = 'menu';               // menu | play
+let twoPlayer = false;
+let aiLevel = 'rookie';          // rookie | ace
+let paused = false;
+
+let vWall, hWall;                // vWall[x][y]: wall right of cell; hWall[x][y]: wall below cell
+let wallRects = [];              // {x,y,w,h}
+let tanks = [];                  // [p1, p2]
+let shells = [];
+let particles = [];
+let treads = [];
+let powerup = null;              // {x,y,kind,age}
+let powerupTimer = 0;
+let roundTime = 0;
+let suddenDeath = false;
+let sdTimer = 0;
+let phase = 'countdown';         // countdown | play | roundover
+let phaseT = 0;
+let banner = '';
+let bannerCol = '#fff';
+let shake = 0;
+let hitstop = 0;
+let roundNum = 1;
+let winReported = false;
+let confetti = [];
+
+const keys = {};
+let touchState = { active:false, steer:null, steerId:-1, fire:false };
+
+// persistent
+let totalWins = 0;
+try { totalWins = parseInt(localStorage.getItem('tankbros_wins') || '0', 10) || 0; } catch (e) {}
+let muted = false;
+try { muted = localStorage.getItem('tankbros_muted') === '1'; } catch (e) {}
+
+// ============================== AUDIO (procedural) ==============================
+let AC = null, masterGain = null;
+function audioInit() {
+  if (AC) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain();
+    masterGain.gain.value = muted ? 0 : 0.5;
+    masterGain.connect(AC.destination);
+  } catch (e) { AC = null; }
+}
+function beep(freq, dur, type, vol, slide) {
+  if (!AC || muted) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'square'; o.frequency.value = freq;
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), AC.currentTime + dur);
+  g.gain.value = vol || 0.15;
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(); o.stop(AC.currentTime + dur);
+}
+function noiseBurst(dur, vol, low) {
+  if (!AC || muted) return;
+  const len = Math.floor(AC.sampleRate * dur);
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const g = AC.createGain(); g.gain.value = vol || 0.3;
+  if (low) {
+    const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = low;
+    src.connect(f); f.connect(g);
+  } else src.connect(g);
+  g.connect(masterGain); src.start();
+}
+const sfx = {
+  fire()      { beep(330, 0.09, 'square', 0.12, 90); },
+  bounce()    { beep(1150, 0.03, 'square', 0.05); },
+  boom()      { noiseBurst(0.45, 0.5, 900); beep(70, 0.4, 'sine', 0.4, 30); },
+  small()     { noiseBurst(0.12, 0.18, 1600); },
+  powerup()   { beep(520, 0.08, 'square', 0.12); setTimeout(() => beep(780, 0.1, 'square', 0.12), 70); },
+  shield()    { beep(1400, 0.15, 'triangle', 0.2, 500); },
+  count()     { beep(440, 0.08, 'square', 0.12); },
+  go()        { beep(880, 0.18, 'square', 0.15); },
+  crumble()   { noiseBurst(0.2, 0.22, 500); },
+  win() {
+    [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.22, 'square', 0.14), i * 130));
+  },
+};
+
+// ============================== MAZE ==============================
+function genMaze() {
+  vWall = []; hWall = [];
+  for (let x = 0; x < COLS; x++) { vWall[x] = []; hWall[x] = []; for (let y = 0; y < ROWS; y++) { vWall[x][y] = true; hWall[x][y] = true; } }
+  // recursive backtracker
+  const visited = [];
+  for (let x = 0; x < COLS; x++) { visited[x] = []; for (let y = 0; y < ROWS; y++) visited[x][y] = false; }
+  const stack = [[0, 0]]; visited[0][0] = true;
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const nbrs = [];
+    if (cx > 0 && !visited[cx - 1][cy]) nbrs.push([cx - 1, cy, 'L']);
+    if (cx < COLS - 1 && !visited[cx + 1][cy]) nbrs.push([cx + 1, cy, 'R']);
+    if (cy > 0 && !visited[cx][cy - 1]) nbrs.push([cx, cy - 1, 'U']);
+    if (cy < ROWS - 1 && !visited[cx][cy + 1]) nbrs.push([cx, cy + 1, 'D']);
+    if (!nbrs.length) { stack.pop(); continue; }
+    const [nx, ny, dir] = nbrs[(Math.random() * nbrs.length) | 0];
+    if (dir === 'R') vWall[cx][cy] = false;
+    else if (dir === 'L') vWall[nx][ny] = false;
+    else if (dir === 'D') hWall[cx][cy] = false;
+    else hWall[nx][ny] = false;
+    visited[nx][ny] = true; stack.push([nx, ny]);
+  }
+  // knock out extra walls so there are loops (less dead-end camping)
+  let extra = 20;
+  while (extra > 0) {
+    if (Math.random() < 0.5) {
+      const x = (Math.random() * (COLS - 1)) | 0, y = (Math.random() * ROWS) | 0;
+      if (vWall[x][y]) { vWall[x][y] = false; extra--; }
+    } else {
+      const x = (Math.random() * COLS) | 0, y = (Math.random() * (ROWS - 1)) | 0;
+      if (hWall[x][y]) { hWall[x][y] = false; extra--; }
+    }
+  }
+  buildWallRects();
+}
+function buildWallRects() {
+  wallRects = [];
+  const T = WALL_T, h = T / 2;
+  for (let x = 0; x < COLS - 1; x++) for (let y = 0; y < ROWS; y++)
+    if (vWall[x][y]) wallRects.push({ x: (x + 1) * CELL - h, y: y * CELL - h, w: T, h: CELL + T, vx: x, vy: y, kind: 'v' });
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS - 1; y++)
+    if (hWall[x][y]) wallRects.push({ x: x * CELL - h, y: (y + 1) * CELL - h, w: CELL + T, h: T, vx: x, vy: y, kind: 'h' });
+}
+function removeWallRect(r) {
+  if (r.kind === 'v') vWall[r.vx][r.vy] = false; else hWall[r.vx][r.vy] = false;
+  buildWallRects();
+}
+function cellOpen(ax, ay, bx, by) { // adjacency for BFS
+  if (bx === ax + 1) return !vWall[ax][ay];
+  if (bx === ax - 1) return !vWall[bx][by];
+  if (by === ay + 1) return !hWall[ax][ay];
+  if (by === ay - 1) return !hWall[bx][by];
+  return false;
+}
+function bfsPath(sx, sy, tx, ty) {
+  if (sx === tx && sy === ty) return [];
+  const prev = {}; const q = [[sx, sy]]; const seen = new Set([sx + ',' + sy]);
+  while (q.length) {
+    const [cx, cy] = q.shift();
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (const [dx, dy] of dirs) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+      const k = nx + ',' + ny;
+      if (seen.has(k) || !cellOpen(cx, cy, nx, ny)) continue;
+      seen.add(k); prev[k] = [cx, cy];
+      if (nx === tx && ny === ty) {
+        const path = [[nx, ny]];
+        let cur = prev[k];
+        while (cur && !(cur[0] === sx && cur[1] === sy)) { path.unshift(cur); cur = prev[cur[0] + ',' + cur[1]]; }
+        return path;
+      }
+      q.push([nx, ny]);
+    }
+  }
+  return null;
+}
+
+// ============================== GEOMETRY ==============================
+function circleRectPush(px, py, r, rect) {
+  const cx = Math.max(rect.x, Math.min(px, rect.x + rect.w));
+  const cy = Math.max(rect.y, Math.min(py, rect.y + rect.h));
+  const dx = px - cx, dy = py - cy;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= r * r) return null;
+  const d = Math.sqrt(d2) || 0.0001;
+  const push = r - d;
+  return { nx: dx / d, ny: dy / d, push };
+}
+function segRectHit(x1, y1, x2, y2, rect) { // slab method; true if segment crosses rect
+  let tmin = 0, tmax = 1;
+  const dx = x2 - x1, dy = y2 - y1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x1 - rect.x, rect.x + rect.w - x1, y1 - rect.y, rect.y + rect.h - y1];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(p[i]) < 1e-9) { if (q[i] < 0) return false; }
+    else {
+      const t = q[i] / p[i];
+      if (p[i] < 0) { if (t > tmax) return false; if (t > tmin) tmin = t; }
+      else { if (t < tmin) return false; if (t < tmax) tmax = t; }
+    }
+  }
+  return true;
+}
+function hasLOS(x1, y1, x2, y2) {
+  for (const r of wallRects) if (segRectHit(x1, y1, x2, y2, r)) return false;
+  return true;
+}
+function angDiff(a, b) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+// ============================== ENTITIES ==============================
+function makeTank(i, cellX, cellY) {
+  return {
+    i, x: cellX * CELL + CELL / 2, y: cellY * CELL + CELL / 2,
+    a: Math.atan2(ROWS / 2 * CELL - (cellY * CELL + CELL / 2), COLS / 2 * CELL - (cellX * CELL + CELL / 2)),
+    alive: true, col: i === 0 ? P1_COL : P2_COL, glow: i === 0 ? P1_GLOW : P2_GLOW,
+    cd: 0, power: null, powerT: 0, shield: false,
+    isAI: false, ai: { path: [], repath: 0, fireDelay: 0, dodge: 0, dodgeDir: 1, wander: null },
+    score: 0, treadT: 0,
+  };
+}
+function spawnTanks() {
+  const corners = [[0, 0], [COLS - 1, ROWS - 1], [COLS - 1, 0], [0, ROWS - 1]];
+  const pair = Math.random() < 0.5 ? [corners[0], corners[1]] : [corners[2], corners[3]];
+  if (Math.random() < 0.5) pair.reverse();
+  const s0 = tanks[0] ? tanks[0].score : 0, s1 = tanks[1] ? tanks[1].score : 0;
+  const wasAI = tanks[1] ? tanks[1].isAI : !twoPlayer;
+  tanks = [makeTank(0, pair[0][0], pair[0][1]), makeTank(1, pair[1][0], pair[1][1])];
+  tanks[0].score = s0; tanks[1].score = s1;
+  tanks[1].isAI = wasAI;
+}
+function fireShell(t) {
+  if (t.cd > 0 || !t.alive) return;
+  const live = shells.filter(s => s.owner === t.i).length;
+  const max = t.power === 'rapid' ? 7 : MAX_SHELLS;
+  if (live >= max) return;
+  const spread = t.power === 'triple' ? [-0.26, 0, 0.26] : [0];
+  for (const off of spread) {
+    const a = t.a + off;
+    const big = t.power === 'big';
+    shells.push({
+      x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
+      vx: Math.cos(a) * (big ? SHELL_SPEED * 0.62 : SHELL_SPEED) * (t.power === 'rapid' ? 1.25 : 1),
+      vy: Math.sin(a) * (big ? SHELL_SPEED * 0.62 : SHELL_SPEED) * (t.power === 'rapid' ? 1.25 : 1),
+      r: big ? 9 : SHELL_R, owner: t.i, age: 0, grace: 0.12, big, smash: big ? 2 : 0, col: t.col,
+    });
+  }
+  if (t.power === 'big') { t.power = null; t.powerT = 0; }   // big shot is single-use
+  t.cd = t.power === 'rapid' ? 0.13 : FIRE_CD;
+  sfx.fire();
+  spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
+}
+function spawnParticles(x, y, n, col, speed, life) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = (0.3 + Math.random() * 0.7) * speed;
+    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: life * (0.5 + Math.random()), max: life, col, r: 1.5 + Math.random() * 2.5 });
+  }
+}
+function explodeTank(t) {
+  t.alive = false;
+  spawnParticles(t.x, t.y, 46, t.col, 240, 0.8);
+  spawnParticles(t.x, t.y, 22, '#ffffff', 160, 0.5);
+  shake = 14; hitstop = 0.1;
+  sfx.boom();
+}
+function killShell(i) {
+  const s = shells[i];
+  spawnParticles(s.x, s.y, 4, '#dfe8ff', 60, 0.2);
+  shells.splice(i, 1);
+}
+
+// ============================== ROUND FLOW ==============================
+function startMatch(two, level) {
+  twoPlayer = two; aiLevel = level || aiLevel;
+  tanks = []; roundNum = 1; winReported = false;
+  startRound();
+  mode = 'play'; paused = false;
+  show('menu', false); show('diff', false); show('victory', false); show('helpBox', false);
+}
+function startRound() {
+  genMaze();
+  spawnTanks();
+  if (!twoPlayer) tanks[1].isAI = true;
+  shells = []; particles = []; treads = []; powerup = null; confetti = [];
+  powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
+  roundTime = 0; suddenDeath = false; sdTimer = 0;
+  phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
+}
+function endRound() {
+  const a = tanks[0].alive, b = tanks[1].alive;
+  phase = 'roundover'; phaseT = 0;
+  if (a === b) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; }
+  else {
+    const w = a ? tanks[0] : tanks[1];
+    w.score++;
+    banner = (w.i === 0 ? 'PLAYER 1' : (twoPlayer ? 'PLAYER 2' : 'THE AI')) + ' SCORES!';
+    bannerCol = w.col;
+  }
+}
+function endMatch() {
+  const w = tanks[0].score >= ROUNDS_TO_WIN ? tanks[0] : tanks[1];
+  const humanWon = (w.i === 0) || twoPlayer;
+  document.getElementById('winName').textContent =
+    w.i === 0 ? 'PLAYER 1 WINS!' : (twoPlayer ? 'PLAYER 2 WINS!' : 'THE AI WINS!');
+  document.getElementById('winName').style.color = w.col;
+  document.getElementById('winScore').textContent = tanks[0].score + ' — ' + tanks[1].score + '  ·  first to ' + ROUNDS_TO_WIN;
+  show('victory', true);
+  sfx.win();
+  for (let i = 0; i < 120; i++) confetti.push({
+    x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
+    vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
+    col: [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
+    w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, spin: Math.random() * 6, a: Math.random() * 6,
+  });
+  if (humanWon && !winReported) {
+    winReported = true;
+    totalWins++;
+    try { localStorage.setItem('tankbros_wins', String(totalWins)); } catch (e) {}
+    try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tank-bros', score: totalWins }, '*'); } catch (e) {}
+    updateWinTag();
+  }
+}
+function updateWinTag() {
+  document.getElementById('winTag').textContent = totalWins > 0 ? ('★ career match wins: ' + totalWins) : '';
+}
+
+// ============================== AI ==============================
+function aiThink(t, foe, dt) {
+  const ai = t.ai;
+  const rookie = aiLevel === 'rookie';
+  const cx = Math.max(0, Math.min(COLS - 1, (t.x / CELL) | 0));
+  const cy = Math.max(0, Math.min(ROWS - 1, (t.y / CELL) | 0));
+  const fx = Math.max(0, Math.min(COLS - 1, (foe.x / CELL) | 0));
+  const fy = Math.max(0, Math.min(ROWS - 1, (foe.y / CELL) | 0));
+
+  // dodge incoming shells (ace only)
+  if (!rookie) {
+    ai.dodge -= dt;
+    for (const s of shells) {
+      const rx = t.x - s.x, ry = t.y - s.y;
+      const dist = Math.sqrt(rx * rx + ry * ry);
+      if (dist > 190) continue;
+      const sv = Math.sqrt(s.vx * s.vx + s.vy * s.vy) || 1;
+      const dot = (rx * s.vx + ry * s.vy) / (dist * sv);
+      if (dot > 0.94) { ai.dodge = 0.32; ai.dodgeDir = ((rx * s.vy - ry * s.vx) > 0) ? 1 : -1; break; }
+    }
+    if (ai.dodge > 0) {
+      const escape = Math.atan2(t.y - foe.y, t.x - foe.x) + ai.dodgeDir * Math.PI / 2;
+      steerToward(t, escape, dt, true);
+      tryAIFire(t, foe, dt, rookie);
+      return;
+    }
+  }
+
+  // repath periodically
+  ai.repath -= dt;
+  if (ai.repath <= 0) {
+    ai.repath = rookie ? 0.7 : 0.4;
+    ai.path = bfsPath(cx, cy, fx, fy) || [];
+  }
+  // steer to next waypoint
+  let target = null;
+  while (ai.path.length) {
+    const [wx, wy] = ai.path[0];
+    const px = wx * CELL + CELL / 2, py = wy * CELL + CELL / 2;
+    if (Math.abs(t.x - px) < 14 && Math.abs(t.y - py) < 14) { ai.path.shift(); continue; }
+    target = [px, py]; break;
+  }
+  const distFoe = Math.hypot(foe.x - t.x, foe.y - t.y);
+  if (target && (rookie || distFoe > 110 || !hasLOS(t.x, t.y, foe.x, foe.y))) {
+    steerToward(t, Math.atan2(target[1] - t.y, target[0] - t.x), dt, true);
+  } else if (!target || distFoe <= 110) {
+    // face the foe, hold position (or orbit a touch for ace)
+    steerToward(t, Math.atan2(foe.y - t.y, foe.x - t.x), dt, !rookie && distFoe > 150);
+  }
+  // powerup detour: if close, grab it
+  if (powerup) {
+    const pd = Math.hypot(powerup.x - t.x, powerup.y - t.y);
+    if (pd < CELL * 1.6 && hasLOS(t.x, t.y, powerup.x, powerup.y)) {
+      steerToward(t, Math.atan2(powerup.y - t.y, powerup.x - t.x), dt, true);
+    }
+  }
+  tryAIFire(t, foe, dt, rookie);
+}
+function steerToward(t, targetA, dt, drive) {
+  const d = angDiff(t.a, targetA);
+  const rot = TANK_ROT * dt;
+  if (Math.abs(d) <= rot) t.a = targetA; else t.a += Math.sign(d) * rot;
+  if (drive && Math.abs(d) < 1.0) moveTank(t, TANK_SPEED * dt * (Math.abs(d) < 0.4 ? 1 : 0.55));
+}
+function tryAIFire(t, foe, dt, rookie) {
+  const ai = t.ai;
+  ai.fireDelay -= dt;
+  if (!foe.alive || ai.fireDelay > 0) return;
+  // predicted foe position (ace leads)
+  let tx = foe.x, ty = foe.y;
+  if (!rookie) {
+    const dist = Math.hypot(foe.x - t.x, foe.y - t.y);
+    const tta = dist / SHELL_SPEED;
+    tx += (foe.lastVX || 0) * tta * 0.7; ty += (foe.lastVY || 0) * tta * 0.7;
+  }
+  if (!hasLOS(t.x, t.y, tx, ty)) return;
+  const aimA = Math.atan2(ty - t.y, tx - t.x);
+  const err = rookie ? 0.16 : 0.05;
+  if (Math.abs(angDiff(t.a, aimA)) < err + 0.06) {
+    // don't fire point-blank into a wall next to us
+    const mx = t.x + Math.cos(t.a) * (TANK_R + 10), my = t.y + Math.sin(t.a) * (TANK_R + 10);
+    if (hasLOS(mx, my, tx, ty)) {
+      fireShell(t);
+      ai.fireDelay = rookie ? (0.7 + Math.random() * 0.7) : (0.28 + Math.random() * 0.3);
+    }
+  }
+}
+
+// ============================== MOVEMENT / PHYSICS ==============================
+function moveTank(t, dist) {
+  const steps = Math.ceil(Math.abs(dist) / 6);
+  const step = dist / steps;
+  for (let i = 0; i < steps; i++) {
+    // x then y separately => wall sliding
+    t.x += Math.cos(t.a) * step;
+    resolveTankWalls(t, true, false);
+    t.y += Math.sin(t.a) * step;
+    resolveTankWalls(t, false, true);
+  }
+  t.x = Math.max(TANK_R, Math.min(W - TANK_R, t.x));
+  t.y = Math.max(TANK_R, Math.min(H - TANK_R, t.y));
+}
+function resolveTankWalls(t, doX, doY) {
+  for (const r of wallRects) {
+    const hit = circleRectPush(t.x, t.y, TANK_R, r);
+    if (hit) {
+      if (doX && doY) { t.x += hit.nx * hit.push; t.y += hit.ny * hit.push; }
+      else if (doX) t.x += hit.nx * hit.push;
+      else t.y += hit.ny * hit.push;
+    }
+  }
+}
+function updateShells(dt) {
+  for (let i = shells.length - 1; i >= 0; i--) {
+    const s = shells[i];
+    s.age += dt; s.grace -= dt;
+    if (s.age > SHELL_LIFE) { killShell(i); continue; }
+    // substep so fast shells never tunnel walls
+    const steps = Math.ceil((Math.hypot(s.vx, s.vy) * dt) / 4);
+    let dead = false;
+    for (let st = 0; st < steps && !dead; st++) {
+      s.x += s.vx * dt / steps; s.y += s.vy * dt / steps;
+      // border bounce
+      if (s.x < s.r) { s.x = s.r; s.vx = Math.abs(s.vx); sfx.bounce(); }
+      if (s.x > W - s.r) { s.x = W - s.r; s.vx = -Math.abs(s.vx); sfx.bounce(); }
+      if (s.y < s.r) { s.y = s.r; s.vy = Math.abs(s.vy); sfx.bounce(); }
+      if (s.y > H - s.r) { s.y = H - s.r; s.vy = -Math.abs(s.vy); sfx.bounce(); }
+      // wall hit
+      for (const r of wallRects) {
+        const hit = circleRectPush(s.x, s.y, s.r, r);
+        if (!hit) continue;
+        if (s.big && s.smash > 0) {   // big shot smashes through
+          s.smash--;
+          removeWallRect(r);
+          spawnParticles(s.x, s.y, 18, '#c792ea', 170, 0.5);
+          shake = Math.max(shake, 8);
+          sfx.crumble();
+          break;
+        }
+        s.x += hit.nx * hit.push; s.y += hit.ny * hit.push;
+        if (Math.abs(hit.nx) > Math.abs(hit.ny)) s.vx = Math.abs(s.vx) * Math.sign(hit.nx);
+        else s.vy = Math.abs(s.vy) * Math.sign(hit.ny);
+        sfx.bounce();
+        break;
+      }
+      // tank hits
+      for (const t of tanks) {
+        if (!t.alive) continue;
+        if (s.grace > 0 && s.owner === t.i) continue;
+        const d = Math.hypot(s.x - t.x, s.y - t.y);
+        if (d < s.r + TANK_R - 2) {
+          if (t.shield) {
+            t.shield = false; sfx.shield();
+            spawnParticles(t.x, t.y, 20, '#4de3c2', 180, 0.4);
+            dead = true; break;
+          }
+          explodeTank(t);
+          dead = true; break;
+        }
+      }
+      // big shot eats normal shells
+      if (!dead && s.big) {
+        for (let j = shells.length - 1; j >= 0; j--) {
+          const o = shells[j];
+          if (o === s || o.big) continue;
+          if (Math.hypot(s.x - o.x, s.y - o.y) < s.r + o.r) { killShell(j); if (j < i) i--; sfx.small(); }
+        }
+      }
+    }
+    if (dead) { const idx = shells.indexOf(s); if (idx >= 0) killShell(idx); }
+  }
+}
+function updatePowerups(dt) {
+  if (powerup) {
+    powerup.age += dt;
+    if (powerup.age > POWERUP_LIFE) powerup = null;
+    else {
+      for (const t of tanks) {
+        if (!t.alive) continue;
+        if (Math.hypot(t.x - powerup.x, t.y - powerup.y) < TANK_R + 13) {
+          if (powerup.kind === 'shield') t.shield = true;
+          else { t.power = powerup.kind; t.powerT = powerup.kind === 'big' ? 99 : 8; }
+          sfx.powerup();
+          spawnParticles(powerup.x, powerup.y, 16, powerColor(powerup.kind), 140, 0.4);
+          powerup = null;
+          break;
+        }
+      }
+    }
+  } else {
+    powerupTimer -= dt;
+    if (powerupTimer <= 0) {
+      powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
+      const kinds = ['triple', 'rapid', 'shield', 'big'];
+      // random free cell not too near either tank
+      for (let tries = 0; tries < 30; tries++) {
+        const cx = (Math.random() * COLS) | 0, cy = (Math.random() * ROWS) | 0;
+        const px = cx * CELL + CELL / 2, py = cy * CELL + CELL / 2;
+        if (tanks.every(t => Math.hypot(t.x - px, t.y - py) > CELL * 2)) {
+          powerup = { x: px, y: py, kind: kinds[(Math.random() * kinds.length) | 0], age: 0 };
+          break;
+        }
+      }
+    }
+  }
+  for (const t of tanks) {
+    if (t.power && t.power !== 'big') {
+      t.powerT -= dt;
+      if (t.powerT <= 0) { t.power = null; }
+    }
+  }
+}
+function powerColor(kind) {
+  return kind === 'triple' ? '#ffd166' : kind === 'rapid' ? '#ff6b6b' : kind === 'shield' ? '#4de3c2' : '#c792ea';
+}
+
+// ============================== UPDATE ==============================
+function controlHuman(t, dt, scheme) {
+  let fwd = 0, rot = 0, fire = false;
+  if (scheme === 0) {
+    if (keys['KeyW']) fwd += 1;
+    if (keys['KeyS']) fwd -= 1;
+    if (keys['KeyA']) rot -= 1;
+    if (keys['KeyD']) rot += 1;
+    fire = keys['KeyF'] || keys['Space'];
+    // touch steering (solo): stick angle = desired heading
+    if (touchState.steer) {
+      const ta = touchState.steer;
+      const d = angDiff(t.a, ta);
+      rot = Math.abs(d) < 0.08 ? 0 : Math.sign(d);
+      fwd = Math.abs(d) < 1.1 ? 1 : 0;
+    }
+    if (touchState.fire) fire = true;
+  } else {
+    if (keys['ArrowUp']) fwd += 1;
+    if (keys['ArrowDown']) fwd -= 1;
+    if (keys['ArrowLeft']) rot -= 1;
+    if (keys['ArrowRight']) rot += 1;
+    fire = keys['Enter'] || keys['KeyM'];
+  }
+  const speedMul = t.power === 'rapid' ? 1.12 : 1;
+  t.a += rot * TANK_ROT * dt;
+  const ox = t.x, oy = t.y;
+  if (fwd !== 0) moveTank(t, fwd * TANK_SPEED * speedMul * dt);
+  t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
+  if (fire) fireShell(t);
+}
+function update(dt) {
+  if (mode !== 'play' || paused) return;
+  if (hitstop > 0) { hitstop -= dt; return; }
+  phaseT += dt;
+
+  if (phase === 'countdown') {
+    if (phaseT >= 1.8) { phase = 'play'; phaseT = 0; sfx.go(); }
+    return;
+  }
+  if (phase === 'roundover') {
+    // particles keep flying during the banner
+    updateParticles(dt);
+    updateShells(dt);
+    if (phaseT >= 1.7) {
+      if (tanks[0].score >= ROUNDS_TO_WIN || tanks[1].score >= ROUNDS_TO_WIN) endMatch();
+      else { roundNum++; startRound(); }
+    }
+    return;
+  }
+
+  roundTime += dt;
+  // sudden death: crumble walls
+  if (!suddenDeath && roundTime > SUDDEN_DEATH_AT) { suddenDeath = true; sdTimer = 0; banner = ''; }
+  if (suddenDeath) {
+    sdTimer -= dt;
+    if (sdTimer <= 0 && wallRects.length > 6) {
+      sdTimer = 1.4;
+      for (let n = 0; n < 3 && wallRects.length; n++) {
+        const r = wallRects[(Math.random() * wallRects.length) | 0];
+        spawnParticles(r.x + r.w / 2, r.y + r.h / 2, 10, '#8899bb', 90, 0.5);
+        removeWallRect(r);
+      }
+      shake = Math.max(shake, 4);
+      sfx.crumble();
+    }
+  }
+
+  for (const t of tanks) {
+    if (!t.alive) continue;
+    t.cd -= dt;
+    if (t.isAI) {
+      const ox = t.x, oy = t.y;
+      aiThink(t, tanks[1 - t.i], dt);
+      t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
+    } else controlHuman(t, dt, t.i);
+    // tread marks
+    t.treadT -= dt;
+    if (t.treadT <= 0 && (Math.abs(t.lastVX) > 10 || Math.abs(t.lastVY) > 10)) {
+      t.treadT = 0.06;
+      treads.push({ x: t.x, y: t.y, a: t.a, life: 2.2 });
+      if (treads.length > 260) treads.shift();
+    }
+  }
+  // tank-tank soft push
+  const [a, b] = tanks;
+  if (a.alive && b.alive) {
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d < TANK_R * 2 && d > 0) {
+      const push = (TANK_R * 2 - d) / 2, nx = (a.x - b.x) / d, ny = (a.y - b.y) / d;
+      a.x += nx * push; a.y += ny * push; b.x -= nx * push; b.y -= ny * push;
+    }
+  }
+  updateShells(dt);
+  updatePowerups(dt);
+  updateParticles(dt);
+  for (const tr of treads) tr.life -= dt;
+  while (treads.length && treads[0].life <= 0) treads.shift();
+
+  if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
+}
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.96; p.vy *= 0.96;
+  }
+  for (const c of confetti) {
+    c.y += c.vy * dt; c.x += c.vx * dt; c.a += c.spin * dt;
+    if (c.y > H + 30) { c.y = -20; c.x = Math.random() * W; }
+  }
+}
+
+// ============================== RENDER ==============================
+function render() {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+  // floor
+  ctx.fillStyle = '#0a0e1a';
+  ctx.fillRect(0, 0, W, H);
+  if (shake > 0) {
+    ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    shake *= 0.86; if (shake < 0.4) shake = 0;
+  }
+  // subtle floor grid
+  ctx.strokeStyle = 'rgba(70,100,160,0.07)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 1; x < COLS; x++) { ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H); }
+  for (let y = 1; y < ROWS; y++) { ctx.moveTo(0, y * CELL); ctx.lineTo(W, y * CELL); }
+  ctx.stroke();
+
+  if (mode === 'play') {
+    // tread marks
+    for (const tr of treads) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.16, tr.life * 0.08);
+      ctx.translate(tr.x, tr.y); ctx.rotate(tr.a);
+      ctx.fillStyle = '#96a8cc';
+      ctx.fillRect(-8, -10, 5, 3); ctx.fillRect(-8, 7, 5, 3);
+      ctx.restore();
+    }
+    // powerup
+    if (powerup) drawPowerup(powerup);
+    // shells
+    for (const s of shells) {
+      ctx.save();
+      ctx.shadowColor = s.big ? '#c792ea' : '#ffffff';
+      ctx.shadowBlur = s.big ? 18 : 10;
+      ctx.fillStyle = s.big ? '#c792ea' : '#f4f8ff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    // tanks
+    for (const t of tanks) if (t.alive) drawTank(t);
+    // particles
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.fillStyle = p.col;
+      ctx.fillRect(p.x - p.r / 2, p.y - p.r / 2, p.r, p.r);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // walls (over floor & treads, under HUD)
+  ctx.save();
+  ctx.shadowColor = 'rgba(90,140,220,0.55)';
+  ctx.shadowBlur = 7;
+  ctx.fillStyle = '#3d4a66';
+  for (const r of wallRects || []) ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.restore();
+  // arena border
+  ctx.strokeStyle = '#4a5a80'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, W - 4, H - 4);
+
+  if (mode === 'play') {
+    drawHUD();
+    if (phase === 'countdown') {
+      const n = Math.ceil(1.5 - phaseT);
+      const label = phaseT < 1.5 ? String(Math.max(1, n)) : 'GO!';
+      drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
+      if (!render._lastCount || render._lastCount !== label) { render._lastCount = label; label === 'GO!' ? sfx.go() : sfx.count(); }
+    } else render._lastCount = null;
+    if (phase === 'roundover' && banner) drawBanner(banner, bannerCol, 46);
+    if (suddenDeath && phase === 'play' && (roundTime % 1) < 0.55) drawBanner('SUDDEN DEATH', '#ff6b6b', 26, 44);
+    if (paused) drawBanner('PAUSED', '#dfe8ff', 50);
+    // confetti (drawn under DOM victory panel)
+    for (const c of confetti) {
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a);
+      ctx.fillStyle = c.col; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h);
+      ctx.restore();
+    }
+    // touch hints
+    if (touchState.active && phase === 'play') {
+      ctx.globalAlpha = 0.25; ctx.fillStyle = '#9fb3d9';
+      ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('steer', W * 0.25, H - 14);
+      ctx.fillText('tap to fire', W * 0.75, H - 14);
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.restore();
+}
+function drawTank(t) {
+  ctx.save();
+  ctx.translate(t.x, t.y);
+  // shield ring
+  if (t.shield) {
+    ctx.save();
+    ctx.strokeStyle = '#4de3c2'; ctx.lineWidth = 2;
+    ctx.shadowColor = '#4de3c2'; ctx.shadowBlur = 12;
+    ctx.globalAlpha = 0.7 + 0.3 * Math.sin(performance.now() / 130);
+    ctx.beginPath(); ctx.arc(0, 0, TANK_R + 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.rotate(t.a);
+  ctx.shadowColor = t.glow; ctx.shadowBlur = 14;
+  // treads
+  ctx.fillStyle = '#222c44';
+  ctx.fillRect(-TANK_R, -TANK_R - 1, TANK_R * 2, 7);
+  ctx.fillRect(-TANK_R, TANK_R - 6, TANK_R * 2, 7);
+  // hull
+  ctx.fillStyle = t.col;
+  roundRect(-TANK_R + 1, -TANK_R + 5, TANK_R * 2 - 2, TANK_R * 2 - 10, 4);
+  // turret
+  ctx.fillStyle = '#0e1526';
+  ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = t.col; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
+  // barrel
+  ctx.fillStyle = t.col;
+  ctx.fillRect(6, -2.5, TANK_R + 6, 5);
+  ctx.restore();
+  // power timer arc
+  if (t.power && t.power !== 'big' && t.powerT < 90) {
+    ctx.save();
+    ctx.strokeStyle = powerColor(t.power); ctx.lineWidth = 2.5; ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.arc(t.x, t.y, TANK_R + 9, -Math.PI / 2, -Math.PI / 2 + (t.powerT / 8) * Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  } else if (t.power === 'big') {
+    ctx.save();
+    ctx.fillStyle = '#c792ea'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+    ctx.shadowColor = '#c792ea'; ctx.shadowBlur = 8;
+    ctx.fillText('BIG', t.x, t.y - TANK_R - 10);
+    ctx.restore();
+  }
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.fill();
+}
+function drawPowerup(p) {
+  const pulse = 1 + 0.1 * Math.sin(performance.now() / 180);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.scale(pulse, pulse);
+  const col = powerColor(p.kind);
+  ctx.shadowColor = col; ctx.shadowBlur = 16;
+  ctx.strokeStyle = col; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const glyph = p.kind === 'triple' ? '▲' : p.kind === 'rapid' ? '⚡' : p.kind === 'shield' ? '⬤' : '■';
+  ctx.fillText(glyph, 0, 1);
+  // expiry blink
+  if (p.age > POWERUP_LIFE - 3 && (p.age % 0.5) < 0.25) { ctx.globalAlpha = 0.3; }
+  ctx.restore();
+}
+function drawBanner(text, col, size, yOff) {
+  ctx.save();
+  ctx.font = '900 ' + size + 'px "Arial Black", Arial, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const y = (yOff || H / 2);
+  ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 18;
+  ctx.lineWidth = size / 9; ctx.strokeStyle = 'rgba(5,8,16,0.95)';
+  ctx.strokeText(text, W / 2, y);
+  ctx.shadowColor = col; ctx.shadowBlur = 24;
+  ctx.fillStyle = col;
+  ctx.fillText(text, W / 2, y);
+  ctx.restore();
+}
+function drawHUD() {
+  ctx.save();
+  // score pips top center
+  const cx = W / 2, y = 18;
+  ctx.font = 'bold 14px sans-serif'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < ROUNDS_TO_WIN; i++) {
+    // P1 pips leftward, P2 pips rightward
+    drawPip(cx - 36 - i * 20, y, i < tanks[0].score, P1_COL);
+    drawPip(cx + 36 + i * 20, y, i < tanks[1].score, P2_COL);
+  }
+  ctx.fillStyle = '#5f7099'; ctx.textAlign = 'center';
+  ctx.fillText('R' + roundNum, cx, y);
+  ctx.textAlign = 'left'; ctx.fillStyle = P1_COL;
+  ctx.fillText('P1', cx - 36 - ROUNDS_TO_WIN * 20 - 22, y);
+  ctx.textAlign = 'right'; ctx.fillStyle = P2_COL;
+  ctx.fillText(tanks[1].isAI ? 'AI' : 'P2', cx + 36 + ROUNDS_TO_WIN * 20 + 22, y);
+  ctx.restore();
+}
+function drawPip(x, y, filled, col) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2);
+  if (filled) { ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fillStyle = col; ctx.fill(); }
+  else { ctx.strokeStyle = 'rgba(160,180,220,0.4)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  ctx.restore();
+}
+
+// ============================== LOOP ==============================
+let last = performance.now(), acc = 0;
+const STEP = 1 / 60;
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.25) dt = 0.25;
+  acc += dt;
+  let guard = 0;
+  while (acc >= STEP && guard < 8) { update(STEP); acc -= STEP; guard++; }
+  render();
+}
+
+// ============================== INPUT ==============================
+window.addEventListener('keydown', (e) => {
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  audioInit();
+  if (e.code === 'KeyP' && mode === 'play') paused = !paused;
+});
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+window.addEventListener('blur', () => { if (mode === 'play') paused = true; for (const k in keys) keys[k] = false; });
+
+// touch: left half steer (angle from touch start OR relative to tank), right half fire
+function canvasPos(touch) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (touch.clientX - r.left) / r.width * W, y: (touch.clientY - r.top) / r.height * H };
+}
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault(); audioInit();
+  touchState.active = true;
+  for (const t of e.changedTouches) {
+    const p = canvasPos(t);
+    if (p.x < W / 2 && touchState.steerId === -1) {
+      touchState.steerId = t.identifier;
+      const tank = tanks[0];
+      if (tank) touchState.steer = Math.atan2(p.y - tank.y, p.x - tank.x);
+    } else touchState.fire = true;
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchState.steerId) {
+      const p = canvasPos(t);
+      const tank = tanks[0];
+      if (tank && Math.hypot(p.x - tank.x, p.y - tank.y) > 24) touchState.steer = Math.atan2(p.y - tank.y, p.x - tank.x);
+    }
+  }
+}, { passive: false });
+function touchEnd(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchState.steerId) { touchState.steerId = -1; touchState.steer = null; }
+    else touchState.fire = false;
+  }
+  if (e.touches.length === 0) { touchState.steerId = -1; touchState.steer = null; touchState.fire = false; }
+}
+canvas.addEventListener('touchend', touchEnd, { passive: false });
+canvas.addEventListener('touchcancel', touchEnd, { passive: false });
+
+// ============================== DOM / UI ==============================
+function show(id, on) { document.getElementById(id).classList.toggle('hidden', !on); }
+document.getElementById('btn1p').onclick = () => { audioInit(); show('menu', false); show('diff', true); };
+document.getElementById('btn2p').onclick = () => { audioInit(); startMatch(true); };
+document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch(false, 'rookie'); };
+document.getElementById('btnAce').onclick = () => { audioInit(); startMatch(false, 'ace'); };
+document.getElementById('btnDiffBack').onclick = () => { show('diff', false); show('menu', true); };
+document.getElementById('btnHelp').onclick = () => { show('menu', false); show('helpBox', true); };
+document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
+document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(twoPlayer, aiLevel); };
+document.getElementById('btnMenu').onclick = () => {
+  show('victory', false); mode = 'menu'; tanks = []; shells = []; genMaze(); show('menu', true);
+};
+const soundBtn = document.getElementById('soundBtn');
+function syncSoundBtn() { soundBtn.innerHTML = muted ? '&#9834; OFF' : '&#9834; ON'; if (masterGain) masterGain.gain.value = muted ? 0 : 0.5; }
+soundBtn.onclick = () => {
+  muted = !muted;
+  try { localStorage.setItem('tankbros_muted', muted ? '1' : '0'); } catch (e) {}
+  audioInit(); syncSoundBtn();
+};
+syncSoundBtn();
+updateWinTag();
+
+// ============================== SIZING ==============================
+function resize() {
+  const ww = window.innerWidth, wh = window.innerHeight;
+  const scale = Math.min(ww / W, wh / H) * 0.985;
+  canvas.style.width = (W * scale) + 'px';
+  canvas.style.height = (H * scale) + 'px';
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// menu backdrop: an idle maze looks nicer than a void
+genMaze();
+
+// ?demo=1 auto-starts an AI match (used for headless screenshots)
+if (/(\?|&)demo=1/.test(location.search)) {
+  startMatch(false, 'ace');
+  tanks[0].isAI = true;
+}
+
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
