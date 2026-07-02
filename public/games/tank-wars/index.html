@@ -1689,7 +1689,7 @@ function rtcNewPC() {
 function rtcWaitIce(pc) {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') return resolve();
-    const to = setTimeout(resolve, 6500);   // TURN allocation + slow cellular need headroom
+    const to = setTimeout(resolve, 11000);  // TURN relay allocation measured at ~8s — do NOT cut it off
     pc.addEventListener('icegatheringstatechange', () => {
       if (pc.iceGatheringState === 'complete') { clearTimeout(to); resolve(); }
     });
@@ -1735,7 +1735,7 @@ function rtcWireChannel(dc) {
 async function rtcHost() {
   rtcCleanup();
   rtcShowStatus('····');
-  rtcSetState('Creating room…');
+  rtcSetState('Creating room… (finding network paths, up to ~10s)');
   try {
     if (!rtcIceLoaded) await rtcLoadIce();
     rtcPC = rtcNewPC();
