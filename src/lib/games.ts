@@ -68,8 +68,8 @@ export const games: Game[] = [
     id: "tank-wars",
     title: "Tank Wars",
     description:
-      "Classic maze-tank battle! Shells bounce off walls — dodge, trap, and outsmart your rival. Grab power-ups, survive sudden death, first to 5 wins. Play a friend on one keyboard or take on the AI.",
-    genre: "Arcade / Versus",
+      "Classic maze-tank battle! Shells bounce off walls — dodge, trap, and outsmart your rival. Grab power-ups, survive sudden death, first to 5 wins. Take on the Rookie or Ace AI.",
+    genre: "Arcade / Action",
     cover: "/games/tank-wars/cover.jpg",
     url: "/games/tank-wars/index.html",
     color: "#ffb347",

@@ -46,21 +46,11 @@
 <div id="menu" class="overlay">
   <div class="panel">
     <h1 class="title">TANK WARS</h1>
-    <p class="subtitle">2-PLAYER MAZE BATTLE</p>
-    <button class="btn" id="btn1p">&#9658;&nbsp; 1 PLAYER &nbsp;vs AI</button>
-    <button class="btn teal" id="btn2p">&#9658;&#9658;&nbsp; 2 PLAYERS &nbsp;one keyboard</button>
+    <p class="subtitle">BOUNCING-SHELL MAZE BATTLE</p>
+    <button class="btn teal" id="btnRookie">&#9658;&nbsp; PLAY &nbsp;&bull;&nbsp; ROOKIE AI &#9733;</button>
+    <button class="btn" id="btnAce">&#9658;&nbsp; PLAY &nbsp;&bull;&nbsp; ACE AI &#9733;&#9733;&#9733;</button>
     <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
     <p class="tag" id="winTag"></p>
-  </div>
-</div>
-
-<div id="diff" class="overlay hidden">
-  <div class="panel">
-    <h1 class="title" style="font-size:34px;">CHOOSE AI</h1>
-    <p class="subtitle">HOW TOUGH?</p>
-    <button class="btn teal" id="btnRookie">ROOKIE &nbsp;&#9733;</button>
-    <button class="btn" id="btnAce">ACE &nbsp;&#9733;&#9733;&#9733;</button>
-    <button class="btn ghost" id="btnDiffBack">BACK</button>
   </div>
 </div>
 
@@ -70,12 +60,12 @@
     <div class="help">
       <p><b>Destroy the other tank!</b> Shells <b>bounce off walls</b> — and yes, your own shell
       can come back and get you. First to <b>5 rounds</b> wins the match.</p>
-      <p><b>Player 1</b> (amber): <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span>
-      press where you want to go (combine keys for diagonals) &nbsp;&bull;&nbsp; <span class="k">SPACE</span> or <span class="k">F</span> fire</p>
-      <p><b>Player 2</b> (teal): <span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span>
-      press where you want to go &nbsp;&bull;&nbsp; <span class="k">ENTER</span> or <span class="k">M</span> fire</p>
+      <p><b>Drive</b> (amber tank): <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span>
+      or <span class="k">&#8593;</span><span class="k">&#8595;</span><span class="k">&#8592;</span><span class="k">&#8594;</span>
+      — press where you want to go (combine keys for diagonals)</p>
+      <p><b>Fire:</b> <span class="k">SPACE</span> <span class="k">F</span> <span class="k">ENTER</span> or <span class="k">M</span></p>
       <p style="color:#8fa5cf">Your tank shoots the way it's facing — tap a direction to aim.</p>
-      <p><b>Touch (solo):</b> left side of the screen steers, tap the right side to fire.</p>
+      <p><b>Touch:</b> left side of the screen steers, tap the right side to fire.</p>
       <p><b>Power-ups:</b> <b style="color:#ffd166">&#9650; TRIPLE</b> 3-way spread &nbsp;&bull;&nbsp;
       <b style="color:#ff6b6b">&#9889; RAPID</b> fast fire &nbsp;&bull;&nbsp;
       <b style="color:#4de3c2">&#11044; SHIELD</b> blocks one hit &nbsp;&bull;&nbsp;
@@ -389,7 +379,7 @@ function startMatch(two, level) {
   tanks = []; roundNum = 1; winReported = false;
   startRound();
   mode = 'play'; paused = false;
-  show('menu', false); show('diff', false); show('victory', false); show('helpBox', false);
+  show('menu', false); show('victory', false); show('helpBox', false);
 }
 function startRound() {
   genMaze();
@@ -669,11 +659,11 @@ function controlHuman(t, dt, scheme) {
   // than rotate-to-steer tank controls (playtest feedback: "hard to drive").
   let dx = 0, dy = 0, fire = false;
   if (scheme === 0) {
-    if (keys['KeyW']) dy -= 1;
-    if (keys['KeyS']) dy += 1;
-    if (keys['KeyA']) dx -= 1;
-    if (keys['KeyD']) dx += 1;
-    fire = keys['KeyF'] || keys['Space'];
+    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+    fire = keys['KeyF'] || keys['Space'] || keys['Enter'] || keys['KeyM'];
     if (touchState.fire) fire = true;
   } else {
     if (keys['ArrowUp']) dy -= 1;
@@ -1066,11 +1056,8 @@ canvas.addEventListener('touchcancel', touchEnd, { passive: false });
 
 // ============================== DOM / UI ==============================
 function show(id, on) { document.getElementById(id).classList.toggle('hidden', !on); }
-document.getElementById('btn1p').onclick = () => { audioInit(); show('menu', false); show('diff', true); };
-document.getElementById('btn2p').onclick = () => { audioInit(); startMatch(true); };
 document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch(false, 'rookie'); };
 document.getElementById('btnAce').onclick = () => { audioInit(); startMatch(false, 'ace'); };
-document.getElementById('btnDiffBack').onclick = () => { show('diff', false); show('menu', true); };
 document.getElementById('btnHelp').onclick = () => { show('menu', false); show('helpBox', true); };
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
 document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(twoPlayer, aiLevel); };

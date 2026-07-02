@@ -40,10 +40,15 @@ single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-
 
 ## Modes
 - 1 Player vs AI: **Rookie** (slow reactions, aim error, no dodging) / **Ace**
-  (fast, leads moving targets, dodges incoming shells, grabs nearby power-ups)
+  (fast, leads moving targets, dodges incoming shells, grabs nearby power-ups).
+  Menu offers Rookie/Ace directly (flattened when 2P was removed).
 - AI: BFS pathing over the maze grid @0.4–0.7s repath, line-of-sight raycast
   (segment-vs-wall-rect slab tests) gating fire.
-- 2 Players: same keyboard.
+- ~~2 Players same keyboard~~ REMOVED 2026-07-01 (user: "don't think we'll play on the
+  same keyboard"). The seat-2 plumbing (scheme param, twoPlayer flag, teal-player
+  branches) is left DORMANT on purpose — the eventual wish is **networked 2P on
+  different devices** (bigger lift: needs a relay server / WebRTC + rooms; revisit
+  as its own project). Both key sets (WASD + arrows) now drive the solo tank.
 
 ## Tech
 - Single index.html, IIFE, fixed 60Hz timestep (accumulator; Bloot lesson), canvas
