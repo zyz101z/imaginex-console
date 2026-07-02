@@ -196,6 +196,29 @@ const sfx = {
   },
 };
 
+// ============================== MUSIC (user-provided track) ==============================
+// Plays during matches; fades out at the victory screen so the win fanfare stands alone;
+// stops at the menu; pauses with P / window blur; follows the mute button.
+let music = null;
+try { music = new Audio('music.mp3'); music.loop = true; music.preload = 'auto'; } catch (e) { music = null; }
+const MUSIC_VOL = 0.3;
+let musicFade = null;
+function musicPlay() {
+  if (!music) return;
+  clearInterval(musicFade); musicFade = null;
+  music.volume = MUSIC_VOL; music.muted = muted;
+  if (music.paused) { try { music.currentTime = 0; } catch (e) {} music.play().catch(() => {}); }
+}
+function musicStop(fade) {
+  if (!music || music.paused) return;
+  clearInterval(musicFade); musicFade = null;
+  if (!fade) { music.pause(); return; }
+  musicFade = setInterval(() => {
+    music.volume = Math.max(0, music.volume - 0.03);
+    if (music.volume <= 0.001) { clearInterval(musicFade); musicFade = null; music.pause(); }
+  }, 60);
+}
+
 // ============================== MAZE ==============================
 function genMaze() {
   vWall = []; hWall = [];
@@ -379,6 +402,7 @@ function startMatch(two, level) {
   tanks = []; roundNum = 1; winReported = false;
   startRound();
   mode = 'play'; paused = false;
+  musicPlay();
   show('menu', false); show('victory', false); show('helpBox', false);
 }
 function startRound() {
@@ -402,7 +426,8 @@ function endRound() {
   }
 }
 function endMatch() {
-  phase = 'matchover'; phaseT = 0;   // terminal state — without this, the roundover
+  phase = 'matchover'; phaseT = 0;   // terminal state
+  musicStop(true);                    // fade the music so the fanfare stands alone — without this, the roundover
   // branch re-entered endMatch EVERY FRAME: fanfare × 60/s (awful ringing) + unbounded confetti.
   const w = tanks[0].score >= ROUNDS_TO_WIN ? tanks[0] : tanks[1];
   const humanWon = (w.i === 0) || twoPlayer;
@@ -1011,10 +1036,16 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   audioInit();
-  if (e.code === 'KeyP' && mode === 'play') paused = !paused;
+  if (e.code === 'KeyP' && mode === 'play') {
+    paused = !paused;
+    if (music && phase !== 'matchover') { if (paused) music.pause(); else music.play().catch(() => {}); }
+  }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-window.addEventListener('blur', () => { if (mode === 'play') paused = true; for (const k in keys) keys[k] = false; });
+window.addEventListener('blur', () => {
+  if (mode === 'play') { paused = true; if (music) music.pause(); }
+  for (const k in keys) keys[k] = false;
+});
 
 // touch: left half steer (angle from touch start OR relative to tank), right half fire
 function canvasPos(touch) {
@@ -1062,10 +1093,15 @@ document.getElementById('btnHelp').onclick = () => { show('menu', false); show('
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
 document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(twoPlayer, aiLevel); };
 document.getElementById('btnMenu').onclick = () => {
+  musicStop(false);
   show('victory', false); mode = 'menu'; tanks = []; shells = []; genMaze(); show('menu', true);
 };
 const soundBtn = document.getElementById('soundBtn');
-function syncSoundBtn() { soundBtn.innerHTML = muted ? '&#9834; OFF' : '&#9834; ON'; if (masterGain) masterGain.gain.value = muted ? 0 : 0.5; }
+function syncSoundBtn() {
+  soundBtn.innerHTML = muted ? '&#9834; OFF' : '&#9834; ON';
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.5;
+  if (music) music.muted = muted;
+}
 soundBtn.onclick = () => {
   muted = !muted;
   try { localStorage.setItem('tankwars_muted', muted ? '1' : '0'); } catch (e) {}
