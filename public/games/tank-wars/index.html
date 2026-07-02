@@ -252,9 +252,9 @@ const CAMPAIGN = [
   { id: 3,  name: 'PILLAR PARK',    foe: 'viper',   ai: 'rookie',  arena: 'pillars',   reward: 50 },
   { id: 4,  name: 'THE LONG HALLS', foe: 'mammoth', ai: 'officer', arena: 'corridors', reward: 60 },
   { id: 5,  name: 'DEMOLITION',     foe: 'mammoth', ai: 'officer', arena: 'dense',     reward: 70 },
-  { id: 6,  name: 'SNAKE PIT',      foe: 'viper',   ai: 'officer', arena: 'maze',      reward: 80 },
+  { id: 6,  name: 'SNAKE PIT',      foe: 'viper',   ai: 'officer', arena: 'jungle',    reward: 80 },
   { id: 7,  name: 'PINBALL WIZARD', foe: 'pinball', ai: 'officer', arena: 'pillars',   reward: 90 },
-  { id: 8,  name: 'CROSSFIRE',      foe: 'viper',   ai: 'ace',     arena: 'dense',     reward: 110 },
+  { id: 8,  name: 'CROSSFIRE',      foe: 'viper',   ai: 'ace',     arena: 'city',      reward: 110 },
   { id: 9,  name: 'LIGHTS OUT',     foe: 'photon',  ai: 'ace',     arena: 'corridors', reward: 130 },
   { id: 10, name: 'THE GENERAL',    foe: 'pinball', ai: 'ace',     arena: 'shifting',  reward: 150 },
 ];
@@ -297,14 +297,35 @@ let matchScrap = 0;              // scrap earned so far this match (rounds + bon
 let shiftTimer = 0;              // 'shifting' arena wall churn
 let roundArena = 'maze';         // the arena actually generated THIS round ('mix' rotates)
 const ARENA_LABELS = { maze: 'CLASSIC MAZE', dense: 'DENSE MAZE', pillars: 'PILLAR FIELD',
-                       corridors: 'THE LONG HALLS', shifting: 'SHIFTING WALLS' };
+                       corridors: 'THE LONG HALLS', shifting: 'SHIFTING WALLS',
+                       jungle: 'JUNGLE', city: 'CITY BLOCKS' };
+// Themed arenas reuse proven layout generators — the theme is a rendering skin only.
+const LAYOUT_OF = { jungle: 'maze', city: 'dense' };
 function pickArena() {   // weighted rotation for quick/online play
   const r = Math.random();
-  if (r < 0.30) return 'maze';
-  if (r < 0.50) return 'dense';
-  if (r < 0.70) return 'pillars';
-  if (r < 0.90) return 'corridors';
+  if (r < 0.20) return 'maze';
+  if (r < 0.34) return 'dense';
+  if (r < 0.50) return 'pillars';
+  if (r < 0.66) return 'corridors';
+  if (r < 0.80) return 'jungle';
+  if (r < 0.94) return 'city';
   return 'shifting';
+}
+// Meshy theme art (tree canopy / rooftop sprites + floor tiles); neon fallback until loaded
+const themeImgs = {};
+let layersDirty = true;
+if (typeof Image !== 'undefined') {
+  for (const [key, file] of [['tree', 'img/theme_tree.png'], ['roof', 'img/theme_roof.png'],
+                             ['floorJungle', 'img/floor_jungle.jpg'], ['floorCity', 'img/floor_city.jpg']]) {
+    const im = new Image();
+    im.onload = () => { themeImgs[key] = im; layersDirty = true; };
+    im.src = file;
+  }
+}
+function hashRand(a, b, c) {   // deterministic 0..1 so themed walls don't reshuffle every frame
+  let h = (a * 374761393 + b * 668265263 + ((c || 0) + 1) * 1274126177) >>> 0;
+  h = ((h ^ (h >>> 13)) * 1103515245) >>> 0;
+  return ((h >>> 8) % 10000) / 10000;
 }
 // Online multiplayer state (Phases 2+3). net.role: null (offline) | 'host' | 'guest'.
 const net = {
@@ -553,13 +574,15 @@ function buildArena(kind) {
   }
 }
 function genMaze(kind) {
+  const layout = LAYOUT_OF[kind] || kind || 'maze';
   for (let tries = 0; tries < 25; tries++) {   // pillars/corridors can rarely trap a cell
-    buildArena(kind || 'maze');
+    buildArena(layout);
     if (allCellsReachable()) break;
   }
   buildWallRects();
 }
 function buildWallRects() {
+  layersDirty = true;
   wallRects = [];
   const T = WALL_T, h = T / 2;
   for (let x = 0; x < COLS - 1; x++) for (let y = 0; y < ROWS; y++)
@@ -1041,7 +1064,8 @@ function updateShells(dt) {
         if (s.smash > 0) {   // big-shot powerup (2) or Mammoth shell (1) smashes through
           s.smash--;
           removeWallRect(r);
-          spawnParticles(s.x, s.y, 18, s.big ? '#c792ea' : s.col, 170, 0.5);
+          spawnParticles(s.x, s.y, 18,
+            s.big ? '#c792ea' : (roundArena === 'jungle' ? '#6fae5a' : roundArena === 'city' ? '#9aa0a8' : s.col), 170, 0.5);
           shake = Math.max(shake, 8);
           sfx.crumble();
           break;
@@ -1240,7 +1264,8 @@ function update(dt) {
       sdTimer = 1.4;
       for (let n = 0; n < 3 && wallRects.length; n++) {
         const r = wallRects[(Math.random() * wallRects.length) | 0];
-        spawnParticles(r.x + r.w / 2, r.y + r.h / 2, 10, '#8899bb', 90, 0.5);
+        spawnParticles(r.x + r.w / 2, r.y + r.h / 2, 10,
+          roundArena === 'jungle' ? '#6fae5a' : roundArena === 'city' ? '#9aa0a8' : '#8899bb', 90, 0.5);
         removeWallRect(r);
       }
       shake = Math.max(shake, 4);
@@ -1305,6 +1330,88 @@ function updateParticles(dt) {
 }
 
 // ============================== RENDER ==============================
+let floorLayer = null, wallLayer = null;
+function ensureArenaLayers() {
+  if (!layersDirty) return;
+  const probe = document.createElement('canvas');
+  if (!probe.getContext) return;   // headless harness: no real canvas, fallbacks handle it
+  floorLayer = floorLayer || document.createElement('canvas');
+  wallLayer = wallLayer || document.createElement('canvas');
+  floorLayer.width = W; floorLayer.height = H;
+  wallLayer.width = W; wallLayer.height = H;
+  const f = floorLayer.getContext('2d');
+  const wl = wallLayer.getContext('2d');
+  wl.clearRect(0, 0, W, H);
+  const theme = (roundArena === 'jungle' && themeImgs.tree) ? 'jungle'
+              : (roundArena === 'city' && themeImgs.roof) ? 'city' : 'neon';
+  // ---- floor ----
+  f.fillStyle = '#0a0e1a';
+  f.fillRect(0, 0, W, H);
+  if (theme === 'jungle' && themeImgs.floorJungle) {
+    f.fillStyle = f.createPattern(themeImgs.floorJungle, 'repeat');
+    f.fillRect(0, 0, W, H);
+  } else if (theme === 'city' && themeImgs.floorCity) {
+    f.fillStyle = f.createPattern(themeImgs.floorCity, 'repeat');
+    f.fillRect(0, 0, W, H);
+  } else {
+    f.strokeStyle = 'rgba(70,100,160,0.07)';
+    f.lineWidth = 1;
+    f.beginPath();
+    for (let x = 1; x < COLS; x++) { f.moveTo(x * CELL, 0); f.lineTo(x * CELL, H); }
+    for (let y = 1; y < ROWS; y++) { f.moveTo(0, y * CELL); f.lineTo(W, y * CELL); }
+    f.stroke();
+  }
+  // ---- walls ----
+  if (theme === 'jungle') {
+    // dark soil under the treeline, then overlapping canopies along each wall
+    wl.fillStyle = 'rgba(24,32,20,0.85)';
+    for (const r of wallRects) wl.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+    const tree = themeImgs.tree;
+    for (const r of wallRects) {
+      const horiz = r.w > r.h;
+      const len = horiz ? r.w : r.h;
+      for (let d = 0; d <= len; d += 24) {
+        const rr = hashRand(r.x | 0, r.y | 0, d);
+        const size = 30 + rr * 16;
+        const jitter = (hashRand(r.y | 0, r.x | 0, d) - 0.5) * 6;
+        const cx = horiz ? r.x + d : r.x + r.w / 2 + jitter;
+        const cy = horiz ? r.y + r.h / 2 + jitter : r.y + d;
+        wl.save();
+        wl.translate(cx, cy);
+        wl.rotate(rr * Math.PI * 2);
+        wl.drawImage(tree, -size / 2, -size / 2, size, size);
+        wl.restore();
+      }
+    }
+  } else if (theme === 'city') {
+    // rows of rooftops along each wall = city blocks; corridors read as streets
+    const roof = themeImgs.roof;
+    for (const r of wallRects) {
+      const horiz = r.w > r.h;
+      const len = horiz ? r.w : r.h;
+      for (let d = 0; d <= len; d += 36) {
+        const q = Math.floor(hashRand(r.x | 0, r.y | 0, d) * 4) * (Math.PI / 2);
+        const size = 34;
+        const cx = horiz ? r.x + d : r.x + r.w / 2;
+        const cy = horiz ? r.y + r.h / 2 : r.y + d;
+        wl.save();
+        wl.translate(cx, cy);
+        wl.rotate(q);
+        wl.drawImage(roof, -size / 2, -size / 2, size, size);
+        wl.restore();
+      }
+    }
+  } else {
+    // neon bars (the original look)
+    wl.save();
+    wl.shadowColor = 'rgba(90,140,220,0.55)';
+    wl.shadowBlur = 7;
+    wl.fillStyle = '#3d4a66';
+    for (const r of wallRects) wl.fillRect(r.x, r.y, r.w, r.h);
+    wl.restore();
+  }
+  layersDirty = false;
+}
 function render() {
   ctx.save();
   ctx.clearRect(0, 0, W, H);
@@ -1315,13 +1422,16 @@ function render() {
     ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
     shake *= 0.86; if (shake < 0.4) shake = 0;
   }
-  // subtle floor grid
-  ctx.strokeStyle = 'rgba(70,100,160,0.07)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = 1; x < COLS; x++) { ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H); }
-  for (let y = 1; y < ROWS; y++) { ctx.moveTo(0, y * CELL); ctx.lineTo(W, y * CELL); }
-  ctx.stroke();
+  ensureArenaLayers();
+  if (floorLayer) ctx.drawImage(floorLayer, 0, 0);
+  else {
+    ctx.strokeStyle = 'rgba(70,100,160,0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < COLS; x++) { ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, H); }
+    for (let y = 1; y < ROWS; y++) { ctx.moveTo(0, y * CELL); ctx.lineTo(W, y * CELL); }
+    ctx.stroke();
+  }
 
   if (mode === 'play') {
     // tread marks
@@ -1370,13 +1480,16 @@ function render() {
     ctx.globalAlpha = 1;
   }
 
-  // walls (over floor & treads, under HUD)
-  ctx.save();
-  ctx.shadowColor = 'rgba(90,140,220,0.55)';
-  ctx.shadowBlur = 7;
-  ctx.fillStyle = '#3d4a66';
-  for (const r of wallRects || []) ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.restore();
+  // walls (over floor & treads, under HUD) — prerendered themed layer
+  if (wallLayer) ctx.drawImage(wallLayer, 0, 0);
+  else {
+    ctx.save();
+    ctx.shadowColor = 'rgba(90,140,220,0.55)';
+    ctx.shadowBlur = 7;
+    ctx.fillStyle = '#3d4a66';
+    for (const r of wallRects || []) ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.restore();
+  }
   // arena border
   ctx.strokeStyle = '#4a5a80'; ctx.lineWidth = 4; ctx.strokeRect(2, 2, W - 4, H - 4);
 
@@ -2269,7 +2382,8 @@ genMaze();
 // ?demo=1 auto-starts an AI match; ?screen=garage|campaign opens that overlay
 // (both are headless-screenshot hooks — harmless for players)
 if (/(\?|&)demo=1/.test(location.search)) {
-  startMatch({ mode: 'quick', aiLevel: 'ace' });
+  const am = location.search.match(/(?:\?|&)arena=(\w+)/);
+  startMatch({ mode: 'quick', aiLevel: 'ace', arena: am ? am[1] : undefined });
   tanks[0].isAI = true;
 } else if (/(\?|&)touchdemo=1/.test(location.search)) {
   // screenshot hook: start a match with the touch UI forced visible (joystick engaged + FIRE pressed)
