@@ -42,7 +42,11 @@ export async function POST(req: Request) {
     const fallback = [{ urls: "stun:stun.l.google.com:19302" }];
     const app = process.env.METERED_TURN_APP;
     const key = process.env.METERED_TURN_KEY;
-    if (!app || !key) return NextResponse.json({ iceServers: fallback, turn: false });
+    if (!app || !key) {
+      // non-secret diagnostic: which env var is missing (helps verify the Vercel handoff)
+      const reason = !app && !key ? "no env vars" : !app ? "missing METERED_TURN_APP" : "missing METERED_TURN_KEY";
+      return NextResponse.json({ iceServers: fallback, turn: false, reason });
+    }
     try {
       const cached = await redis.get(`rtc:iceservers`);
       if (typeof cached === "string" && cached.length > 2) {
@@ -52,14 +56,17 @@ export async function POST(req: Request) {
         `https://${app}.metered.live/api/v1/turn/credentials?apiKey=${key}`,
         { headers: { accept: "application/json" } },
       );
-      if (!r.ok) throw new Error("metered " + r.status);
+      if (!r.ok) throw new Error("metered http " + r.status);
       const servers = (await r.json()) as Array<{ urls: string }>;
-      if (!Array.isArray(servers) || !servers.length) throw new Error("empty");
+      if (!Array.isArray(servers) || !servers.length) throw new Error("metered returned no servers");
       const ice = [...fallback, ...servers];
       await redis.set(`rtc:iceservers`, JSON.stringify(ice), { ex: 1200 });
       return NextResponse.json({ iceServers: ice, turn: true });
-    } catch {
-      return NextResponse.json({ iceServers: fallback, turn: false });
+    } catch (e) {
+      return NextResponse.json({
+        iceServers: fallback, turn: false,
+        reason: e instanceof Error ? e.message : "fetch failed",
+      });
     }
   }
 
