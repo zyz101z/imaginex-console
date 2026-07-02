@@ -150,6 +150,7 @@
       <p id="rtcState" style="color:#9fb3d9;font-size:14px;min-height:20px;"></p>
       <p id="rtcPing" style="font-size:30px;color:#4de3c2;font-weight:900;margin:10px 0;"></p>
       <p id="rtcNote" class="tag" style="margin-top:4px;"></p>
+      <button class="btn teal hidden" id="btnRtcStart" style="margin-top:12px;">&#9658;&nbsp; START BATTLE</button>
     </div>
     <button class="btn ghost" id="btnOnlineBack">BACK</button>
   </div>
@@ -160,6 +161,7 @@
     <h1 class="winTitle" id="winName">YOU WIN!</h1>
     <p class="winSub" id="winScore">5 — 3</p>
     <p class="winSub" id="winScrap" style="color:#ffd166;font-weight:800;letter-spacing:1px;"></p>
+    <p id="winWait" class="tag hidden">waiting for the host &mdash; they can start a rematch&hellip;</p>
     <button class="btn" id="btnRematch">REMATCH</button>
     <button class="btn ghost" id="btnMenu">MAIN MENU</button>
   </div>
@@ -262,11 +264,25 @@ let matchCfg = { mode: 'quick', aiLevel: 'rookie', roundsToWin: 5, arena: 'maze'
 let aiParams = AI_LEVELS.rookie;
 let matchScrap = 0;              // scrap earned so far this match (rounds + bonus)
 let shiftTimer = 0;              // 'shifting' arena wall churn
+// Online multiplayer state (Phases 2+3). net.role: null (offline) | 'host' | 'guest'.
+const net = {
+  role: null, dcGame: null, dcFast: null,
+  guestKind: 'scout',
+  rIn: { st: null, th: 1, f: 0 },   // host: latest input received from the guest
+  lastInSeq: 0,                     // host: highest guest input seq applied (echoed as ack)
+  seq: 0, pending: [],              // guest: unacknowledged inputs for replay-reconciliation
+  sPrev: null, sCur: null,          // guest: snapshot interpolation buffer {m, at}
+  predShells: [],                   // guest: cosmetic locally-predicted shells
+  prevShellIds: new Set(), prevAlive: [true, true],
+  snapCtr: 0, wallsDirty: false,
+  guestScrap: 0, guestReported: false,
+};
 
 let vWall, hWall;                // vWall[x][y]: wall right of cell; hWall[x][y]: wall below cell
 let wallRects = [];              // {x,y,w,h}
 let tanks = [];                  // [p1, p2]
 let shells = [];
+let shellSeq = 0;            // ids let the online guest match shells across snapshots
 let particles = [];
 let treads = [];
 let powerup = null;              // {x,y,kind,age}
@@ -479,6 +495,7 @@ function buildWallRects() {
 function removeWallRect(r) {
   if (r.kind === 'v') vWall[r.vx][r.vy] = false; else hWall[r.vx][r.vy] = false;
   buildWallRects();
+  net.wallsDirty = true;   // online host: broadcast on the next snapshot tick
 }
 function cellOpen(ax, ay, bx, by) { // adjacency for BFS
   if (bx === ax + 1) return !vWall[ax][ay];
@@ -568,7 +585,9 @@ function spawnTanks() {
   tanks = [makeTank(0, pair[0][0], pair[0][1], matchCfg.playerTank),
            makeTank(1, pair[1][0], pair[1][1], matchCfg.foeTank)];
   tanks[0].score = s0; tanks[1].score = s1;
-  tanks[1].isAI = true;
+  if (net.role === 'host' && matchCfg.mode === 'online') {
+    tanks[1].isAI = false; tanks[1].isRemote = true;
+  } else tanks[1].isAI = true;
 }
 function fireShell(t) {
   if (t.cd > 0 || !t.alive) return;
@@ -578,6 +597,7 @@ function fireShell(t) {
   if (t.power === 'big') {
     const a = t.a;
     shells.push({
+      id: ++shellSeq,
       x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
       vx: Math.cos(a) * SHELL_SPEED * 0.62, vy: Math.sin(a) * SHELL_SPEED * 0.62,
       r: 9, owner: t.i, age: 0, grace: 0.12, big: true, heavy: true, smash: 2,
@@ -601,6 +621,7 @@ function fireShell(t) {
   for (const off of spread) {
     const a = t.a + off;
     shells.push({
+      id: ++shellSeq,
       x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
       vx: Math.cos(a) * sh.speed * spdMul, vy: Math.sin(a) * sh.speed * spdMul,
       r: sh.r, owner: t.i, age: 0, grace: 0.12,
@@ -668,6 +689,7 @@ function fireLaser(t) {
       x = end.x + Math.cos(a) * 4; y = end.y + Math.sin(a) * 4;
     }
     beams.push({ segs, col: t.col, t: 0.22, max: 0.22 });
+    netSendGame({ t: 'beam', segs, col: t.col });
     for (let si = 0; si < segs.length; si++) {
       const [x1, y1, x2, y2] = segs[si];
       for (const tk of tanks) {
@@ -722,7 +744,7 @@ function startMatch(cfg) {
   mode = 'play'; paused = false;
   musicPlay();
   show('menu', false); show('victory', false); show('helpBox', false);
-  show('garage', false); show('campaign', false);
+  show('garage', false); show('campaign', false); show('online', false);
 }
 function startRound() {
   genMaze(matchCfg.arena);
@@ -731,18 +753,22 @@ function startRound() {
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
   roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
   phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
+  netSendRound();   // online host: ship maze + spawns + scores to the guest (no-op otherwise)
 }
 function endRound() {
   const a = tanks[0].alive, b = tanks[1].alive;
   phase = 'roundover'; phaseT = 0;
+  let winnerIdx = -1;
   if (a === b) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; matchScrap += 2; }
   else {
     const w = a ? tanks[0] : tanks[1];
     w.score++;
-    banner = (w.i === 0 ? 'YOU SCORE!' : 'THE AI SCORES!');
+    winnerIdx = w.i;
+    banner = (w.i === 0 ? 'YOU SCORE!' : (matchCfg.mode === 'online' ? 'OPPONENT SCORES!' : 'THE AI SCORES!'));
     bannerCol = w.col;
     matchScrap += (w.i === 0) ? 10 : 2;   // win the round +10; even a loss pays +2
   }
+  netSendGame({ t: 'rover', w: winnerIdx, sc: [tanks[0].score, tanks[1].score] });
 }
 function endMatch() {
   phase = 'matchover'; phaseT = 0;   // terminal state
@@ -762,17 +788,21 @@ function endMatch() {
       profile.done[b.id] = true;
       starLine = '  ·  ' + '★'.repeat(stars) + '☆'.repeat(3 - stars);
     } else {
-      bonus = matchCfg.aiLevel === 'ace' ? 100 : 50;
+      bonus = matchCfg.mode === 'online' ? 75 : (matchCfg.aiLevel === 'ace' ? 100 : 50);
     }
   }
   matchScrap += bonus;
   profile.scrap += matchScrap;
   saveProfile();
-  document.getElementById('winName').textContent = humanWon ? 'YOU WIN!' : 'THE AI WINS!';
+  netSendGame({ t: 'gover', w: w.i, sc: [tanks[0].score, tanks[1].score] });
+  document.getElementById('winName').textContent = humanWon ? 'YOU WIN!' :
+    (matchCfg.mode === 'online' ? 'OPPONENT WINS!' : 'THE AI WINS!');
   document.getElementById('winName').style.color = w.col;
   const mname = (matchCfg.mode === 'campaign' && matchCfg.battle) ? matchCfg.battle.name : ('first to ' + matchCfg.roundsToWin);
   document.getElementById('winScore').textContent = tanks[0].score + ' — ' + tanks[1].score + '  ·  ' + mname + starLine;
   document.getElementById('winScrap').textContent = '+' + matchScrap + ' SCRAP EARNED';
+  document.getElementById('btnRematch').classList.remove('hidden');
+  document.getElementById('winWait').classList.add('hidden');
   show('victory', true);
   sfx.win();
   if (humanWon) for (let i = 0; i < 120; i++) confetti.push({
@@ -1019,62 +1049,60 @@ function powerColor(kind) {
 }
 
 // ============================== UPDATE ==============================
-function controlHuman(t, dt, scheme) {
-  // DIRECTIONAL drive: press where you want to go (8-way); the tank auto-rotates
-  // toward it and drives once roughly aligned. Same scheme as touch and far easier
-  // than rotate-to-steer tank controls (playtest feedback: "hard to drive").
-  let dx = 0, dy = 0, fire = false;
-  if (scheme === 0) {
-    if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
-    if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
-    if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
-    if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
-    fire = keys['KeyF'] || keys['Space'] || keys['Enter'] || keys['KeyM'];
-    if (touchState.fire) fire = true;
-  } else {
-    if (keys['ArrowUp']) dy -= 1;
-    if (keys['ArrowDown']) dy += 1;
-    if (keys['ArrowLeft']) dx -= 1;
-    if (keys['ArrowRight']) dx += 1;
-    fire = keys['Enter'] || keys['KeyM'];
-  }
+// Read the local player's input (keyboard 8-way + touch joystick).
+// Returns { target: angle|null, throttle: 0..1, fire: bool } — the same shape an online
+// guest sends over the wire, so host / guest / prediction share ONE drive path.
+function readLocalInput() {
+  let dx = 0, dy = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+  if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+  if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+  let fire = !!(keys['KeyF'] || keys['Space'] || keys['Enter'] || keys['KeyM']);
+  if (touchState.fire) fire = true;
   let target = null, throttle = 1;
   if (dx !== 0 || dy !== 0) target = Math.atan2(dy, dx);
-  if (scheme === 0 && touchState.steer != null) { target = touchState.steer; throttle = touchState.speedMul; }
-  const speedMul = (t.power === 'rapid' ? 1.12 : 1) * throttle;
+  if (touchState.steer != null) { target = touchState.steer; throttle = touchState.speedMul; }
+  return { target, throttle, fire };
+}
+// One tick of directional drive (instant velocity + corner assist + cosmetic hull snap).
+// Used by local play, by the HOST driving the remote guest's tank from received inputs,
+// and by the GUEST's client-side prediction — one implementation so they never diverge.
+function applyDrive(t, target, throttle, dt) {
+  const speedMul = (t.power === 'rapid' ? 1.12 : 1) * (throttle || 1);
   const ox = t.x, oy = t.y;
-  if (target !== null) {
-    // Movement is INSTANT in the pressed direction — no waiting for the hull to line
-    // up (that made travel arc/swoop: "turns weird, hard to go where I want").
-    // The hull swivel below is purely cosmetic and fast.
+  if (target !== null && target !== undefined) {
     const step = tankDef(t).speed * speedMul * dt;
     const fx = Math.cos(target), fy = Math.sin(target);
     moveTankVec(t, fx * step, fy * step);
     // Corner assist (Pac-Man style): if a wall mostly blocked us but there's an
-    // opening a few px to the side, slide toward it so doorways don't demand
-    // pixel-perfect alignment.
+    // opening a few px to the side, slide toward it.
     const moved = Math.hypot(t.x - ox, t.y - oy);
     if (moved < step * 0.45) {
-      outer: for (const off of [9, 17, 26]) {                     // probe ladder: near openings win
+      outer: for (const off of [9, 17, 26]) {
         for (const s of [1, -1]) {
-          const nx = t.x - fy * s * off, ny = t.y + fx * s * off; // off px to the side...
-          if (!circleBlocked(nx + fx * 10, ny + fy * 10, TANK_R - 2)) { // ...forward clears there
-            moveTankVec(t, -fy * s * step, fx * s * step);        // slide into the opening
+          const nx = t.x - fy * s * off, ny = t.y + fx * s * off;
+          if (!circleBlocked(nx + fx * 10, ny + fy * 10, TANK_R - 2)) {
+            moveTankVec(t, -fy * s * step, fx * s * step);
             break outer;
           }
         }
       }
     }
-    // cosmetic hull snap toward heading (fast; aiming follows almost instantly)
     const d = angDiff(t.a, target);
     const rot = HULL_SNAP * dt;
     if (Math.abs(d) <= rot) t.a = target; else t.a += Math.sign(d) * rot;
   }
   t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
-  if (fire) fireShell(t);
+}
+function controlHuman(t, dt, scheme) {
+  const inp = readLocalInput();
+  applyDrive(t, inp.target, inp.throttle, dt);
+  if (inp.fire) fireShell(t);
 }
 function update(dt) {
   if (mode !== 'play' || paused) return;
+  if (net.role === 'guest' && matchCfg.mode === 'online') { updateGuest(dt); return; }
   if (hitstop > 0) { hitstop -= dt; return; }
   phaseT += dt;
 
@@ -1120,6 +1148,7 @@ function update(dt) {
           const bad = !allCellsReachable() ||
             tanks.some(t => t.alive && wallRects.some(r => circleRectPush(t.x, t.y, TANK_R + 2, r)));
           if (bad) { arr[x][y] = false; buildWallRects(); continue; }
+          net.wallsDirty = true;
           break;
         }
       }
@@ -1150,6 +1179,10 @@ function update(dt) {
       const ox = t.x, oy = t.y;
       aiThink(t, tanks[1 - t.i], dt);
       t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
+    } else if (t.isRemote) {
+      // online guest's tank: replay their latest input through the SAME drive path
+      applyDrive(t, net.rIn.st, net.rIn.th, dt);
+      if (net.rIn.f) fireShell(t);
     } else controlHuman(t, dt, t.i);
     // tread marks
     t.treadT -= dt;
@@ -1175,6 +1208,7 @@ function update(dt) {
   while (treads.length && treads[0].life <= 0) treads.shift();
 
   if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
+  netHostTick();   // online host: snapshots @20/s + dirty-wall broadcasts (no-op offline)
 }
 function updateParticles(dt) {
   for (let i = beams.length - 1; i >= 0; i--) {
@@ -1430,10 +1464,11 @@ function drawHUD() {
   }
   ctx.fillStyle = '#5f7099'; ctx.textAlign = 'center';
   ctx.fillText('R' + roundNum, cx, y);
+  const guest = net.role === 'guest' && matchCfg.mode === 'online';
   ctx.textAlign = 'left'; ctx.fillStyle = P1_COL;
-  ctx.fillText('YOU', cx - 36 - rtw * 20 - 22, y);
+  ctx.fillText(guest ? 'THEM' : 'YOU', cx - 36 - rtw * 20 - 22, y);
   ctx.textAlign = 'right'; ctx.fillStyle = P2_COL;
-  ctx.fillText('AI', cx + 36 + rtw * 20 + 22, y);
+  ctx.fillText(guest ? 'YOU' : (matchCfg.mode === 'online' ? 'THEM' : 'AI'), cx + 36 + rtw * 20 + 22, y);
   ctx.restore();
 }
 function drawPip(x, y, filled, col) {
@@ -1462,14 +1497,14 @@ window.addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   audioInit();
-  if (e.code === 'KeyP' && mode === 'play') {
+  if (e.code === 'KeyP' && mode === 'play' && matchCfg.mode !== 'online') {
     paused = !paused;
     if (music && phase !== 'matchover') { if (paused) music.pause(); else music.play().catch(() => {}); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 window.addEventListener('blur', () => {
-  if (mode === 'play') { paused = true; if (music) music.pause(); }
+  if (mode === 'play' && matchCfg.mode !== 'online') { paused = true; if (music) music.pause(); }
   for (const k in keys) keys[k] = false;
 });
 
@@ -1608,6 +1643,7 @@ document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false);
 document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(matchCfg); };
 document.getElementById('btnMenu').onclick = () => {
   musicStop(false);
+  if (matchCfg.mode === 'online') netDisconnect();
   show('victory', false); mode = 'menu'; tanks = []; shells = []; beams = []; genMaze(); updateWinTag(); show('menu', true);
 };
 
@@ -1630,7 +1666,12 @@ function rtcCleanup() {
   if (rtcPollTimer) { clearInterval(rtcPollTimer); rtcPollTimer = null; }
   if (rtcPingTimer) { clearInterval(rtcPingTimer); rtcPingTimer = null; }
   if (rtcDC) { try { rtcDC.close(); } catch (e) {} rtcDC = null; }
+  if (net.dcFast) { try { net.dcFast.close(); } catch (e) {} }
   if (rtcPC) { try { rtcPC.close(); } catch (e) {} rtcPC = null; }
+  net.dcGame = null; net.dcFast = null;
+  if (mode !== 'play') net.role = null;
+  const sb = document.getElementById('btnRtcStart');
+  if (sb) sb.classList.add('hidden');
   rtcPings = [];
   rtcEl('onlineHome').classList.remove('hidden');
   rtcEl('onlineStatus').classList.add('hidden');
@@ -1680,8 +1721,8 @@ function rtcNewPC() {
   pc.onconnectionstatechange = () => {
     if (pc !== rtcPC) return;
     if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-      rtcSetState('Connection lost.');
-      rtcEl('rtcPing').textContent = '';
+      if (mode === 'play' && matchCfg.mode === 'online') netAbort('Connection lost.');
+      else { rtcSetState('Connection lost.'); rtcEl('rtcPing').textContent = ''; }
     }
   };
   return pc;
@@ -1707,10 +1748,17 @@ async function rtcApi(payload) {
 }
 function rtcWireChannel(dc) {
   rtcDC = dc;
+  net.dcGame = dc;
   dc.onopen = () => {
     if (rtcFailTimer) { clearTimeout(rtcFailTimer); rtcFailTimer = null; }
     rtcSetState('CONNECTED! Measuring ping…');
     sfx.powerup();
+    if (net.role === 'guest') {
+      try { dc.send(JSON.stringify({ t: 'hello', kind: profile.owned[profile.tank] ? profile.tank : 'scout' })); } catch (e) {}
+      rtcEl('rtcNote').textContent = 'Connected! The host starts the battle.';
+    } else if (net.role === 'host') {
+      rtcEl('btnRtcStart').classList.remove('hidden');
+    }
     rtcPingTimer = setInterval(() => {
       if (dc.readyState === 'open') { try { dc.send(JSON.stringify({ t: 'ping', ts: performance.now() })); } catch (e) {} }
     }, 1000);
@@ -1719,6 +1767,7 @@ function rtcWireChannel(dc) {
     let m = null;
     try { m = JSON.parse(ev.data); } catch (e) { return; }
     if (m.t === 'ping') { try { dc.send(JSON.stringify({ t: 'pong', ts: m.ts })); } catch (e) {} }
+    else if (m.t !== 'pong') { netHandleMsg(m); }
     else if (m.t === 'pong') {
       rtcPings.push(performance.now() - m.ts);
       if (rtcPings.length > 5) rtcPings.shift();
@@ -1730,7 +1779,19 @@ function rtcWireChannel(dc) {
         'High latency — playable, may feel a little soft.') + '  Online battles land in the next update.';
     }
   };
-  dc.onclose = () => { if (rtcDC === dc) rtcSetState('Channel closed.'); };
+  dc.onclose = () => {
+    if (mode === 'play' && matchCfg.mode === 'online') netAbort('Connection lost.');
+    else if (rtcDC === dc) rtcSetState('Channel closed.');
+  };
+}
+// Second, unreliable-unordered channel for inputs + snapshots (no head-of-line blocking).
+function rtcWireFast(dc) {
+  net.dcFast = dc;
+  dc.onmessage = (ev) => {
+    let m = null;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    netHandleMsg(m);
+  };
 }
 async function rtcHost() {
   rtcCleanup();
@@ -1738,8 +1799,10 @@ async function rtcHost() {
   rtcSetState('Creating room… (finding network paths, up to ~10s)');
   try {
     if (!rtcIceLoaded) await rtcLoadIce();
+    net.role = 'host';
     rtcPC = rtcNewPC();
     rtcWireChannel(rtcPC.createDataChannel('game'));
+    rtcWireFast(rtcPC.createDataChannel('fast', { ordered: false, maxRetransmits: 0 }));
     await rtcPC.setLocalDescription(await rtcPC.createOffer());
     await rtcWaitIce(rtcPC);
     const { code } = await rtcApi({ action: 'host', sdp: JSON.stringify(rtcPC.localDescription) });
@@ -1767,8 +1830,12 @@ async function rtcJoin(code) {
   try {
     if (!rtcIceLoaded) await rtcLoadIce();
     const { sdp } = await rtcApi({ action: 'join', code });
+    net.role = 'guest';
     rtcPC = rtcNewPC();
-    rtcPC.ondatachannel = (ev) => rtcWireChannel(ev.channel);
+    rtcPC.ondatachannel = (ev) => {
+      if (ev.channel.label === 'fast') rtcWireFast(ev.channel);
+      else rtcWireChannel(ev.channel);
+    };
     await rtcPC.setRemoteDescription(typeof sdp === 'string' ? JSON.parse(sdp) : sdp);
     await rtcPC.setLocalDescription(await rtcPC.createAnswer());
     rtcSetState('Connecting…');
@@ -1780,9 +1847,295 @@ async function rtcJoin(code) {
     rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).' : ('Error: ' + e.message));
   }
 }
+
+// ============================== NETCODE (Phases 2+3) ==============================
+// Host-authoritative: the host runs the real sim; the guest sends inputs, receives
+// 20/s snapshots, interpolates the world ~110ms in the past, and PREDICTS its own
+// tank locally (replaying unacked inputs on each authoritative snapshot) so its own
+// driving feels instant at any latency.
+function r1(v) { return Math.round(v * 10) / 10; }
+function r2(v) { return Math.round(v * 100) / 100; }
+function netSendGame(obj) {
+  if (!net.dcGame || net.dcGame.readyState !== 'open') return;
+  if (matchCfg.mode !== 'online' && obj.t !== 'bye' && obj.t !== 'hello') return;
+  try { net.dcGame.send(JSON.stringify(obj)); } catch (e) {}
+}
+function netSendFast(obj) {
+  const dc = (net.dcFast && net.dcFast.readyState === 'open') ? net.dcFast : net.dcGame;
+  if (!dc || dc.readyState !== 'open' || matchCfg.mode !== 'online') return;
+  try { dc.send(JSON.stringify(obj)); } catch (e) {}
+}
+function packWalls() {
+  let v = '', h = '';
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) { v += vWall[x][y] ? '1' : '0'; h += hWall[x][y] ? '1' : '0'; }
+  return { v, h };
+}
+function unpackWalls(w) {
+  vWall = []; hWall = [];
+  let i = 0;
+  for (let x = 0; x < COLS; x++) {
+    vWall[x] = []; hWall[x] = [];
+    for (let y = 0; y < ROWS; y++) { vWall[x][y] = w.v[i] === '1'; hWall[x][y] = w.h[i] === '1'; i++; }
+  }
+  buildWallRects();
+  net.wallsDirty = false;
+}
+function serTank(t) { return [r1(t.x), r1(t.y), r2(t.a), t.alive ? 1 : 0, t.shield ? 1 : 0, t.power || '', r1(t.powerT || 0)]; }
+function serShell(sh) { return [sh.id, r1(sh.x), r1(sh.y), r1(sh.vx), r1(sh.vy), sh.r, sh.owner, sh.big ? 1 : (sh.heavy ? 2 : 0)]; }
+
+// ---- host side ----
+function startOnlineMatch() {
+  startMatch({ mode: 'online', foeTank: net.guestKind || 'scout' });
+}
+function netSendRound() {
+  if (net.role !== 'host' || matchCfg.mode !== 'online') return;
+  netSendGame({
+    t: 'round', round: roundNum, rw: matchCfg.roundsToWin,
+    sc: [tanks[0].score, tanks[1].score], walls: packWalls(),
+    tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind]),
+  });
+  net.wallsDirty = false;
+  net.rIn = { st: null, th: 1, f: 0 };   // stale inputs must not drive the new round
+}
+function netHostTick() {
+  if (net.role !== 'host' || matchCfg.mode !== 'online') return;
+  net.snapCtr++;
+  if (net.snapCtr % 3 !== 0) return;     // 60Hz sim -> 20/s snapshots
+  if (net.wallsDirty) { const w = packWalls(); netSendGame({ t: 'walls', v: w.v, h: w.h }); net.wallsDirty = false; }
+  netSendFast({
+    t: 'snap', ack: net.lastInSeq,
+    a: tanks.map(serTank), s: shells.map(serShell),
+    pu: powerup ? [r1(powerup.x), r1(powerup.y), powerup.kind, r1(powerup.age)] : 0,
+    ph: phase, rt: r1(roundTime), sd: suddenDeath ? 1 : 0,
+  });
+}
+
+// ---- guest side ----
+function gmGuestRound(m) {
+  matchCfg = { mode: 'online', aiLevel: 'rookie', roundsToWin: m.rw, arena: 'net',
+               playerTank: m.tk[1][3], foeTank: m.tk[0][3], battle: null };
+  unpackWalls(m.walls);
+  tanks = [makeTank(0, 0, 0, m.tk[0][3]), makeTank(1, 0, 0, m.tk[1][3])];
+  for (let i = 0; i < 2; i++) { tanks[i].x = m.tk[i][0]; tanks[i].y = m.tk[i][1]; tanks[i].a = m.tk[i][2]; }
+  tanks[0].score = m.sc[0]; tanks[1].score = m.sc[1];
+  roundNum = m.round;
+  shells = []; beams = []; particles = []; treads = []; confetti = []; powerup = null;
+  net.pending = []; net.sPrev = null; net.sCur = null; net.predShells = [];
+  net.prevShellIds = new Set(); net.prevAlive = [true, true];
+  phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
+  roundTime = 0; suddenDeath = false;
+  if (m.round === 1 && m.sc[0] === 0 && m.sc[1] === 0) { net.guestScrap = 0; net.guestReported = false; }
+  if (mode !== 'play') {
+    mode = 'play'; paused = false;
+    musicPlay();
+    show('online', false); show('menu', false);
+  }
+  show('victory', false);
+}
+function gmGuestRover(m) {
+  phase = 'roundover'; phaseT = 0;
+  tanks[0].score = m.sc[0]; tanks[1].score = m.sc[1];
+  if (m.w === -1) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; net.guestScrap += 2; }
+  else {
+    banner = m.w === 1 ? 'YOU SCORE!' : 'OPPONENT SCORES!';
+    bannerCol = m.w === 1 ? P2_COL : P1_COL;
+    net.guestScrap += (m.w === 1 ? 10 : 2);
+  }
+}
+function gmGuestGover(m) {
+  phase = 'matchover'; phaseT = 0;
+  musicStop(true);
+  tanks[0].score = m.sc[0]; tanks[1].score = m.sc[1];
+  const won = m.w === 1;
+  const earned = net.guestScrap + (won ? 75 : 0);
+  net.guestScrap = 0;
+  profile.scrap += earned; saveProfile(); updateWinTag();
+  document.getElementById('winName').textContent = won ? 'YOU WIN!' : 'OPPONENT WINS!';
+  document.getElementById('winName').style.color = won ? P2_COL : P1_COL;
+  document.getElementById('winScore').textContent = m.sc[1] + ' — ' + m.sc[0] + '  ·  online battle';
+  document.getElementById('winScrap').textContent = '+' + earned + ' SCRAP EARNED';
+  document.getElementById('btnRematch').classList.add('hidden');
+  document.getElementById('winWait').classList.remove('hidden');
+  show('victory', true);
+  sfx.win();
+  if (won) {
+    for (let i = 0; i < 120; i++) confetti.push({
+      x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
+      vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
+      col: [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
+      w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, spin: Math.random() * 6, a: Math.random() * 6,
+    });
+    if (!net.guestReported) {
+      net.guestReported = true;
+      totalWins++;
+      try { localStorage.setItem('tankwars_wins', String(totalWins)); } catch (e) {}
+      try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tank-wars', score: totalWins }, '*'); } catch (e) {}
+    }
+  }
+}
+function updateGuest(dt) {
+  phaseT += dt;
+  if (phase === 'countdown' && phaseT >= 1.8) { phase = 'play'; phaseT = 0; sfx.go(); }
+  // 1) capture + send + remember input
+  const inp = readLocalInput();
+  net.seq++;
+  net.pending.push({ q: net.seq, st: inp.target, th: inp.throttle });
+  if (net.pending.length > 180) net.pending.shift();
+  netSendFast({ t: 'in', q: net.seq, st: inp.target, th: inp.throttle, f: inp.fire ? 1 : 0 });
+  // 2) client-side prediction: own tank moves THIS frame
+  const me = tanks[1];
+  if (me && me.alive && phase === 'play') {
+    me.cd -= dt;
+    applyDrive(me, inp.target, inp.throttle, dt);
+    if (inp.fire && me.cd <= 0) {
+      me.cd = tankDef(me).laser ? tankDef(me).fireCd
+            : tankDef(me).fireCd * (me.power === 'rapid' ? 0.45 : 1);
+      sfx.fire();
+      const mx = me.x + Math.cos(me.a) * (TANK_R + 8), my = me.y + Math.sin(me.a) * (TANK_R + 8);
+      spawnParticles(mx, my, 5, me.col, 90, 0.18);
+      if (!tankDef(me).laser) {
+        const sh = tankDef(me).shell;
+        net.predShells.push({ x: mx, y: my, vx: Math.cos(me.a) * sh.speed, vy: Math.sin(me.a) * sh.speed,
+                              r: sh.r, col: me.col, age: 0 });
+      }
+    }
+  }
+  for (const ps of net.predShells) { ps.x += ps.vx * dt; ps.y += ps.vy * dt; ps.age += dt; }
+  net.predShells = net.predShells.filter(ps => ps.age < 0.24 && ps.x > 0 && ps.x < W && ps.y > 0 && ps.y < H);
+  // 3) world from snapshots
+  applyInterp();
+  updateParticles(dt);
+}
+function applyInterp() {
+  const cur = net.sCur;
+  if (!cur) return;
+  const prev = net.sPrev;
+  const INTERP = 110;
+  let alpha = 1, A = cur.m, B = cur.m;
+  if (prev) {
+    const span = cur.at - prev.at;
+    const rt = performance.now() - INTERP;
+    alpha = span > 1 ? Math.max(0, Math.min(1, (rt - prev.at) / span)) : 1;
+    A = prev.m; B = cur.m;
+  }
+  const t0 = tanks[0];
+  if (t0 && A.a && B.a) {
+    const a0 = A.a[0], b0 = B.a[0];
+    t0.x = a0[0] + (b0[0] - a0[0]) * alpha;
+    t0.y = a0[1] + (b0[1] - a0[1]) * alpha;
+    t0.a = a0[2] + angDiff(a0[2], b0[2]) * alpha;
+    t0.alive = !!b0[3]; t0.shield = !!b0[4]; t0.power = b0[5] || null; t0.powerT = b0[6];
+  }
+  const me = tanks[1];
+  if (me && B.a) {
+    const b1 = B.a[1];
+    me.alive = !!b1[3]; me.shield = !!b1[4];
+    if ((b1[5] || null) !== me.power) { me.power = b1[5] || null; if (me.power) sfx.powerup(); }
+    me.powerT = b1[6];
+  }
+  // shells: interpolate matched ids; sfx for newly-seen opponent shells
+  const prevById = {};
+  if (prev && A.s) for (const sh of A.s) prevById[sh[0]] = sh;
+  const out = [];
+  for (const sh of (B.s || [])) {
+    const pv = prevById[sh[0]];
+    const x = pv ? pv[1] + (sh[1] - pv[1]) * alpha : sh[1];
+    const y = pv ? pv[2] + (sh[2] - pv[2]) * alpha : sh[2];
+    out.push({ id: sh[0], x, y, vx: sh[3], vy: sh[4], r: sh[5], owner: sh[6],
+               big: sh[7] === 1, heavy: sh[7] === 2, col: sh[6] === 0 ? P1_COL : P2_COL });
+    if (!net.prevShellIds.has(sh[0])) {
+      if (sh[6] === 0) sfx.fire();                        // opponent fired
+      else if (net.predShells.length) net.predShells.shift();   // authoritative own shell replaces a ghost
+    }
+  }
+  net.prevShellIds = new Set((B.s || []).map(sh => sh[0]));
+  shells = out.concat(net.predShells.map(ps => ({ x: ps.x, y: ps.y, r: ps.r, col: ps.col, big: false, heavy: false })));
+  // death FX from alive-flag transitions
+  if (B.a) for (let i = 0; i < 2; i++) {
+    const alive = !!B.a[i][3];
+    if (net.prevAlive[i] && !alive && tanks[i]) {
+      spawnParticles(tanks[i].x, tanks[i].y, 46, tanks[i].col, 240, 0.8);
+      spawnParticles(tanks[i].x, tanks[i].y, 22, '#ffffff', 160, 0.5);
+      shake = 14;
+      sfx.boom();
+    }
+    net.prevAlive[i] = alive;
+  }
+  powerup = B.pu ? { x: B.pu[0], y: B.pu[1], kind: B.pu[2], age: B.pu[3] } : null;
+  roundTime = B.rt || 0; suddenDeath = !!B.sd;
+  if (B.ph === 'play' && phase === 'countdown') { phase = 'play'; phaseT = 0; }
+}
+
+// ---- message router (both roles) ----
+function netHandleMsg(m) {
+  switch (m.t) {
+    case 'hello':
+      net.guestKind = TANKS[m.kind] ? m.kind : 'scout';
+      break;
+    case 'in':
+      if (net.role === 'host' && m.q > net.lastInSeq) {
+        net.lastInSeq = m.q;
+        net.rIn = { st: m.st, th: m.th, f: m.f };
+      }
+      break;
+    case 'snap': {
+      if (net.role !== 'guest' || mode !== 'play') break;
+      net.sPrev = net.sCur;
+      net.sCur = { m, at: performance.now() };
+      // reconciliation: reset own tank to authoritative, replay unacked inputs
+      const me = tanks[1];
+      if (me && m.a && m.a[1]) {
+        net.pending = net.pending.filter(pp => pp.q > m.ack);
+        const px = me.x, py = me.y;
+        me.x = m.a[1][0]; me.y = m.a[1][1];
+        for (const pp of net.pending) applyDrive(me, pp.st, pp.th, STEP);
+        // soften small corrections so they never pop (fully converges across snapshots)
+        const ex = px - me.x, ey = py - me.y;
+        const err = Math.hypot(ex, ey);
+        if (err > 0.5 && err < 48) { me.x += ex * 0.4; me.y += ey * 0.4; }
+      }
+      break;
+    }
+    case 'round': if (net.role === 'guest') gmGuestRound(m); break;
+    case 'rover': if (net.role === 'guest') gmGuestRover(m); break;
+    case 'gover': if (net.role === 'guest') gmGuestGover(m); break;
+    case 'walls': if (net.role === 'guest') unpackWalls({ v: m.v, h: m.h }); break;
+    case 'beam':
+      if (net.role === 'guest') { beams.push({ segs: m.segs, col: m.col, t: 0.22, max: 0.22 }); sfx.laser(); }
+      break;
+    case 'bye': netAbort('They went back to the menu.'); break;
+  }
+}
+function netDisconnect() {
+  netSendGame({ t: 'bye' });
+  net.role = null;
+  matchCfg.mode = 'quick';
+  setTimeout(() => rtcCleanup(), 150);
+}
+function netAbort(msg) {
+  if (matchCfg.mode !== 'online') return;
+  musicStop(false);
+  phase = 'matchover';
+  let banked = 0;
+  if (net.role === 'guest') { banked = net.guestScrap; net.guestScrap = 0; }
+  else banked = matchScrap;
+  if (banked > 0) { profile.scrap += banked; saveProfile(); updateWinTag(); }
+  document.getElementById('winName').textContent = 'OPPONENT LEFT';
+  document.getElementById('winName').style.color = '#dfe8ff';
+  document.getElementById('winScore').textContent = msg || '';
+  document.getElementById('winScrap').textContent = banked > 0 ? ('+' + banked + ' SCRAP BANKED') : '';
+  document.getElementById('btnRematch').classList.add('hidden');
+  document.getElementById('winWait').classList.add('hidden');
+  show('victory', true);
+  net.role = null;
+  matchCfg.mode = 'quick';
+  rtcCleanup();
+}
+
 document.getElementById('btnOnline').onclick = () => { audioInit(); rtcLoadIce(); show('menu', false); show('online', true); };
 document.getElementById('btnOnlineBack').onclick = () => { rtcCleanup(); show('online', false); show('menu', true); };
 document.getElementById('btnRtcHost').onclick = () => rtcHost();
+document.getElementById('btnRtcStart').onclick = () => { startOnlineMatch(); };
 document.getElementById('btnRtcJoin').onclick = () => {
   const code = (rtcEl('rtcJoinCode').value || '').toUpperCase().trim();
   if (/^[A-Z2-9]{4}$/.test(code)) rtcJoin(code);
