@@ -206,6 +206,37 @@ const TANKS = {
 const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon'];
 function tankDef(t) { return TANKS[t.kind] || TANKS.scout; }
 
+// Meshy-generated top-down sprites (img/tank_*.png, chroma-keyed + hull-centered).
+// cx/cy = hull center in the image (rotation pivot); barrels overhang to the right.
+const SPRITE_META = {
+  scout:   { w: 240, h: 128, cx: 102, cy: 64 },
+  mammoth: { w: 205, h: 128, cx: 90,  cy: 64 },
+  viper:   { w: 337, h: 128, cx: 121, cy: 64 },
+  pinball: { w: 146, h: 128, cx: 59,  cy: 64 },
+  photon:  { w: 230, h: 128, cx: 99,  cy: 64 },
+};
+const tankSprites = {};   // kind -> { 0: amber-tinted canvas, 1: teal-tinted canvas }
+if (typeof Image !== 'undefined') {
+  for (const k of TANK_ORDER) {
+    const im = new Image();
+    im.onload = () => {
+      const tint = (col) => {
+        const c = document.createElement('canvas');
+        c.width = im.width; c.height = im.height;
+        const x = c.getContext('2d');
+        x.drawImage(im, 0, 0);
+        x.globalCompositeOperation = 'source-atop';
+        x.globalAlpha = 0.32;               // team identity without killing the metal detail
+        x.fillStyle = col;
+        x.fillRect(0, 0, c.width, c.height);
+        return c;
+      };
+      tankSprites[k] = { 0: tint(P1_COL), 1: tint(P2_COL) };
+    };
+    im.src = 'img/tank_' + k + '.png';
+  }
+}
+
 // AI skill tiers (Officer added between Rookie and Ace for the campaign's mid rungs)
 const AI_LEVELS = {
   rookie:  { repath: 0.7,  dodge: false, lead: false, aimErr: 0.16, fireMin: 0.7,  fireRnd: 0.7 },
@@ -1409,28 +1440,39 @@ function drawTank(t) {
     ctx.restore();
   }
   ctx.rotate(t.a);
-  ctx.shadowColor = t.glow; ctx.shadowBlur = 14;
-  // treads
-  ctx.fillStyle = '#222c44';
-  ctx.fillRect(-TANK_R, -TANK_R - 1, TANK_R * 2, 7);
-  ctx.fillRect(-TANK_R, TANK_R - 6, TANK_R * 2, 7);
-  // hull
-  ctx.fillStyle = t.col;
-  roundRect(-TANK_R + 1, -TANK_R + 5, TANK_R * 2 - 2, TANK_R * 2 - 10, 4);
-  // turret
-  ctx.fillStyle = '#0e1526';
-  ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = t.col; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
-  // barrel (shape varies a touch by tank type)
-  ctx.fillStyle = t.col;
-  const bw = t.kind === 'mammoth' ? 8 : (t.kind === 'viper' ? 3 : 5);
-  ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
-  if (t.kind === 'photon') {   // glowing emitter tip
-    ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.arc(TANK_R + 11, 0, 3, 0, Math.PI * 2); ctx.fill();
+  const spr = tankSprites[t.kind];
+  if (spr && SPRITE_META[t.kind]) {
+    // Meshy sprite: hull-centered, team-tinted, soft team glow
+    const sm = SPRITE_META[t.kind];
+    const scale = (TANK_R * 2.55) / sm.h;
+    ctx.shadowColor = t.glow; ctx.shadowBlur = 12;
+    ctx.drawImage(spr[t.i], -sm.cx * scale, -sm.cy * scale, sm.w * scale, sm.h * scale);
+    ctx.restore();
+  } else {
+    // vector fallback (sprite still loading / failed)
+    ctx.shadowColor = t.glow; ctx.shadowBlur = 14;
+    // treads
+    ctx.fillStyle = '#222c44';
+    ctx.fillRect(-TANK_R, -TANK_R - 1, TANK_R * 2, 7);
+    ctx.fillRect(-TANK_R, TANK_R - 6, TANK_R * 2, 7);
+    // hull
+    ctx.fillStyle = t.col;
+    roundRect(-TANK_R + 1, -TANK_R + 5, TANK_R * 2 - 2, TANK_R * 2 - 10, 4);
+    // turret
+    ctx.fillStyle = '#0e1526';
+    ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = t.col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
+    // barrel (shape varies a touch by tank type)
+    ctx.fillStyle = t.col;
+    const bw = t.kind === 'mammoth' ? 8 : (t.kind === 'viper' ? 3 : 5);
+    ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
+    if (t.kind === 'photon') {   // glowing emitter tip
+      ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(TANK_R + 11, 0, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
-  ctx.restore();
   // power timer arc
   if (t.power && t.power !== 'big' && t.powerT < 90) {
     ctx.save();
@@ -1608,6 +1650,11 @@ function renderGarage() {
     const owned = !!profile.owned[k], sel = profile.tank === k;
     const card = document.createElement('div');
     card.className = 'gcard' + (sel ? ' sel' : '');
+    const thumb = document.createElement('img');
+    thumb.src = 'img/tank_' + k + '.png';
+    thumb.alt = d.name;
+    thumb.style.cssText = 'height:46px;max-width:100px;object-fit:contain;flex:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.55));';
+    card.appendChild(thumb);
     const info = document.createElement('div');
     info.className = 'ginfo';
     const spd = statDots((d.speed - 100) / 80);
