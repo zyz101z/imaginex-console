@@ -29,6 +29,7 @@
 ## Session log — 2026-07-02
 | Ver | Commit | What |
 |---|---|---|
+| MAPS | (this) | Arena rotation: quick/online rotate the 5 generators per ROUND (weighted, shifting 10%) + arena name under countdown; campaign unchanged; arena rides 'round' msg online. T16 added |
 | ART | `8b9400a` | **Meshy tank sprites:** 5 top-down realistic tanks (text-to-image, nano-banana-pro, ~30 credits) → magenta chroma-key → hull-center manifest (SPRITE_META) → in-game team-tinted sprites (amber/teal via offscreen source-atop, vector fallback) + garage thumbnails. Raw art archived in scratchpad meshy_output/ that session; game copies in img/. Regen recipe: scratchpad meshy_tanks.py pattern (flat magenta bg + hull-pointing-right prompts) |
 | MUSIC | `c5eedde` | Guest had no music online — matches start from a network msg (no gesture) → autoplay blocked. Fix: muted play/pause unlock in ONLINE VS clicks + start-on-first-input fallback |
 | MP-2/3 | `f1e8e44` | **ONLINE MULTIPLAYER PLAYABLE:** host-authoritative sim + 20/s snapshots (unordered 'fast' channel) + guest interpolation (~110ms, id-matched shells) + CLIENT-SIDE PREDICTION w/ input-replay reconciliation (own tank instant at any latency) + round/match/scrap/rematch/disconnect flow. Host picks own garage tank; guest's hello carries theirs; enemy = real human via ONLINE VS → START BATTLE (host). Verified: NETSIM two-VM harness @80ms — 29 checks, 0.0px prediction divergence. Offline untouched (59+6 green) |
