@@ -62,6 +62,26 @@ single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-
   (any human winner: P1 in solo, either player in 2P).
 - `?demo=1` auto-starts an AI-vs-AI match (headless screenshot hook).
 
+## Progression (v2.0, 2026-07-01 — user request: "something to earn")
+- **SCRAP economy:** +10/round won, +2/round otherwise, match bonus 50 (Rookie) / 100 (Ace);
+  campaign battles pay one-time rewards 30→150 (replays 25%). Saved in localStorage
+  `tankwars_profile` {scrap, owned, tank, stars, done}.
+- **GARAGE — 5 tanks** (sidegrades; enemy AI uses them too): Scout (free, classic),
+  Mammoth 150 (slow, fat shell smashes 1 wall), Viper 400 (fast, rapid darts die after
+  2 bounces, 6-shell cap), Pinball 800 (shells ×1.18 speed per bounce, cap 430, 13s life),
+  Photon 1500 (hitscan laser: raycast + one reflection, 1.15s reload; AI photons get
+  2.4× fire-delay so they don't beam-spam).
+- **CAMPAIGN — 10 battles**, first-to-3, sequential unlock, stars (3=flawless 3-0, 2=3-1,
+  1=won): Boot Camp → Scrapyard → Pillar Park → The Long Halls → Demolition → Snake Pit →
+  Pinball Wizard → Crossfire → Lights Out → THE GENERAL. New OFFICER AI tier between
+  Rookie/Ace (AI_LEVELS params: repath/dodge/lead/aimErr/fire timing).
+- **Arenas:** maze (classic), dense (8 loop-openings), pillars (open + scattered stubs),
+  corridors (long halls + gaps; stubs placed with connectivity-check-and-revert — raw gen
+  was 97% disconnected before that fix), shifting (THE GENERAL: every 6s walls crumble AND
+  regrow, connectivity + tank-overlap checked before each regrow).
+- Quick Play unchanged (first-to-5, rookie/ace) and pays scrap too.
+- Screenshot hooks: `?demo=1` (AI match), `?screen=garage`, `?screen=campaign`.
+
 ## Testing
 - Headless node harness (scratchpad `tanktest.js`, technique per imaginex memory):
   21 checks — maze connectivity (20 mazes × all 150 cells), wall containment under

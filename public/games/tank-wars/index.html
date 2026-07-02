@@ -37,6 +37,32 @@
     border:1px solid #2a3b5e; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:700; cursor:pointer; }
   #soundBtn:hover { color:#dfe8ff; border-color:#4de3c2; }
   .tag { font-size:12px; color:#5f7099; margin-top:18px; }
+  .panel.wide { max-width:640px; width:92vw; text-align:left; }
+  .scrapBadge { display:inline-block; background:#1a2440; border:1px solid #3a4a70; border-radius:20px;
+    padding:4px 16px; color:#ffd166; font-weight:800; font-size:15px; letter-spacing:1px; margin:0 0 16px; }
+  .gcard { display:flex; align-items:center; gap:14px; background:rgba(20,30,55,0.6); border:1px solid #2a3b5e;
+    border-radius:12px; padding:12px 16px; margin:8px 0; }
+  .gcard.sel { border-color:#ffd166; box-shadow:0 0 14px rgba(255,209,102,0.15); }
+  .gcard .ginfo { flex:1; min-width:0; }
+  .gname { font-weight:900; letter-spacing:1px; font-size:16px; }
+  .gtag { color:#9fb3d9; font-size:13px; margin-top:2px; }
+  .gstats { color:#5f7099; font-size:11px; letter-spacing:1px; margin-top:4px; }
+  .gstats b { color:#7fd8c8; font-weight:400; }
+  .cardBtn { flex:none; padding:9px 16px; border:none; border-radius:8px; font-weight:800; font-size:13px;
+    letter-spacing:0.5px; cursor:pointer; background:linear-gradient(180deg,#ffd166,#ffb347); color:#0a0e1a; }
+  .cardBtn.own { background:#1a2440; color:#7fd8c8; border:1px solid #2a5e50; }
+  .cardBtn.sel { background:#1a2440; color:#ffd166; border:1px solid #6e5a1e; cursor:default; }
+  .cardBtn.cant { background:#1a2440; color:#5f7099; border:1px solid #2a3b5e; cursor:default; }
+  .crow { display:flex; align-items:center; gap:12px; background:rgba(20,30,55,0.6); border:1px solid #2a3b5e;
+    border-radius:12px; padding:10px 14px; margin:7px 0; }
+  .crow.locked { opacity:0.45; }
+  .cnum { flex:none; width:30px; height:30px; border-radius:50%; background:#1a2440; border:1px solid #3a4a70;
+    color:#9fb3d9; font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; }
+  .cinfo { flex:1; min-width:0; }
+  .cname { font-weight:900; letter-spacing:1px; font-size:14px; color:#dfe8ff; }
+  .cmeta { color:#7c8fb5; font-size:11.5px; margin-top:2px; letter-spacing:0.4px; }
+  .cstars { flex:none; color:#ffd166; font-size:14px; letter-spacing:2px; }
+  .listScroll { max-height:52vh; overflow-y:auto; padding-right:4px; }
 </style>
 </head>
 <body>
@@ -47,10 +73,33 @@
   <div class="panel">
     <h1 class="title">TANK WARS</h1>
     <p class="subtitle">BOUNCING-SHELL MAZE BATTLE</p>
-    <button class="btn teal" id="btnRookie">&#9658;&nbsp; PLAY &nbsp;&bull;&nbsp; ROOKIE AI &#9733;</button>
-    <button class="btn" id="btnAce">&#9658;&nbsp; PLAY &nbsp;&bull;&nbsp; ACE AI &#9733;&#9733;&#9733;</button>
+    <p class="scrapBadge">&#128296; <span id="scrapMenu">0</span> SCRAP</p>
+    <button class="btn teal" id="btnCampaign">&#9658;&nbsp; CAMPAIGN</button>
+    <div class="row">
+      <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
+      <button class="btn" id="btnAce">QUICK &bull; ACE</button>
+    </div>
+    <button class="btn ghost" id="btnGarage">GARAGE &mdash; TANKS &amp; SHELLS</button>
     <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
     <p class="tag" id="winTag"></p>
+  </div>
+</div>
+
+<div id="garage" class="overlay hidden">
+  <div class="panel wide">
+    <h1 class="title" style="font-size:28px;">GARAGE</h1>
+    <p class="scrapBadge">&#128296; <span id="scrapGarage">0</span> SCRAP</p>
+    <div id="garageList" class="listScroll"></div>
+    <button class="btn ghost" id="btnGarageBack">BACK</button>
+  </div>
+</div>
+
+<div id="campaign" class="overlay hidden">
+  <div class="panel wide">
+    <h1 class="title" style="font-size:28px;">CAMPAIGN</h1>
+    <p class="subtitle" style="margin-bottom:14px;">FIRST TO 3 &nbsp;&bull;&nbsp; EARN SCRAP &amp; STARS</p>
+    <div id="campaignList" class="listScroll"></div>
+    <button class="btn ghost" id="btnCampaignBack">BACK</button>
   </div>
 </div>
 
@@ -71,6 +120,9 @@
       <b style="color:#4de3c2">&#11044; SHIELD</b> blocks one hit &nbsp;&bull;&nbsp;
       <b style="color:#c792ea">&#9632; BIG SHOT</b> smashes through walls</p>
       <p>Camp too long and <b>SUDDEN DEATH</b> starts crumbling the maze...</p>
+      <p><b>Earn SCRAP</b> every round (+10 win, +2 otherwise, big match bonuses) and spend it
+      in the <b>GARAGE</b> on tanks with totally different weapons. Climb the 10-battle
+      <b>CAMPAIGN</b> for stars and the biggest rewards.</p>
       <p><span class="k">P</span> pause</p>
     </div>
     <button class="btn ghost" id="btnHelpBack">BACK</button>
@@ -79,8 +131,9 @@
 
 <div id="victory" class="overlay hidden">
   <div class="panel">
-    <h1 class="winTitle" id="winName">PLAYER 1 WINS!</h1>
+    <h1 class="winTitle" id="winName">YOU WIN!</h1>
     <p class="winSub" id="winScore">5 — 3</p>
+    <p class="winSub" id="winScrap" style="color:#ffd166;font-weight:800;letter-spacing:1px;"></p>
     <button class="btn" id="btnRematch">REMATCH</button>
     <button class="btn ghost" id="btnMenu">MAIN MENU</button>
   </div>
@@ -106,15 +159,83 @@ const POWERUP_LIFE = 12;
 const P1_COL = '#ffb347', P2_COL = '#4de3c2';
 const P1_GLOW = 'rgba(255,179,71,0.5)', P2_GLOW = 'rgba(77,227,194,0.5)';
 
+// ============================== TANKS (garage) ==============================
+// Sidegrades, not upgrades: each changes HOW you fight. speed is px/s; fireCd seconds.
+// shell: speed/r/life, bounces (-1 = unlimited), accel (speed multiplier per bounce),
+// smash (walls it can break), maxLive overrides the live-shell cap. laser = hitscan beam.
+const TANKS = {
+  scout:   { name: 'SCOUT',   cost: 0,    tag: 'Balanced. The classic bouncing shell.',
+             speed: 150, fireCd: 0.36, shell: { speed: 265, r: 4,   life: 9,  bounces: -1 } },
+  mammoth: { name: 'MAMMOTH', cost: 150,  tag: 'Huge shell SMASHES through a wall. Slow.',
+             speed: 118, fireCd: 0.6,  shell: { speed: 175, r: 8,   life: 9,  bounces: -1, smash: 1 } },
+  viper:   { name: 'VIPER',   cost: 400,  tag: 'Fast tank, rapid darts — but they die after 2 bounces.',
+             speed: 168, fireCd: 0.16, shell: { speed: 300, r: 3,   life: 6,  bounces: 2, maxLive: 6 } },
+  pinball: { name: 'PINBALL', cost: 800,  tag: 'Shells SPEED UP with every bounce and live longer.',
+             speed: 150, fireCd: 0.42, shell: { speed: 205, r: 4.5, life: 13, bounces: -1, accel: 1.18 } },
+  photon:  { name: 'PHOTON',  cost: 1500, tag: 'Instant laser with one wall reflection. Long reload.',
+             speed: 150, fireCd: 1.15, laser: true },
+};
+const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon'];
+function tankDef(t) { return TANKS[t.kind] || TANKS.scout; }
+
+// AI skill tiers (Officer added between Rookie and Ace for the campaign's mid rungs)
+const AI_LEVELS = {
+  rookie:  { repath: 0.7,  dodge: false, lead: false, aimErr: 0.16, fireMin: 0.7,  fireRnd: 0.7 },
+  officer: { repath: 0.55, dodge: true,  lead: false, aimErr: 0.10, fireMin: 0.5,  fireRnd: 0.5 },
+  ace:     { repath: 0.4,  dodge: true,  lead: true,  aimErr: 0.05, fireMin: 0.28, fireRnd: 0.3 },
+};
+
+// ============================== CAMPAIGN ==============================
+// First-to-3 battles; sequential unlock. reward = one-time scrap (replays pay 25%).
+const CAMPAIGN = [
+  { id: 1,  name: 'BOOT CAMP',      foe: 'scout',   ai: 'rookie',  arena: 'maze',      reward: 30 },
+  { id: 2,  name: 'SCRAPYARD',      foe: 'scout',   ai: 'rookie',  arena: 'dense',     reward: 40 },
+  { id: 3,  name: 'PILLAR PARK',    foe: 'viper',   ai: 'rookie',  arena: 'pillars',   reward: 50 },
+  { id: 4,  name: 'THE LONG HALLS', foe: 'mammoth', ai: 'officer', arena: 'corridors', reward: 60 },
+  { id: 5,  name: 'DEMOLITION',     foe: 'mammoth', ai: 'officer', arena: 'dense',     reward: 70 },
+  { id: 6,  name: 'SNAKE PIT',      foe: 'viper',   ai: 'officer', arena: 'maze',      reward: 80 },
+  { id: 7,  name: 'PINBALL WIZARD', foe: 'pinball', ai: 'officer', arena: 'pillars',   reward: 90 },
+  { id: 8,  name: 'CROSSFIRE',      foe: 'viper',   ai: 'ace',     arena: 'dense',     reward: 110 },
+  { id: 9,  name: 'LIGHTS OUT',     foe: 'photon',  ai: 'ace',     arena: 'corridors', reward: 130 },
+  { id: 10, name: 'THE GENERAL',    foe: 'pinball', ai: 'ace',     arena: 'shifting',  reward: 150 },
+];
+
+// ============================== PROFILE (persistent) ==============================
+let profile = { scrap: 0, owned: { scout: true }, tank: 'scout', stars: {}, done: {} };
+try {
+  const raw = localStorage.getItem('tankwars_profile');
+  if (raw) {
+    const p = JSON.parse(raw);
+    if (p && typeof p === 'object') {
+      profile.scrap = Math.max(0, parseInt(p.scrap, 10) || 0);
+      profile.owned = Object.assign({ scout: true }, p.owned || {});
+      profile.tank = TANKS[p.tank] ? p.tank : 'scout';
+      profile.stars = p.stars || {};
+      profile.done = p.done || {};
+    }
+  }
+} catch (e) {}
+if (!profile.owned[profile.tank]) profile.tank = 'scout';
+function saveProfile() { try { localStorage.setItem('tankwars_profile', JSON.stringify(profile)); } catch (e) {} }
+function campaignUnlockedThrough() {   // highest battle id the player may attempt
+  let n = 1;
+  for (const b of CAMPAIGN) { if (profile.done[b.id]) n = b.id + 1; else break; }
+  return Math.min(n, CAMPAIGN.length);
+}
+
 // ============================== STATE ==============================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let dpr = 1;
 
 let mode = 'menu';               // menu | play
-let twoPlayer = false;
-let aiLevel = 'rookie';          // rookie | ace
 let paused = false;
+// Current match configuration (quick play or a campaign battle)
+let matchCfg = { mode: 'quick', aiLevel: 'rookie', roundsToWin: 5, arena: 'maze',
+                 playerTank: 'scout', foeTank: 'scout', battle: null };
+let aiParams = AI_LEVELS.rookie;
+let matchScrap = 0;              // scrap earned so far this match (rounds + bonus)
+let shiftTimer = 0;              // 'shifting' arena wall churn
 
 let vWall, hWall;                // vWall[x][y]: wall right of cell; hWall[x][y]: wall below cell
 let wallRects = [];              // {x,y,w,h}
@@ -188,6 +309,7 @@ const sfx = {
   small()     { noiseBurst(0.12, 0.18, 1600); },
   powerup()   { beep(520, 0.08, 'square', 0.12); setTimeout(() => beep(780, 0.1, 'square', 0.12), 70); },
   shield()    { beep(1400, 0.15, 'triangle', 0.2, 500); },
+  laser()     { beep(1700, 0.14, 'sawtooth', 0.12, 220); },
   count()     { beep(440, 0.08, 'square', 0.12); },
   go()        { beep(880, 0.18, 'square', 0.15); },
   crumble()   { noiseBurst(0.2, 0.22, 500); },
@@ -220,10 +342,64 @@ function musicStop(fade) {
 }
 
 // ============================== MAZE ==============================
-function genMaze() {
+function allCellsReachable() {
+  let count = 1;
+  const seen = new Set(['0,0']);
+  const q = [[0, 0]];
+  while (q.length) {
+    const [cx, cy] = q.pop();
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+      const k = nx + ',' + ny;
+      if (seen.has(k) || !cellOpen(cx, cy, nx, ny)) continue;
+      seen.add(k); count++; q.push([nx, ny]);
+    }
+  }
+  return count === COLS * ROWS;
+}
+function buildArena(kind) {
   vWall = []; hWall = [];
   for (let x = 0; x < COLS; x++) { vWall[x] = []; hWall[x] = []; for (let y = 0; y < ROWS; y++) { vWall[x][y] = true; hWall[x][y] = true; } }
-  // recursive backtracker
+
+  if (kind === 'pillars') {
+    // open battlefield with scattered wall stubs — long sightlines, dodge-heavy
+    for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) { vWall[x][y] = false; hWall[x][y] = false; }
+    let n = 26;
+    while (n > 0) {
+      if (Math.random() < 0.5) {
+        const x = (Math.random() * (COLS - 1)) | 0, y = (Math.random() * ROWS) | 0;
+        if (!vWall[x][y]) { vWall[x][y] = true; n--; }
+      } else {
+        const x = (Math.random() * COLS) | 0, y = (Math.random() * (ROWS - 1)) | 0;
+        if (!hWall[x][y]) { hWall[x][y] = true; n--; }
+      }
+    }
+    return;
+  }
+  if (kind === 'corridors') {
+    // long horizontal halls with a few gaps between them — sniper country
+    for (let x = 0; x < COLS - 1; x++) for (let y = 0; y < ROWS; y++) vWall[x][y] = false;
+    for (let y = 0; y < ROWS - 1; y++) {
+      const gaps = 2 + ((Math.random() * 2) | 0);
+      for (let g = 0; g < gaps; g++) hWall[(Math.random() * COLS) | 0][y] = false;
+    }
+    // a few vertical stubs so halls aren't featureless — but a stub can seal off a
+    // corridor segment whose span has no ceiling/floor gap (found by T13: ~97% of raw
+    // gens were disconnected!), so place each one with a connectivity check + revert.
+    for (let n = 0; n < 6; n++) {
+      for (let tries = 0; tries < 10; tries++) {
+        const x = (Math.random() * (COLS - 1)) | 0, y = (Math.random() * ROWS) | 0;
+        if (vWall[x][y]) continue;
+        vWall[x][y] = true;
+        if (allCellsReachable()) break;
+        vWall[x][y] = false;
+      }
+    }
+    return;
+  }
+
+  // 'maze' (default), 'dense', 'shifting': recursive backtracker
   const visited = [];
   for (let x = 0; x < COLS; x++) { visited[x] = []; for (let y = 0; y < ROWS; y++) visited[x][y] = false; }
   const stack = [[0, 0]]; visited[0][0] = true;
@@ -242,8 +418,8 @@ function genMaze() {
     else hWall[nx][ny] = false;
     visited[nx][ny] = true; stack.push([nx, ny]);
   }
-  // knock out extra walls so there are loops (less dead-end camping)
-  let extra = 20;
+  // knock out extra walls so there are loops (less dead-end camping); 'dense' keeps it tight
+  let extra = kind === 'dense' ? 8 : 20;
   while (extra > 0) {
     if (Math.random() < 0.5) {
       const x = (Math.random() * (COLS - 1)) | 0, y = (Math.random() * ROWS) | 0;
@@ -252,6 +428,12 @@ function genMaze() {
       const x = (Math.random() * COLS) | 0, y = (Math.random() * (ROWS - 1)) | 0;
       if (hWall[x][y]) { hWall[x][y] = false; extra--; }
     }
+  }
+}
+function genMaze(kind) {
+  for (let tries = 0; tries < 25; tries++) {   // pillars/corridors can rarely trap a cell
+    buildArena(kind || 'maze');
+    if (allCellsReachable()) break;
   }
   buildWallRects();
 }
@@ -336,9 +518,10 @@ function angDiff(a, b) {
 }
 
 // ============================== ENTITIES ==============================
-function makeTank(i, cellX, cellY) {
+function makeTank(i, cellX, cellY, kind) {
   return {
-    i, x: cellX * CELL + CELL / 2, y: cellY * CELL + CELL / 2,
+    i, kind: kind || 'scout',
+    x: cellX * CELL + CELL / 2, y: cellY * CELL + CELL / 2,
     a: Math.atan2(ROWS / 2 * CELL - (cellY * CELL + CELL / 2), COLS / 2 * CELL - (cellX * CELL + CELL / 2)),
     alive: true, col: i === 0 ? P1_COL : P2_COL, glow: i === 0 ? P1_GLOW : P2_GLOW,
     cd: 0, power: null, powerT: 0, shield: false,
@@ -351,31 +534,126 @@ function spawnTanks() {
   const pair = Math.random() < 0.5 ? [corners[0], corners[1]] : [corners[2], corners[3]];
   if (Math.random() < 0.5) pair.reverse();
   const s0 = tanks[0] ? tanks[0].score : 0, s1 = tanks[1] ? tanks[1].score : 0;
-  const wasAI = tanks[1] ? tanks[1].isAI : !twoPlayer;
-  tanks = [makeTank(0, pair[0][0], pair[0][1]), makeTank(1, pair[1][0], pair[1][1])];
+  tanks = [makeTank(0, pair[0][0], pair[0][1], matchCfg.playerTank),
+           makeTank(1, pair[1][0], pair[1][1], matchCfg.foeTank)];
   tanks[0].score = s0; tanks[1].score = s1;
-  tanks[1].isAI = wasAI;
+  tanks[1].isAI = true;
 }
 function fireShell(t) {
   if (t.cd > 0 || !t.alive) return;
-  const live = shells.filter(s => s.owner === t.i).length;
-  const max = t.power === 'rapid' ? 7 : MAX_SHELLS;
-  if (live >= max) return;
-  const spread = t.power === 'triple' ? [-0.26, 0, 0.26] : [0];
-  for (const off of spread) {
-    const a = t.a + off;
-    const big = t.power === 'big';
+  const def = tankDef(t);
+
+  // BIG-SHOT power-up overrides the tank's own weapon (single use, smashes 2 walls, eats shells)
+  if (t.power === 'big') {
+    const a = t.a;
     shells.push({
       x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
-      vx: Math.cos(a) * (big ? SHELL_SPEED * 0.62 : SHELL_SPEED) * (t.power === 'rapid' ? 1.25 : 1),
-      vy: Math.sin(a) * (big ? SHELL_SPEED * 0.62 : SHELL_SPEED) * (t.power === 'rapid' ? 1.25 : 1),
-      r: big ? 9 : SHELL_R, owner: t.i, age: 0, grace: 0.12, big, smash: big ? 2 : 0, col: t.col,
+      vx: Math.cos(a) * SHELL_SPEED * 0.62, vy: Math.sin(a) * SHELL_SPEED * 0.62,
+      r: 9, owner: t.i, age: 0, grace: 0.12, big: true, heavy: true, smash: 2,
+      bounces: -1, accel: 0, life: SHELL_LIFE, col: t.col,
+    });
+    t.power = null; t.powerT = 0;
+    t.cd = FIRE_CD;
+    sfx.fire();
+    spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
+    return;
+  }
+
+  if (def.laser) { fireLaser(t); return; }
+
+  const sh = def.shell;
+  const live = shells.filter(s => s.owner === t.i).length;
+  const max = t.power === 'rapid' ? 7 : (sh.maxLive || MAX_SHELLS);
+  if (live >= max) return;
+  const spread = t.power === 'triple' ? [-0.26, 0, 0.26] : [0];
+  const spdMul = t.power === 'rapid' ? 1.25 : 1;
+  for (const off of spread) {
+    const a = t.a + off;
+    shells.push({
+      x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
+      vx: Math.cos(a) * sh.speed * spdMul, vy: Math.sin(a) * sh.speed * spdMul,
+      r: sh.r, owner: t.i, age: 0, grace: 0.12,
+      big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
+      bounces: sh.bounces === undefined ? -1 : sh.bounces, accel: sh.accel || 0,
+      life: sh.life || SHELL_LIFE, col: t.col,
     });
   }
-  if (t.power === 'big') { t.power = null; t.powerT = 0; }   // big shot is single-use
-  t.cd = t.power === 'rapid' ? 0.13 : FIRE_CD;
+  t.cd = t.power === 'rapid' ? Math.max(0.1, def.fireCd * 0.45) : def.fireCd;
   sfx.fire();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
+}
+
+// A shell just bounced: apply Pinball acceleration + Viper bounce budget.
+// Returns false if the shell is out of bounces and should die.
+function onBounce(s) {
+  sfx.bounce();
+  if (s.accel) {
+    const v = Math.hypot(s.vx, s.vy);
+    const nv = Math.min(430, v * s.accel);
+    s.vx *= nv / v; s.vy *= nv / v;
+  }
+  if (s.bounces === 0) return false;
+  if (s.bounces > 0) s.bounces--;
+  return true;
+}
+
+// ============================== PHOTON LASER ==============================
+let beams = [];   // { segs: [[x1,y1,x2,y2],...], col, t, max }
+function castRay(x, y, a, maxLen) {
+  const dx = Math.cos(a), dy = Math.sin(a);
+  for (let d = 3; d < maxLen; d += 3) {
+    const px = x + dx * d, py = y + dy * d;
+    if (px < 2 || px > W - 2 || py < 2 || py > H - 2) return { x: px, y: py, hit: 'border' };
+    for (const r of wallRects) {
+      if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return { x: px, y: py, hit: r };
+    }
+  }
+  return { x: x + dx * maxLen, y: y + dy * maxLen, hit: null };
+}
+function segCircleHit(x1, y1, x2, y2, cx, cy, r) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  const u = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((cx - x1) * dx + (cy - y1) * dy) / len2));
+  return Math.hypot(cx - (x1 + u * dx), cy - (y1 + u * dy)) < r;
+}
+function fireLaser(t) {
+  const spread = t.power === 'triple' ? [-0.13, 0, 0.13] : [0];
+  for (const off of spread) {
+    let a = t.a + off;
+    let x = t.x + Math.cos(a) * (TANK_R + 6), y = t.y + Math.sin(a) * (TANK_R + 6);
+    const segs = [];
+    for (let seg = 0; seg < 2; seg++) {
+      const end = castRay(x, y, a, seg === 0 ? 900 : 620);
+      segs.push([x, y, end.x, end.y]);
+      if (!end.hit) break;
+      if (end.hit === 'border') {
+        a = (end.x <= 2 || end.x >= W - 2) ? Math.PI - a : -a;
+      } else {
+        const r = end.hit;
+        const dh = Math.min(end.x - r.x, r.x + r.w - end.x);
+        const dv = Math.min(end.y - r.y, r.y + r.h - end.y);
+        a = (dh < dv) ? Math.PI - a : -a;
+      }
+      x = end.x + Math.cos(a) * 4; y = end.y + Math.sin(a) * 4;
+    }
+    beams.push({ segs, col: t.col, t: 0.22, max: 0.22 });
+    for (let si = 0; si < segs.length; si++) {
+      const [x1, y1, x2, y2] = segs[si];
+      for (const tk of tanks) {
+        if (!tk.alive) continue;
+        if (si === 0 && tk.i === t.i) continue;   // can't shoot yourself point-blank; reflections CAN
+        if (segCircleHit(x1, y1, x2, y2, tk.x, tk.y, TANK_R)) {
+          if (tk.shield) {
+            tk.shield = false; sfx.shield();
+            spawnParticles(tk.x, tk.y, 20, '#4de3c2', 180, 0.4);
+          } else explodeTank(tk);
+        }
+      }
+    }
+  }
+  t.cd = tankDef(t).fireCd * (t.power === 'rapid' ? 0.55 : 1);
+  sfx.laser();
+  spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 8), t.y + Math.sin(t.a) * (TANK_R + 8), 8, '#ffffff', 120, 0.2);
 }
 function spawnParticles(x, y, n, col, speed, life) {
   for (let i = 0; i < n; i++) {
@@ -397,47 +675,76 @@ function killShell(i) {
 }
 
 // ============================== ROUND FLOW ==============================
-function startMatch(two, level) {
-  twoPlayer = two; aiLevel = level || aiLevel;
-  tanks = []; roundNum = 1; winReported = false;
+function startMatch(cfg) {
+  matchCfg = {
+    mode: cfg.mode || 'quick',
+    aiLevel: cfg.aiLevel || 'rookie',
+    roundsToWin: cfg.roundsToWin || (cfg.mode === 'campaign' ? 3 : 5),
+    arena: cfg.arena || 'maze',
+    playerTank: profile.owned[profile.tank] ? profile.tank : 'scout',
+    foeTank: cfg.foeTank || 'scout',
+    battle: cfg.battle || null,
+  };
+  aiParams = AI_LEVELS[matchCfg.aiLevel] || AI_LEVELS.rookie;
+  tanks = []; roundNum = 1; winReported = false; matchScrap = 0;
   startRound();
   mode = 'play'; paused = false;
   musicPlay();
   show('menu', false); show('victory', false); show('helpBox', false);
+  show('garage', false); show('campaign', false);
 }
 function startRound() {
-  genMaze();
+  genMaze(matchCfg.arena);
   spawnTanks();
-  if (!twoPlayer) tanks[1].isAI = true;
-  shells = []; particles = []; treads = []; powerup = null; confetti = [];
+  shells = []; beams = []; particles = []; treads = []; powerup = null; confetti = [];
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
-  roundTime = 0; suddenDeath = false; sdTimer = 0;
+  roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
   phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
 }
 function endRound() {
   const a = tanks[0].alive, b = tanks[1].alive;
   phase = 'roundover'; phaseT = 0;
-  if (a === b) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; }
+  if (a === b) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; matchScrap += 2; }
   else {
     const w = a ? tanks[0] : tanks[1];
     w.score++;
-    banner = (w.i === 0 ? 'PLAYER 1' : (twoPlayer ? 'PLAYER 2' : 'THE AI')) + ' SCORES!';
+    banner = (w.i === 0 ? 'YOU SCORE!' : 'THE AI SCORES!');
     bannerCol = w.col;
+    matchScrap += (w.i === 0) ? 10 : 2;   // win the round +10; even a loss pays +2
   }
 }
 function endMatch() {
   phase = 'matchover'; phaseT = 0;   // terminal state
   musicStop(true);                    // fade the music so the fanfare stands alone — without this, the roundover
   // branch re-entered endMatch EVERY FRAME: fanfare × 60/s (awful ringing) + unbounded confetti.
-  const w = tanks[0].score >= ROUNDS_TO_WIN ? tanks[0] : tanks[1];
-  const humanWon = (w.i === 0) || twoPlayer;
-  document.getElementById('winName').textContent =
-    w.i === 0 ? 'PLAYER 1 WINS!' : (twoPlayer ? 'PLAYER 2 WINS!' : 'THE AI WINS!');
+  const w = tanks[0].score >= matchCfg.roundsToWin ? tanks[0] : tanks[1];
+  const humanWon = w.i === 0;
+  // SCRAP: match bonus on a win. Quick play pays by AI level; campaign battles pay their
+  // one-time reward (replays pay 25%). Stars = how clean the win was (3-0 / 3-1 / else).
+  let bonus = 0, starLine = '';
+  if (humanWon) {
+    if (matchCfg.mode === 'campaign' && matchCfg.battle) {
+      const b = matchCfg.battle;
+      bonus = profile.done[b.id] ? Math.round(b.reward * 0.25) : b.reward;
+      const stars = tanks[1].score === 0 ? 3 : (tanks[1].score === 1 ? 2 : 1);
+      profile.stars[b.id] = Math.max(profile.stars[b.id] || 0, stars);
+      profile.done[b.id] = true;
+      starLine = '  ·  ' + '★'.repeat(stars) + '☆'.repeat(3 - stars);
+    } else {
+      bonus = matchCfg.aiLevel === 'ace' ? 100 : 50;
+    }
+  }
+  matchScrap += bonus;
+  profile.scrap += matchScrap;
+  saveProfile();
+  document.getElementById('winName').textContent = humanWon ? 'YOU WIN!' : 'THE AI WINS!';
   document.getElementById('winName').style.color = w.col;
-  document.getElementById('winScore').textContent = tanks[0].score + ' — ' + tanks[1].score + '  ·  first to ' + ROUNDS_TO_WIN;
+  const mname = (matchCfg.mode === 'campaign' && matchCfg.battle) ? matchCfg.battle.name : ('first to ' + matchCfg.roundsToWin);
+  document.getElementById('winScore').textContent = tanks[0].score + ' — ' + tanks[1].score + '  ·  ' + mname + starLine;
+  document.getElementById('winScrap').textContent = '+' + matchScrap + ' SCRAP EARNED';
   show('victory', true);
   sfx.win();
-  for (let i = 0; i < 120; i++) confetti.push({
+  if (humanWon) for (let i = 0; i < 120; i++) confetti.push({
     x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
     vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
     col: [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
@@ -453,19 +760,20 @@ function endMatch() {
 }
 function updateWinTag() {
   document.getElementById('winTag').textContent = totalWins > 0 ? ('★ career match wins: ' + totalWins) : '';
+  const sm = document.getElementById('scrapMenu');
+  if (sm) sm.textContent = profile.scrap;
 }
 
 // ============================== AI ==============================
 function aiThink(t, foe, dt) {
   const ai = t.ai;
-  const rookie = aiLevel === 'rookie';
   const cx = Math.max(0, Math.min(COLS - 1, (t.x / CELL) | 0));
   const cy = Math.max(0, Math.min(ROWS - 1, (t.y / CELL) | 0));
   const fx = Math.max(0, Math.min(COLS - 1, (foe.x / CELL) | 0));
   const fy = Math.max(0, Math.min(ROWS - 1, (foe.y / CELL) | 0));
 
-  // dodge incoming shells (ace only)
-  if (!rookie) {
+  // dodge incoming shells (officer & ace)
+  if (aiParams.dodge) {
     ai.dodge -= dt;
     for (const s of shells) {
       const rx = t.x - s.x, ry = t.y - s.y;
@@ -478,7 +786,7 @@ function aiThink(t, foe, dt) {
     if (ai.dodge > 0) {
       const escape = Math.atan2(t.y - foe.y, t.x - foe.x) + ai.dodgeDir * Math.PI / 2;
       steerToward(t, escape, dt, true);
-      tryAIFire(t, foe, dt, rookie);
+      tryAIFire(t, foe, dt);
       return;
     }
   }
@@ -486,7 +794,7 @@ function aiThink(t, foe, dt) {
   // repath periodically
   ai.repath -= dt;
   if (ai.repath <= 0) {
-    ai.repath = rookie ? 0.7 : 0.4;
+    ai.repath = aiParams.repath;
     ai.path = bfsPath(cx, cy, fx, fy) || [];
   }
   // steer to next waypoint
@@ -498,11 +806,11 @@ function aiThink(t, foe, dt) {
     target = [px, py]; break;
   }
   const distFoe = Math.hypot(foe.x - t.x, foe.y - t.y);
-  if (target && (rookie || distFoe > 110 || !hasLOS(t.x, t.y, foe.x, foe.y))) {
+  if (target && (!aiParams.lead || distFoe > 110 || !hasLOS(t.x, t.y, foe.x, foe.y))) {
     steerToward(t, Math.atan2(target[1] - t.y, target[0] - t.x), dt, true);
   } else if (!target || distFoe <= 110) {
-    // face the foe, hold position (or orbit a touch for ace)
-    steerToward(t, Math.atan2(foe.y - t.y, foe.x - t.x), dt, !rookie && distFoe > 150);
+    // face the foe, hold position (or orbit a touch at higher tiers)
+    steerToward(t, Math.atan2(foe.y - t.y, foe.x - t.x), dt, aiParams.dodge && distFoe > 150);
   }
   // powerup detour: if close, grab it
   if (powerup) {
@@ -511,34 +819,35 @@ function aiThink(t, foe, dt) {
       steerToward(t, Math.atan2(powerup.y - t.y, powerup.x - t.x), dt, true);
     }
   }
-  tryAIFire(t, foe, dt, rookie);
+  tryAIFire(t, foe, dt);
 }
 function steerToward(t, targetA, dt, drive) {
   const d = angDiff(t.a, targetA);
   const rot = TANK_ROT * dt;
   if (Math.abs(d) <= rot) t.a = targetA; else t.a += Math.sign(d) * rot;
-  if (drive && Math.abs(d) < 1.0) moveTank(t, TANK_SPEED * dt * (Math.abs(d) < 0.4 ? 1 : 0.55));
+  if (drive && Math.abs(d) < 1.0) moveTank(t, tankDef(t).speed * dt * (Math.abs(d) < 0.4 ? 1 : 0.55));
 }
-function tryAIFire(t, foe, dt, rookie) {
+function tryAIFire(t, foe, dt) {
   const ai = t.ai;
   ai.fireDelay -= dt;
   if (!foe.alive || ai.fireDelay > 0) return;
-  // predicted foe position (ace leads)
+  const def = tankDef(t);
+  // predicted foe position (top tier leads moving targets)
   let tx = foe.x, ty = foe.y;
-  if (!rookie) {
+  if (aiParams.lead && !def.laser) {
     const dist = Math.hypot(foe.x - t.x, foe.y - t.y);
-    const tta = dist / SHELL_SPEED;
+    const tta = dist / (def.shell ? def.shell.speed : SHELL_SPEED);
     tx += (foe.lastVX || 0) * tta * 0.7; ty += (foe.lastVY || 0) * tta * 0.7;
   }
   if (!hasLOS(t.x, t.y, tx, ty)) return;
   const aimA = Math.atan2(ty - t.y, tx - t.x);
-  const err = rookie ? 0.16 : 0.05;
-  if (Math.abs(angDiff(t.a, aimA)) < err + 0.06) {
+  if (Math.abs(angDiff(t.a, aimA)) < aiParams.aimErr + 0.06) {
     // don't fire point-blank into a wall next to us
     const mx = t.x + Math.cos(t.a) * (TANK_R + 10), my = t.y + Math.sin(t.a) * (TANK_R + 10);
     if (hasLOS(mx, my, tx, ty)) {
       fireShell(t);
-      ai.fireDelay = rookie ? (0.7 + Math.random() * 0.7) : (0.28 + Math.random() * 0.3);
+      // laser foes get a long extra breather — an instant-hit weapon must not spam
+      ai.fireDelay = (aiParams.fireMin + Math.random() * aiParams.fireRnd) * (def.laser ? 2.4 : 1);
     }
   }
 }
@@ -577,25 +886,25 @@ function updateShells(dt) {
   for (let i = shells.length - 1; i >= 0; i--) {
     const s = shells[i];
     s.age += dt; s.grace -= dt;
-    if (s.age > SHELL_LIFE) { killShell(i); continue; }
+    if (s.age > (s.life || SHELL_LIFE)) { killShell(i); continue; }
     // substep so fast shells never tunnel walls
     const steps = Math.ceil((Math.hypot(s.vx, s.vy) * dt) / 4);
     let dead = false;
     for (let st = 0; st < steps && !dead; st++) {
       s.x += s.vx * dt / steps; s.y += s.vy * dt / steps;
       // border bounce
-      if (s.x < s.r) { s.x = s.r; s.vx = Math.abs(s.vx); sfx.bounce(); }
-      if (s.x > W - s.r) { s.x = W - s.r; s.vx = -Math.abs(s.vx); sfx.bounce(); }
-      if (s.y < s.r) { s.y = s.r; s.vy = Math.abs(s.vy); sfx.bounce(); }
-      if (s.y > H - s.r) { s.y = H - s.r; s.vy = -Math.abs(s.vy); sfx.bounce(); }
+      if (s.x < s.r) { s.x = s.r; s.vx = Math.abs(s.vx); if (!onBounce(s)) { dead = true; break; } }
+      if (s.x > W - s.r) { s.x = W - s.r; s.vx = -Math.abs(s.vx); if (!onBounce(s)) { dead = true; break; } }
+      if (s.y < s.r) { s.y = s.r; s.vy = Math.abs(s.vy); if (!onBounce(s)) { dead = true; break; } }
+      if (s.y > H - s.r) { s.y = H - s.r; s.vy = -Math.abs(s.vy); if (!onBounce(s)) { dead = true; break; } }
       // wall hit
       for (const r of wallRects) {
         const hit = circleRectPush(s.x, s.y, s.r, r);
         if (!hit) continue;
-        if (s.big && s.smash > 0) {   // big shot smashes through
+        if (s.smash > 0) {   // big-shot powerup (2) or Mammoth shell (1) smashes through
           s.smash--;
           removeWallRect(r);
-          spawnParticles(s.x, s.y, 18, '#c792ea', 170, 0.5);
+          spawnParticles(s.x, s.y, 18, s.big ? '#c792ea' : s.col, 170, 0.5);
           shake = Math.max(shake, 8);
           sfx.crumble();
           break;
@@ -603,9 +912,10 @@ function updateShells(dt) {
         s.x += hit.nx * hit.push; s.y += hit.ny * hit.push;
         if (Math.abs(hit.nx) > Math.abs(hit.ny)) s.vx = Math.abs(s.vx) * Math.sign(hit.nx);
         else s.vy = Math.abs(s.vy) * Math.sign(hit.ny);
-        sfx.bounce();
+        if (!onBounce(s)) { dead = true; }
         break;
       }
+      if (dead) break;
       // tank hits
       for (const t of tanks) {
         if (!t.alive) continue;
@@ -706,7 +1016,7 @@ function controlHuman(t, dt, scheme) {
     // Movement is INSTANT in the pressed direction — no waiting for the hull to line
     // up (that made travel arc/swoop: "turns weird, hard to go where I want").
     // The hull swivel below is purely cosmetic and fast.
-    const step = TANK_SPEED * speedMul * dt;
+    const step = tankDef(t).speed * speedMul * dt;
     const fx = Math.cos(target), fy = Math.sin(target);
     moveTankVec(t, fx * step, fy * step);
     // Corner assist (Pac-Man style): if a wall mostly blocked us but there's an
@@ -750,13 +1060,42 @@ function update(dt) {
     updateParticles(dt);
     updateShells(dt);
     if (phaseT >= 1.7) {
-      if (tanks[0].score >= ROUNDS_TO_WIN || tanks[1].score >= ROUNDS_TO_WIN) endMatch();
+      if (tanks[0].score >= matchCfg.roundsToWin || tanks[1].score >= matchCfg.roundsToWin) endMatch();
       else { roundNum++; startRound(); }
     }
     return;
   }
 
   roundTime += dt;
+  // 'shifting' arena (THE GENERAL): walls crumble AND regrow every few seconds
+  if (matchCfg.arena === 'shifting' && !suddenDeath) {
+    shiftTimer -= dt;
+    if (shiftTimer <= 0) {
+      shiftTimer = 6;
+      for (let n = 0; n < 2 && wallRects.length > 6; n++) {
+        const r = wallRects[(Math.random() * wallRects.length) | 0];
+        spawnParticles(r.x + r.w / 2, r.y + r.h / 2, 8, '#8899bb', 80, 0.4);
+        removeWallRect(r);
+      }
+      for (let n = 0; n < 2; n++) {
+        for (let tries = 0; tries < 12; tries++) {
+          const isV = Math.random() < 0.5;
+          const x = isV ? (Math.random() * (COLS - 1)) | 0 : (Math.random() * COLS) | 0;
+          const y = isV ? (Math.random() * ROWS) | 0 : (Math.random() * (ROWS - 1)) | 0;
+          const arr = isV ? vWall : hWall;
+          if (arr[x][y]) continue;
+          arr[x][y] = true; buildWallRects();
+          // reject if it disconnects the maze or lands on a tank
+          const bad = !allCellsReachable() ||
+            tanks.some(t => t.alive && wallRects.some(r => circleRectPush(t.x, t.y, TANK_R + 2, r)));
+          if (bad) { arr[x][y] = false; buildWallRects(); continue; }
+          break;
+        }
+      }
+      sfx.crumble();
+      shake = Math.max(shake, 3);
+    }
+  }
   // sudden death: crumble walls
   if (!suddenDeath && roundTime > SUDDEN_DEATH_AT) { suddenDeath = true; sdTimer = 0; banner = ''; }
   if (suddenDeath) {
@@ -807,6 +1146,10 @@ function update(dt) {
   if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
 }
 function updateParticles(dt) {
+  for (let i = beams.length - 1; i >= 0; i--) {
+    beams[i].t -= dt;
+    if (beams[i].t <= 0) beams.splice(i, 1);
+  }
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.life -= dt;
@@ -854,12 +1197,27 @@ function render() {
     // shells
     for (const s of shells) {
       ctx.save();
-      ctx.shadowColor = s.big ? '#c792ea' : '#ffffff';
-      ctx.shadowBlur = s.big ? 18 : 10;
-      ctx.fillStyle = s.big ? '#c792ea' : '#f4f8ff';
+      const col = s.big ? '#c792ea' : (s.heavy ? s.col : '#f4f8ff');
+      ctx.shadowColor = col;
+      ctx.shadowBlur = (s.big || s.heavy) ? 18 : 10;
+      ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
+    // laser beams (Photon)
+    for (const b of beams) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, b.t / b.max);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = b.col; ctx.lineWidth = 3.5; ctx.shadowColor = b.col; ctx.shadowBlur = 14;
+      ctx.beginPath();
+      for (const [x1, y1, x2, y2] of b.segs) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.3; ctx.shadowBlur = 0;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
     // tanks
     for (const t of tanks) if (t.alive) drawTank(t);
     // particles
@@ -935,9 +1293,14 @@ function drawTank(t) {
   ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = t.col; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
-  // barrel
+  // barrel (shape varies a touch by tank type)
   ctx.fillStyle = t.col;
-  ctx.fillRect(6, -2.5, TANK_R + 6, 5);
+  const bw = t.kind === 'mammoth' ? 8 : (t.kind === 'viper' ? 3 : 5);
+  ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
+  if (t.kind === 'photon') {   // glowing emitter tip
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.arc(TANK_R + 11, 0, 3, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.restore();
   // power timer arc
   if (t.power && t.power !== 'big' && t.powerT < 90) {
@@ -996,8 +1359,9 @@ function drawHUD() {
   ctx.save();
   // score pips top center
   const cx = W / 2, y = 18;
+  const rtw = matchCfg.roundsToWin;
   ctx.font = 'bold 14px sans-serif'; ctx.textBaseline = 'middle';
-  for (let i = 0; i < ROUNDS_TO_WIN; i++) {
+  for (let i = 0; i < rtw; i++) {
     // P1 pips leftward, P2 pips rightward
     drawPip(cx - 36 - i * 20, y, i < tanks[0].score, P1_COL);
     drawPip(cx + 36 + i * 20, y, i < tanks[1].score, P2_COL);
@@ -1005,9 +1369,9 @@ function drawHUD() {
   ctx.fillStyle = '#5f7099'; ctx.textAlign = 'center';
   ctx.fillText('R' + roundNum, cx, y);
   ctx.textAlign = 'left'; ctx.fillStyle = P1_COL;
-  ctx.fillText('P1', cx - 36 - ROUNDS_TO_WIN * 20 - 22, y);
+  ctx.fillText('YOU', cx - 36 - rtw * 20 - 22, y);
   ctx.textAlign = 'right'; ctx.fillStyle = P2_COL;
-  ctx.fillText(tanks[1].isAI ? 'AI' : 'P2', cx + 36 + ROUNDS_TO_WIN * 20 + 22, y);
+  ctx.fillText('AI', cx + 36 + rtw * 20 + 22, y);
   ctx.restore();
 }
 function drawPip(x, y, filled, col) {
@@ -1087,14 +1451,90 @@ canvas.addEventListener('touchcancel', touchEnd, { passive: false });
 
 // ============================== DOM / UI ==============================
 function show(id, on) { document.getElementById(id).classList.toggle('hidden', !on); }
-document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch(false, 'rookie'); };
-document.getElementById('btnAce').onclick = () => { audioInit(); startMatch(false, 'ace'); };
+
+// ---- Garage ----
+function statDots(v) {   // 0..1 -> ●●●○○
+  const n = Math.max(1, Math.min(5, Math.round(v * 5)));
+  return '●'.repeat(n) + '○'.repeat(5 - n);
+}
+function renderGarage() {
+  document.getElementById('scrapGarage').textContent = profile.scrap;
+  const list = document.getElementById('garageList');
+  list.innerHTML = '';
+  for (const k of TANK_ORDER) {
+    const d = TANKS[k];
+    const owned = !!profile.owned[k], sel = profile.tank === k;
+    const card = document.createElement('div');
+    card.className = 'gcard' + (sel ? ' sel' : '');
+    const info = document.createElement('div');
+    info.className = 'ginfo';
+    const spd = statDots((d.speed - 100) / 80);
+    const rate = statDots(d.laser ? 0.25 : (0.16 / d.fireCd));
+    const pwr = statDots(d.laser ? 1 : ((d.shell.r - 2) / 6 + (d.shell.smash ? 0.4 : 0)));
+    info.innerHTML =
+      '<div class="gname" style="color:' + (sel ? '#ffd166' : '#dfe8ff') + '">' + d.name + '</div>' +
+      '<div class="gtag">' + d.tag + '</div>' +
+      '<div class="gstats">SPEED <b>' + spd + '</b> &nbsp; RATE <b>' + rate + '</b> &nbsp; PUNCH <b>' + pwr + '</b></div>';
+    const btn = document.createElement('button');
+    if (sel) { btn.className = 'cardBtn sel'; btn.textContent = 'SELECTED'; }
+    else if (owned) { btn.className = 'cardBtn own'; btn.textContent = 'SELECT'; }
+    else if (profile.scrap >= d.cost) { btn.className = 'cardBtn'; btn.textContent = 'BUY ' + d.cost; }
+    else { btn.className = 'cardBtn cant'; btn.textContent = d.cost + ' SCRAP'; }
+    btn.onclick = () => {
+      if (profile.tank === k) return;
+      if (!profile.owned[k]) {
+        if (profile.scrap < d.cost) return;
+        profile.scrap -= d.cost;
+        profile.owned[k] = true;
+      }
+      profile.tank = k;
+      saveProfile(); sfx.powerup(); updateWinTag(); renderGarage();
+    };
+    card.appendChild(info); card.appendChild(btn);
+    list.appendChild(card);
+  }
+}
+
+// ---- Campaign ----
+function renderCampaign() {
+  const list = document.getElementById('campaignList');
+  list.innerHTML = '';
+  const unlocked = campaignUnlockedThrough();
+  for (const b of CAMPAIGN) {
+    const locked = b.id > unlocked;
+    const stars = profile.stars[b.id] || 0;
+    const row = document.createElement('div');
+    row.className = 'crow' + (locked ? ' locked' : '');
+    row.innerHTML =
+      '<div class="cnum">' + b.id + '</div>' +
+      '<div class="cinfo"><div class="cname">' + b.name + '</div>' +
+      '<div class="cmeta">vs ' + TANKS[b.foe].name + ' &bull; ' + b.ai.toUpperCase() + ' &bull; ' +
+      b.arena.toUpperCase() + (profile.done[b.id] ? '' : ' &bull; reward ' + b.reward + ' scrap') + '</div></div>' +
+      '<div class="cstars">' + '★'.repeat(stars) + '☆'.repeat(3 - stars) + '</div>';
+    const btn = document.createElement('button');
+    btn.className = 'cardBtn' + (locked ? ' cant' : '');
+    btn.textContent = locked ? 'LOCKED' : (profile.done[b.id] ? 'REPLAY' : 'BATTLE');
+    if (!locked) btn.onclick = () => {
+      audioInit();
+      startMatch({ mode: 'campaign', aiLevel: b.ai, arena: b.arena, foeTank: b.foe, battle: b });
+    };
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+}
+
+document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'rookie' }); };
+document.getElementById('btnAce').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'ace' }); };
+document.getElementById('btnCampaign').onclick = () => { audioInit(); renderCampaign(); show('menu', false); show('campaign', true); };
+document.getElementById('btnCampaignBack').onclick = () => { show('campaign', false); show('menu', true); };
+document.getElementById('btnGarage').onclick = () => { audioInit(); renderGarage(); show('menu', false); show('garage', true); };
+document.getElementById('btnGarageBack').onclick = () => { show('garage', false); show('menu', true); };
 document.getElementById('btnHelp').onclick = () => { show('menu', false); show('helpBox', true); };
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
-document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(twoPlayer, aiLevel); };
+document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(matchCfg); };
 document.getElementById('btnMenu').onclick = () => {
   musicStop(false);
-  show('victory', false); mode = 'menu'; tanks = []; shells = []; genMaze(); show('menu', true);
+  show('victory', false); mode = 'menu'; tanks = []; shells = []; beams = []; genMaze(); updateWinTag(); show('menu', true);
 };
 const soundBtn = document.getElementById('soundBtn');
 function syncSoundBtn() {
@@ -1126,10 +1566,15 @@ resize();
 // menu backdrop: an idle maze looks nicer than a void
 genMaze();
 
-// ?demo=1 auto-starts an AI match (used for headless screenshots)
+// ?demo=1 auto-starts an AI match; ?screen=garage|campaign opens that overlay
+// (both are headless-screenshot hooks — harmless for players)
 if (/(\?|&)demo=1/.test(location.search)) {
-  startMatch(false, 'ace');
+  startMatch({ mode: 'quick', aiLevel: 'ace' });
   tanks[0].isAI = true;
+} else if (/(\?|&)screen=garage/.test(location.search)) {
+  renderGarage(); show('menu', false); show('garage', true);
+} else if (/(\?|&)screen=campaign/.test(location.search)) {
+  renderCampaign(); show('menu', false); show('campaign', true);
 }
 
 requestAnimationFrame(frame);
