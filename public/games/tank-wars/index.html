@@ -1625,6 +1625,7 @@ function rtcShowStatus(codeText) {
   rtcEl('rtcNote').textContent = '';
 }
 function rtcCleanup() {
+  if (rtcFailTimer) { clearTimeout(rtcFailTimer); rtcFailTimer = null; }
   if (rtcPollTimer) { clearInterval(rtcPollTimer); rtcPollTimer = null; }
   if (rtcPingTimer) { clearInterval(rtcPingTimer); rtcPingTimer = null; }
   if (rtcDC) { try { rtcDC.close(); } catch (e) {} rtcDC = null; }
@@ -1633,8 +1634,40 @@ function rtcCleanup() {
   rtcEl('onlineHome').classList.remove('hidden');
   rtcEl('onlineStatus').classList.add('hidden');
 }
+// STUN finds the direct path; the free TURN relay is the fallback for networks that
+// block P2P (hotel WiFi / cellular CGNAT / school firewalls — the 'stuck at
+// connecting' failure mode from the first remote test).
+const RTC_CFG = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:80' },
+  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+] };
+let rtcFailTimer = null;
+function rtcArmFailTimer() {
+  if (rtcFailTimer) clearTimeout(rtcFailTimer);
+  rtcFailTimer = setTimeout(() => {
+    if (rtcDC && rtcDC.readyState === 'open') return;
+    rtcSetState('Could not connect (25s). One side\'s network may block peer-to-peer — try again, or move one device off hotel/school WiFi (a phone hotspot often works).');
+  }, 25000);
+}
+function rtcCandSummary(desc) {
+  const sdp = (desc && desc.sdp) || '';
+  const kinds = [];
+  if (/ typ host/.test(sdp)) kinds.push('local');
+  if (/ typ srflx/.test(sdp)) kinds.push('internet');
+  if (/ typ relay/.test(sdp)) kinds.push('relay');
+  return kinds.length ? kinds.join(' + ') : 'none';
+}
 function rtcNewPC() {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  const pc = new RTCPeerConnection(RTC_CFG);
+  pc.oniceconnectionstatechange = () => {
+    if (pc !== rtcPC) return;
+    const st = pc.iceConnectionState;
+    if (st === 'checking') rtcSetState('Opponent found — negotiating a path…');
+    else if (st === 'failed') rtcSetState('No network path found. Try again — or move one device to a phone hotspot.');
+  };
   pc.onconnectionstatechange = () => {
     if (pc !== rtcPC) return;
     if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
@@ -1647,7 +1680,7 @@ function rtcNewPC() {
 function rtcWaitIce(pc) {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') return resolve();
-    const to = setTimeout(resolve, 3500);   // partial candidate sets still usually connect
+    const to = setTimeout(resolve, 6500);   // TURN allocation + slow cellular need headroom
     pc.addEventListener('icegatheringstatechange', () => {
       if (pc.iceGatheringState === 'complete') { clearTimeout(to); resolve(); }
     });
@@ -1666,6 +1699,7 @@ async function rtcApi(payload) {
 function rtcWireChannel(dc) {
   rtcDC = dc;
   dc.onopen = () => {
+    if (rtcFailTimer) { clearTimeout(rtcFailTimer); rtcFailTimer = null; }
     rtcSetState('CONNECTED! Measuring ping…');
     sfx.powerup();
     rtcPingTimer = setInterval(() => {
@@ -1701,6 +1735,7 @@ async function rtcHost() {
     const { code } = await rtcApi({ action: 'host', sdp: JSON.stringify(rtcPC.localDescription) });
     rtcEl('rtcCode').textContent = code;
     rtcSetState('Share this code — waiting for your opponent…');
+    rtcEl('rtcNote').textContent = 'network paths ready: ' + rtcCandSummary(rtcPC.localDescription);
     const pc = rtcPC;
     rtcPollTimer = setInterval(async () => {
       try {
@@ -1708,6 +1743,7 @@ async function rtcHost() {
         if (sdp && pc === rtcPC && !pc.currentRemoteDescription) {
           clearInterval(rtcPollTimer); rtcPollTimer = null;
           rtcSetState('Opponent found — connecting…');
+          rtcArmFailTimer();
           await pc.setRemoteDescription(typeof sdp === 'string' ? JSON.parse(sdp) : sdp);
         }
       } catch (e) {}
@@ -1727,6 +1763,8 @@ async function rtcJoin(code) {
     rtcSetState('Connecting…');
     await rtcWaitIce(rtcPC);
     await rtcApi({ action: 'answer', code, sdp: JSON.stringify(rtcPC.localDescription) });
+    rtcEl('rtcNote').textContent = 'network paths ready: ' + rtcCandSummary(rtcPC.localDescription);
+    rtcArmFailTimer();
   } catch (e) {
     rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).' : ('Error: ' + e.message));
   }
