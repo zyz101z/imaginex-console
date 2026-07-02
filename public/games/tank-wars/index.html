@@ -1708,7 +1708,7 @@ async function rtcHost() {
         if (sdp && pc === rtcPC && !pc.currentRemoteDescription) {
           clearInterval(rtcPollTimer); rtcPollTimer = null;
           rtcSetState('Opponent found — connecting…');
-          await pc.setRemoteDescription(JSON.parse(sdp));
+          await pc.setRemoteDescription(typeof sdp === 'string' ? JSON.parse(sdp) : sdp);
         }
       } catch (e) {}
     }, 1500);
@@ -1722,7 +1722,7 @@ async function rtcJoin(code) {
     const { sdp } = await rtcApi({ action: 'join', code });
     rtcPC = rtcNewPC();
     rtcPC.ondatachannel = (ev) => rtcWireChannel(ev.channel);
-    await rtcPC.setRemoteDescription(JSON.parse(sdp));
+    await rtcPC.setRemoteDescription(typeof sdp === 'string' ? JSON.parse(sdp) : sdp);
     await rtcPC.setLocalDescription(await rtcPC.createAnswer());
     rtcSetState('Connecting…');
     await rtcWaitIce(rtcPC);

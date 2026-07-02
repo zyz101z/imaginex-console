@@ -9,7 +9,10 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-const redis = Redis.fromEnv();
+// automaticDeserialization MUST be off: SDP blobs are valid JSON strings, and the
+// default auto-parse turned them into objects on read → the game's JSON.parse choked
+// on "[object Object]" (found in the first real two-browser test).
+const redis = Redis.fromEnv({ automaticDeserialization: false });
 const TTL = 300; // seconds — rooms are ephemeral handshake state, not lobbies
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L confusables
 const MAX_SDP = 25_000;
