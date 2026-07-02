@@ -1,16 +1,19 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-1. **Balance feel-check** (user hasn't played v2.0 progression yet): Photon vs Ace
-   ("Lights Out"), campaign difficulty curve, scrap earn rate for a 9-year-old's patience.
-2. **iPad verdict on the v2.1 touch controls** — rebuilt 2026-07-02 (see below); logic is
-   test-proven but thumb-feel needs the real device. Tunables: JOY_DEAD (10), JOY_MAX (52),
-   min throttle (0.35), FIRE button size/position (52px @ W-84,H-84).
+1. **MULTIPLAYER PHASE 2** (see MULTIPLAYER_PLAN.md): host-authoritative snapshot sync
+   over the Phase-1 DataChannel (20/s state down, 30/s inputs up, interpolation).
+   Then Phase 3 client-side prediction (REQUIRED for the remote 50-100ms use case).
+   ⏳ First: ask the user how the REMOTE CONNECTION TEST with his son went (ONLINE VS →
+   code → ping readout) — the measured RTT decides how hard to lean on prediction.
+2. Balance feel-check (user hasn't reported on v2.0 yet): Photon vs Ace, campaign curve,
+   scrap rate. Touch controls v2.1: user said "pretty good" — done unless new complaints.
 
 ## Session log — 2026-07-02
 | Ver | Commit | What |
 |---|---|---|
-| v2.1 | (this) | **Mobile controls rebuilt** (was: "really bad"). Root cause: steering angle was finger-relative-to-TANK → haywire when tank reached the finger; zero visual affordance. Now: floating virtual joystick (anchors under thumb on left 45%, absolute screen direction like keyboard, 10px deadzone, analog throttle 0.35–1.0 by deflection) + visible FIRE button (any right-side touch still fires) + overlay shows during countdown so thumbs pre-position. Tests 54→59 (T15: steer/throttle/deadzone/full-stop). `?touchdemo=1` screenshot hook |
+| MP-1 | `5c9a3d5` | **Online multiplayer Phase 1:** ONLINE VS (BETA) menu → room codes → WebRTC P2P DataChannel (non-trickle ICE, Google STUN) + live ping readout & link verdict. New `/api/rtc` edge route (Upstash, 4-char codes, 5-min TTL) — live-tested end-to-end via curl (host/join/answer/poll + 404s). `?rtctest=1` loopback self-test (headless-verified: channel opens). Plan: MULTIPLAYER_PLAN.md |
+| v2.1 | `c6de31b` | **Mobile controls rebuilt** (was: "really bad"). Root cause: steering angle was finger-relative-to-TANK → haywire when tank reached the finger; zero visual affordance. Now: floating virtual joystick (anchors under thumb on left 45%, absolute screen direction like keyboard, 10px deadzone, analog throttle 0.35–1.0 by deflection) + visible FIRE button (any right-side touch still fires) + overlay shows during countdown so thumbs pre-position. Tests 54→59 (T15: steer/throttle/deadzone/full-stop). `?touchdemo=1` screenshot hook |
 
 ## Session log — 2026-07-01 (game created start-to-finish, then 6 feedback rounds)
 
