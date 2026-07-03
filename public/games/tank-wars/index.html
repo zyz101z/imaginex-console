@@ -694,9 +694,10 @@ function fireShell(t) {
   // BIG-SHOT power-up overrides the tank's own weapon (single use, smashes 2 walls, eats shells)
   if (t.power === 'big') {
     const a = t.a;
+    const mp0 = muzzlePoint(t, a);
     shells.push({
       id: ++shellSeq,
-      x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
+      x: mp0.x, y: mp0.y,
       vx: Math.cos(a) * SHELL_SPEED * 0.62, vy: Math.sin(a) * SHELL_SPEED * 0.62,
       r: 9, owner: t.i, age: 0, grace: 0.12, big: true, heavy: true, smash: 2,
       bounces: -1, accel: 0, life: SHELL_LIFE, col: t.col,
@@ -718,9 +719,10 @@ function fireShell(t) {
   const spdMul = t.power === 'rapid' ? 1.25 : 1;
   for (const off of spread) {
     const a = t.a + off;
+    const mp = muzzlePoint(t, a);
     shells.push({
       id: ++shellSeq,
-      x: t.x + Math.cos(a) * (TANK_R + 8), y: t.y + Math.sin(a) * (TANK_R + 8),
+      x: mp.x, y: mp.y,
       vx: Math.cos(a) * sh.speed * spdMul, vy: Math.sin(a) * sh.speed * spdMul,
       r: sh.r, owner: t.i, age: 0, grace: 0.12,
       big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
@@ -731,6 +733,23 @@ function fireShell(t) {
   t.cd = t.power === 'rapid' ? Math.max(0.1, def.fireCd * 0.45) : def.fireCd;
   sfx.fire();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
+}
+
+// Walk from the hull edge toward the full muzzle length; stop short of any wall so a
+// barrel poked "through" a wall can't spawn shells on the far side (playtest exploit).
+function muzzlePoint(t, a) {
+  const full = TANK_R + 8;
+  let d = 6;
+  for (; d <= full; d += 3) {
+    const px = t.x + Math.cos(a) * d, py = t.y + Math.sin(a) * d;
+    let hit = false;
+    for (const r of wallRects) {
+      if (px >= r.x - 2 && px <= r.x + r.w + 2 && py >= r.y - 2 && py <= r.y + r.h + 2) { hit = true; break; }
+    }
+    if (hit) { d -= 3; break; }
+  }
+  d = Math.max(4, Math.min(d, full));
+  return { x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d };
 }
 
 // A shell just bounced: apply Pinball acceleration + Viper bounce budget.
@@ -770,7 +789,8 @@ function fireLaser(t) {
   const spread = t.power === 'triple' ? [-0.13, 0, 0.13] : [0];
   for (const off of spread) {
     let a = t.a + off;
-    let x = t.x + Math.cos(a) * (TANK_R + 6), y = t.y + Math.sin(a) * (TANK_R + 6);
+    const lp = muzzlePoint(t, a);
+    let x = lp.x, y = lp.y;
     const segs = [];
     for (let seg = 0; seg < 2; seg++) {
       const end = castRay(x, y, a, seg === 0 ? 900 : 620);
@@ -1194,6 +1214,20 @@ function applyDrive(t, target, throttle, dt) {
     const d = angDiff(t.a, target);
     const rot = HULL_SNAP * dt;
     if (Math.abs(d) <= rot) t.a = target; else t.a += Math.sign(d) * rot;
+    // Anti-stuck failsafe: input held but the tank barely moves for 0.5s -> ease toward
+    // the nearest cell center (always away from walls) until it frees up. Covers any
+    // corner/junction wedge the pushout+assist combo can't resolve ("stuck on a wall").
+    const got = Math.hypot(t.x - ox, t.y - oy);
+    if (got < step * 0.12) {
+      t.stuckT = (t.stuckT || 0) + dt;
+      if (t.stuckT > 0.5) {
+        const ccx = (Math.floor(t.x / CELL) + 0.5) * CELL;
+        const ccy = (Math.floor(t.y / CELL) + 0.5) * CELL;
+        const ddx = ccx - t.x, ddy = ccy - t.y;
+        const dm = Math.hypot(ddx, ddy);
+        if (dm > 1) moveTankVec(t, (ddx / dm) * 55 * dt, (ddy / dm) * 55 * dt);
+      }
+    } else t.stuckT = 0;
   }
   t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
 }
@@ -1372,9 +1406,9 @@ function ensureArenaLayers() {
     for (const r of wallRects) {
       const horiz = r.w > r.h;
       const len = horiz ? r.w : r.h;
-      for (let d = 0; d <= len; d += 24) {
+      for (let d = 0; d <= len; d += 19) {
         const rr = hashRand(r.x | 0, r.y | 0, d);
-        const size = 30 + rr * 16;
+        const size = 24 + rr * 10;   // trimmed overhang: big canopies hid tanks + the HUD
         const jitter = (hashRand(r.y | 0, r.x | 0, d) - 0.5) * 6;
         const cx = horiz ? r.x + d : r.x + r.w / 2 + jitter;
         const cy = horiz ? r.y + r.h / 2 + jitter : r.y + d;
@@ -1396,7 +1430,7 @@ function ensureArenaLayers() {
     tc.fillStyle = 'rgba(13,17,28,0.62)';   // pull the texture down into the night palette
     tc.fillRect(0, 0, 96, 96);
     const pat = wl.createPattern(tex, 'repeat');
-    const THICK = 26;
+    const THICK = 18;   // trimmed overhang (was 26): slabs were swallowing tanks near walls
     for (const r of wallRects) {
       const horiz = r.w > r.h;
       const len = horiz ? r.w : r.h;
@@ -1685,6 +1719,12 @@ function drawHUD() {
   // score pips top center
   const cx = W / 2, y = 18;
   const rtw = matchCfg.roundsToWin;
+  // backing plate so the score pips stay readable over jungle canopy / city rooftops
+  ctx.save();
+  ctx.fillStyle = 'rgba(7, 10, 18, 0.72)';
+  const hw = 36 + rtw * 20 + 48;
+  roundRect(cx - hw, 4, hw * 2, 28, 14);
+  ctx.restore();
   ctx.font = 'bold 14px sans-serif'; ctx.textBaseline = 'middle';
   for (let i = 0; i < rtw; i++) {
     // P1 pips leftward, P2 pips rightward
@@ -2226,7 +2266,8 @@ function updateGuest(dt) {
       me.cd = tankDef(me).laser ? tankDef(me).fireCd
             : tankDef(me).fireCd * (me.power === 'rapid' ? 0.45 : 1);
       sfx.fire();
-      const mx = me.x + Math.cos(me.a) * (TANK_R + 8), my = me.y + Math.sin(me.a) * (TANK_R + 8);
+      const gmp = muzzlePoint(me, me.a);
+      const mx = gmp.x, my = gmp.y;
       spawnParticles(mx, my, 5, me.col, 90, 0.18);
       if (!tankDef(me).laser) {
         const sh = tankDef(me).shell;
