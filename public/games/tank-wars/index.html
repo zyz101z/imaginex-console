@@ -1384,21 +1384,47 @@ function ensureArenaLayers() {
       }
     }
   } else if (theme === 'city') {
-    // rows of rooftops along each wall = city blocks; corridors read as streets
-    const roof = themeImgs.roof;
+    // NIGHT CITY v2: each wall run = 1-3 continuous building slabs with alley gaps.
+    // Big cohesive dark shapes + subtle rooftop texture + parapet edges + a few glowing
+    // roof lights. (v1 stamped the rooftop sprite every 36px — read as noisy tiles.)
+    const tex = document.createElement('canvas');
+    tex.width = 96; tex.height = 96;
+    const tc = tex.getContext('2d');
+    tc.drawImage(themeImgs.roof, 0, 0, 96, 96);
+    tc.fillStyle = 'rgba(13,17,28,0.62)';   // pull the texture down into the night palette
+    tc.fillRect(0, 0, 96, 96);
+    const pat = wl.createPattern(tex, 'repeat');
+    const THICK = 26;
     for (const r of wallRects) {
       const horiz = r.w > r.h;
       const len = horiz ? r.w : r.h;
-      for (let d = 0; d <= len; d += 36) {
-        const q = Math.floor(hashRand(r.x | 0, r.y | 0, d) * 4) * (Math.PI / 2);
-        const size = 34;
-        const cx = horiz ? r.x + d : r.x + r.w / 2;
-        const cy = horiz ? r.y + r.h / 2 : r.y + d;
-        wl.save();
-        wl.translate(cx, cy);
-        wl.rotate(q);
-        wl.drawImage(roof, -size / 2, -size / 2, size, size);
-        wl.restore();
+      let d = 0, seg = 0;
+      while (d < len - 6) {
+        const segLen = Math.min(len - d, 46 + hashRand(r.x | 0, r.y | 0, seg) * 70);
+        const bx = horiz ? r.x + d : r.x + r.w / 2 - THICK / 2;
+        const by = horiz ? r.y + r.h / 2 - THICK / 2 : r.y + d;
+        const bw2 = horiz ? segLen : THICK;
+        const bh2 = horiz ? THICK : segLen;
+        wl.fillStyle = pat;
+        wl.fillRect(bx, by, bw2, bh2);
+        wl.strokeStyle = 'rgba(155,165,180,0.55)';   // parapet edge
+        wl.lineWidth = 1.5;
+        wl.strokeRect(bx + 0.75, by + 0.75, bw2 - 1.5, bh2 - 1.5);
+        wl.strokeStyle = 'rgba(0,0,0,0.35)';         // inner roof inset
+        wl.lineWidth = 1;
+        wl.strokeRect(bx + 4.5, by + 4.5, bw2 - 9, bh2 - 9);
+        if (hashRand(r.y | 0, r.x | 0, seg + 77) < 0.45) {   // occasional rooftop light
+          const lx = bx + 7 + hashRand(bx | 0, by | 0, 1) * (bw2 - 14);
+          const ly = by + 7 + hashRand(by | 0, bx | 0, 2) * (bh2 - 14);
+          wl.save();
+          wl.fillStyle = hashRand(bx | 0, by | 0, 3) < 0.5 ? '#ffd166' : '#7fd8c8';
+          wl.shadowColor = wl.fillStyle; wl.shadowBlur = 7;
+          wl.globalAlpha = 0.9;
+          wl.beginPath(); wl.arc(lx, ly, 1.8, 0, Math.PI * 2); wl.fill();
+          wl.restore();
+        }
+        d += segLen + 4;
+        seg++;
       }
     }
   } else {
