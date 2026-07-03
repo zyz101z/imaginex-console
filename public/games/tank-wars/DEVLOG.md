@@ -21,6 +21,7 @@ Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVL
 ## Session log — 2026-07-03
 | Ver | Commit | What |
 |---|---|---|
+| THEME3 | (this) | **SNOW FORTRESS + LAVA FIELD** (Meshy ~36cr, balance 1043): snow=corridors layout w/ continuous ice-rampart slabs + frost glints + dusk-snow floor; lava=pillars layout w/ boulder stamps + ember glow dots + basalt floor. Campaign b4→snow, b7→lava (same layouts). 9 arenas in rotation |
 | FIX | `748ba5c` | **No friendly fire** (user request): own shells/big-shot/laser reflections pass through owner; AI stops dodging own shells. T17 (+ vacuous-test trap: zero-velocity shells skip collision substeps) |
 | FIX3 | (this) | 3 playtest bugs: HUD backing plate + trimmed theme overhang (pips hidden under canopy/slabs; slabs swallowed tanks); muzzlePoint() clamp kills the shoot-through-wall exploit (T18); anti-stuck failsafe eases toward cell center after 0.5s of blocked input |
 
