@@ -508,16 +508,19 @@ const PAD_POS = [
   { x: 470, y: 390 }, { x: 640, y: 370 }, { x: 810, y: 390 }, { x: 980, y: 370 }, { x: 1150, y: 395 },
   { x: 730, y: 275 }, { x: 900, y: 280 },
 ];
-const WATER_PAD = { x: 1450, y: 700 };
+const WATER_PAD = { x: 1330, y: 745 };   // in the lagoon, visible without panning
 const PLOTS = {
-  den:     { x: 195, y: 560, label: 'Breeding Den' },
-  nursery: { x: 185, y: 720, label: 'Nursery' },
-  farm0:   { x: 1340, y: 320 },
-  farm1:   { x: 1460, y: 380 },
-  farm2:   { x: 1560, y: 300 },
-  vault:   { x: 1580, y: 520 },
-  den2:    { x: 320, y: 750, label: 'Den II' },
+  den:     { x: 220, y: 800, label: 'Breeding Den' },   // foreground flat, close = big
+  nursery: { x: 450, y: 830, label: 'Nursery' },
+  farm0:   { x: 145, y: 560 },                          // mid-left terrace
+  farm1:   { x: 1305, y: 480 },                         // right-side flat above the lagoon
+  farm2:   { x: 110, y: 400 },
+  vault:   { x: 660, y: 330 },                          // built into the hillside rocks
+  den2:    { x: 690, y: 845, label: 'Den II' },
 };
+// Depth scale: the painted background has perspective — lower on screen = closer = bigger.
+// This is what stops sprites from "hovering" on top of the painting.
+const dscale = (y) => 0.6 + 0.55 * (y / WORLD_H);
 const DECOR_POS = [
   { x: 260, y: 430 }, { x: 1250, y: 700 }, { x: 600, y: 760 }, { x: 1050, y: 760 }, { x: 900, y: 180 },
   { x: 380, y: 300 }, { x: 1240, y: 260 }, { x: 150, y: 400 }, { x: 700, y: 180 }, { x: 1350, y: 620 },
@@ -592,37 +595,43 @@ function drawScene(t) {
     const p = PAD_POS[i];
     const used = i < S.creatures.filter(c => !SPECIES[c.sp].water).length;
     if (!used) {
+      const ds = dscale(p.y);
       ctx.fillStyle = 'rgba(255,255,255,0.06)';
       ctx.strokeStyle = 'rgba(127,216,200,0.3)';
       ctx.lineWidth = 2; ctx.setLineDash([7, 6]);
-      ctx.beginPath(); ctx.ellipse(p.x, p.y + 18, 44, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 18 * ds, 44 * ds, 18 * ds, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.setLineDash([]);
     }
   }
 
-  // ---- buildings ----
-  drawBuilding('den', PLOTS.den, '💕', t, S.breeds[0]);
-  drawBuilding('nursery', PLOTS.nursery, '🥚', t, null);
-  if (S.den2) drawBuilding('den', PLOTS.den2, '💕', t, S.breeds[1]);
-  for (let i = 0; i < farmCount(); i++) drawBuilding('farm', PLOTS['farm' + i], '🌾', t, null);
-  if (S.vault) drawBuilding('vault', PLOTS.vault, '🏦', t, null);
+  // ---- buildings (painter's order: farthest first) ----
+  const blds = [
+    ['den', PLOTS.den, '💕', S.breeds[0]],
+    ['nursery', PLOTS.nursery, '🥚', null],
+  ];
+  if (S.den2) blds.push(['den', PLOTS.den2, '💕', S.breeds[1]]);
+  for (let i = 0; i < farmCount(); i++) blds.push(['farm', PLOTS['farm' + i], '🌾', null]);
+  if (S.vault) blds.push(['vault', PLOTS.vault, '🏦', null]);
+  blds.sort((a, b) => a[1].y - b[1].y);
+  for (const [k, pp, emo, ab] of blds) drawBuilding(k, pp, emo, t, ab);
 
   // farm timers
   for (let i = 0; i < farmCount(); i++) {
     const f = S.farms[i], p = PLOTS['farm' + i];
-    if (f) drawTimer(p.x, p.y - 70, f.readyAt, '🍖', now() >= f.readyAt);
+    if (f) drawTimer(p.x, p.y - 150 * dscale(p.y), f.readyAt, '🍖', now() >= f.readyAt);
   }
   // den timers
   for (let d = 0; d < denCount(); d++) {
     const b = S.breeds[d], p = d === 0 ? PLOTS.den : PLOTS.den2;
-    if (b) drawTimer(p.x, p.y - 78, b.readyAt, '💕', now() >= b.readyAt);
+    if (b) drawTimer(p.x, p.y - 165 * dscale(p.y), b.readyAt, '💕', now() >= b.readyAt);
   }
   // nursery egg
   if (S.egg) {
     const p = PLOTS.nursery;
     const wob = Math.sin(t / 130) * (now() >= S.egg.readyAt ? 6 : 2);
     ctx.save();
-    ctx.translate(p.x, p.y - 46); ctx.rotate(wob * 0.02);
+    // the nursery hut is itself egg-shaped — park the incubating egg in front-right of it
+    ctx.translate(p.x - 105 * dscale(p.y), p.y - 5 * dscale(p.y)); ctx.rotate(wob * 0.02);
     if (spr.egg) { ctx.drawImage(spr.egg, -26, -34, 52, 62); }
     else { ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 14); }
     if (S.egg.v !== 'normal') {
@@ -631,7 +640,7 @@ function drawScene(t) {
       ctx.fillText(VARIANTS[S.egg.v].icon, 20, -18);
     }
     ctx.restore();
-    drawTimer(p.x, p.y - 100, S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
+    drawTimer(p.x - 105 * dscale(p.y), p.y - 75 * dscale(p.y), S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
   }
 
   // ---- decorations ----
@@ -653,15 +662,20 @@ function drawScene(t) {
     c._px = p.x; c._py = p.y;
     const bob = Math.sin(t / 420 + c.id * 1.7) * 5;
     const sway = Math.sin(t / 640 + c.id) * 0.04;
-    const size = (c.v === 'epic' ? 1.12 : 1) * (d.tier >= 2 ? 1.18 : 1) * (c.sp === 'dragon' ? 1.35 : 1);
+    const size = (c.v === 'epic' ? 1.12 : 1) * (d.tier >= 2 ? 1.18 : 1) * (c.sp === 'dragon' ? 1.35 : 1)
+      * dscale(p.y);   // perspective: lower on screen = closer = bigger
 
     ctx.save();
     ctx.translate(p.x, p.y + (d.water ? Math.sin(t / 500 + 2) * 6 : bob));
     ctx.rotate(sway);
 
-    // shadow / water ring
-    ctx.fillStyle = d.water ? 'rgba(180,240,255,0.18)' : 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(0, 26 * size, 34 * size, 11 * size, 0, 0, Math.PI * 2); ctx.fill();
+    // grounded contact shadow / water ring
+    if (d.water) {
+      ctx.fillStyle = 'rgba(180,240,255,0.18)';
+      ctx.beginPath(); ctx.ellipse(0, 26 * size, 34 * size, 11 * size, 0, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.save(); ctx.translate(0, 26 * size); groundShadow(38 * size, 12 * size); ctx.restore();
+    }
 
     // variant aura
     if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 16; }
@@ -721,29 +735,42 @@ function drawScene(t) {
   ctx.restore();
 }
 
+function groundShadow(w, h) {
+  // soft radial contact shadow — the difference between "sitting on" and "hovering over"
+  const g = ctx.createRadialGradient(0, 0, 2, 0, 0, w);
+  g.addColorStop(0, 'rgba(10,20,10,0.42)');
+  g.addColorStop(0.7, 'rgba(10,20,10,0.2)');
+  g.addColorStop(1, 'rgba(10,20,10,0)');
+  ctx.save();
+  ctx.scale(1, h / w);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, w, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
 function drawBuilding(kind, p, emo, t, activeBreed) {
   if (!p) return;
+  const ds = dscale(p.y);
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(0, 22, 52, 16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(0, 16 * ds); groundShadow(78 * ds, 24 * ds); ctx.restore();
   if (spr[kind]) {
-    const im = spr[kind], h = 110, w = h * (im.width / im.height);
-    ctx.drawImage(im, -w / 2, -h + 24, w, h);
+    const im = spr[kind], h = 165 * ds, w = h * (im.width / im.height);
+    ctx.drawImage(im, -w / 2, -h + 24 * ds, w, h);
   } else {
     ctx.fillStyle = 'rgba(30,60,80,0.9)'; ctx.strokeStyle = 'rgba(127,216,200,0.5)'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.roundRect(-42, -58, 84, 78, 12); ctx.fill(); ctx.stroke();
-    ctx.font = '34px serif'; ctx.textAlign = 'center'; ctx.fillText(emo, 0, -8);
+    ctx.beginPath(); ctx.roundRect(-52 * ds, -72 * ds, 104 * ds, 92 * ds, 12); ctx.fill(); ctx.stroke();
+    ctx.font = Math.round(40 * ds) + 'px serif'; ctx.textAlign = 'center'; ctx.fillText(emo, 0, -10 * ds);
   }
   if (activeBreed) {
-    ctx.font = '16px serif'; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 250);
-    ctx.fillText('💗', -20 + Math.sin(t / 300) * 6, -66);
-    ctx.fillText('💗', 20 - Math.sin(t / 300) * 6, -66);
+    const ds2 = dscale(p.y);
+    ctx.font = Math.round(16 * ds2) + 'px serif'; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 250);
+    ctx.fillText('💗', -22 * ds2 + Math.sin(t / 300) * 6, -110 * ds2);
+    ctx.fillText('💗', 22 * ds2 - Math.sin(t / 300) * 6, -110 * ds2);
     ctx.globalAlpha = 1;
   }
   if (p.label) {
-    ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.75)'; ctx.textAlign = 'center';
-    ctx.fillText(p.label, 0, 40);
+    ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.8)'; ctx.textAlign = 'center';
+    ctx.fillText(p.label, 0, 42 * dscale(p.y));
   }
   ctx.restore();
 }
@@ -1160,7 +1187,8 @@ function handleTap(wx, wy) {
     const d = SPECIES[c.sp];
     const p = d.water ? WATER_PAD : PAD_POS[landIdx++];
     if (!p) continue;
-    if (Math.abs(wx - p.x) < 52 && wy > p.y - 105 && wy < p.y + 40) hit = c;
+    const ds = dscale(p.y);
+    if (Math.abs(wx - p.x) < 55 * ds && wy > p.y - 110 * ds && wy < p.y + 40 * ds) hit = c;
   }
   if (hit) {
     const got = collect(hit);
@@ -1174,9 +1202,9 @@ function handleTap(wx, wy) {
   }
   hideSel();
   // buildings
-  const near = (p, r) => p && Math.abs(wx - p.x) < r && Math.abs(wy - p.y + 20) < r + 30;
-  if (near(PLOTS.den, 70) || (S.den2 && near(PLOTS.den2, 70))) { openBreed(); return; }
-  if (near(PLOTS.nursery, 70)) {
+  const near = (p, r) => p && Math.abs(wx - p.x) < r * dscale(p.y) && Math.abs(wy - (p.y - 60 * dscale(p.y))) < (r + 45) * dscale(p.y);
+  if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
+  if (near(PLOTS.nursery, 75)) {
     if (S.egg && now() >= S.egg.readyAt) doHatch();
     else openBreed();
     return;
