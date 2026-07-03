@@ -470,6 +470,14 @@ function maybeSubmitScore() {
 
 // ============================== AUDIO (procedural) ==============================
 let AC = null, muted = false;
+const bgm = (typeof Audio !== 'undefined') ? new Audio('music.mp3') : null;
+if (bgm) { bgm.loop = true; bgm.volume = 0.32; }
+let musicOn = false;
+function startMusic() {
+  if (!bgm || musicOn || muted) return;
+  bgm.play().then(() => { musicOn = true; }).catch(() => {});   // retries on next gesture
+}
+if (typeof document !== 'undefined') document.addEventListener('pointerdown', startMusic);
 function ac() { if (!AC && (window.AudioContext || window.webkitAudioContext)) AC = new (window.AudioContext || window.webkitAudioContext)(); return AC; }
 function tone(freq, dur, type, vol, when) {
   if (muted) return;
@@ -1271,7 +1279,11 @@ $('navBreed').onclick = () => { sfx.tap(); openBreed(); };
 $('navShop').onclick = () => { sfx.tap(); openShop(); };
 $('navBook').onclick = () => { sfx.tap(); openBook(); };
 $('navBoard').onclick = () => { sfx.tap(); openBoard(); };
-$('muteBtn').onclick = () => { muted = !muted; $('muteBtn').textContent = muted ? '♪ OFF' : '♪ ON'; };
+$('muteBtn').onclick = () => {
+  muted = !muted;
+  $('muteBtn').textContent = muted ? '♪ OFF' : '♪ ON';
+  if (bgm) { if (muted) { bgm.pause(); musicOn = false; } else startMusic(); }
+};
 $('collectAllBtn').onclick = () => {
   const perCreature = S.creatures.map(c => [c, Math.floor(pendingOf(c))]);
   const got = collectAll();
