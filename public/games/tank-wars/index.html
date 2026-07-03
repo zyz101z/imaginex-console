@@ -204,8 +204,26 @@ const TANKS = {
              speed: 150, fireCd: 0.42, shell: { speed: 205, r: 4.5, life: 13, bounces: -1, accel: 1.18 } },
   photon:  { name: 'PHOTON',  cost: 1500, tag: 'Instant laser with one wall reflection. Long reload.',
              speed: 150, fireCd: 1.15, laser: true },
+  minelayer: { name: 'MINELAYER', cost: 2500, tag: 'Auto-drops proximity mines while driving (max 3). Standard cannon.',
+             speed: 145, fireCd: 0.5, mines: true, shell: { speed: 250, r: 4, life: 8, bounces: -1 } },
+  ghost:   { name: 'GHOST',   cost: 4000, tag: 'Cloaks when you hold fire. Tread marks still show — hunt the trail.',
+             speed: 155, fireCd: 0.42, cloak: true, shell: { speed: 265, r: 4, life: 9, bounces: -1 } },
 };
-const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon'];
+const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost'];
+// Cosmetic catalogs (scrap sinks — never touch the friend-or-foe color language)
+const TRAILS = {
+  ember:   { name: 'EMBER TRAIL',   cost: 300, tag: 'Your shells leave burning sparks.', col: () => (Math.random() < 0.5 ? '#ff9a3c' : '#ffc46b') },
+  frost:   { name: 'FROST TRAIL',   cost: 400, tag: 'A wake of glittering ice.',         col: () => (Math.random() < 0.5 ? '#bfe6ff' : '#e8f7ff') },
+  rainbow: { name: 'RAINBOW TRAIL', cost: 700, tag: 'Taste the rainbow. Every shell.',   col: () => 'hsl(' + ((performance.now() / 4) % 360) + ',95%,65%)' },
+  void:    { name: 'VOID TRAIL',    cost: 900, tag: 'Shells tear a dark purple rift.',   col: () => (Math.random() < 0.5 ? '#7b3ff2' : '#3b1670') },
+};
+const TRAIL_ORDER = ['ember', 'frost', 'rainbow', 'void'];
+const VICS = {
+  golden: { name: 'GOLDEN RAIN', cost: 500, tag: 'Win under a shower of gold.' },
+  mega:   { name: 'MEGA FIREWORKS', cost: 500, tag: 'Twice the bursts, twice the glory.' },
+  storm:  { name: 'CONFETTI STORM', cost: 500, tag: 'A sideways blizzard of confetti.' },
+};
+const VIC_ORDER = ['golden', 'mega', 'storm'];
 function tankDef(t) { return TANKS[t.kind] || TANKS.scout; }
 
 // Meshy-generated top-down sprites (img/tank_*.png, chroma-keyed + hull-centered).
@@ -216,6 +234,8 @@ const SPRITE_META = {
   viper:   { w: 337, h: 128, cx: 121, cy: 64 },
   pinball: { w: 146, h: 128, cx: 59,  cy: 64 },
   photon:  { w: 230, h: 128, cx: 99,  cy: 64 },
+  minelayer: { w: 175, h: 128, cx: 82, cy: 64 },
+  ghost:   { w: 313, h: 128, cx: 122, cy: 64 },
 };
 const tankSprites = {};   // kind -> { 0: amber-tinted canvas, 1: teal-tinted canvas }
 if (typeof Image !== 'undefined') {
@@ -262,7 +282,8 @@ const CAMPAIGN = [
 ];
 
 // ============================== PROFILE (persistent) ==============================
-let profile = { scrap: 0, owned: { scout: true }, tank: 'scout', stars: {}, done: {} };
+let profile = { scrap: 0, owned: { scout: true }, tank: 'scout', stars: {}, done: {},
+                trailsOwned: {}, trail: '', vicsOwned: {}, vic: '' };
 try {
   const raw = localStorage.getItem('tankwars_profile');
   if (raw) {
@@ -273,6 +294,10 @@ try {
       profile.tank = TANKS[p.tank] ? p.tank : 'scout';
       profile.stars = p.stars || {};
       profile.done = p.done || {};
+      profile.trailsOwned = p.trailsOwned || {};
+      profile.trail = TRAILS[p.trail] ? p.trail : '';
+      profile.vicsOwned = p.vicsOwned || {};
+      profile.vic = VICS[p.vic] ? p.vic : '';
     }
   }
 } catch (e) {}
@@ -374,6 +399,8 @@ let wallRects = [];              // {x,y,w,h}
 let tanks = [];                  // [p1, p2]
 let shells = [];
 let shellSeq = 0;            // ids let the online guest match shells across snapshots
+let mines = [];              // MINELAYER: { id, x, y, owner, age, col } — armed after 1s
+let mineSeq = 0;
 let particles = [];
 let treads = [];
 let powerup = null;              // {x,y,kind,age}
@@ -725,6 +752,7 @@ function fireShell(t) {
   // BIG-SHOT power-up overrides the tank's own weapon (single use, smashes 2 walls, eats shells)
   if (t.power === 'big') {
     const a = t.a;
+    t.cloakT = 0;
     const mp0 = muzzlePoint(t, a);
     shells.push({
       id: ++shellSeq,
@@ -762,6 +790,7 @@ function fireShell(t) {
     });
   }
   t.cd = t.power === 'rapid' ? Math.max(0.1, def.fireCd * 0.45) : def.fireCd;
+  t.cloakT = 0;   // GHOST decloaks the moment it fires
   sfx.fire();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
 }
@@ -854,6 +883,7 @@ function fireLaser(t) {
     }
   }
   t.cd = tankDef(t).fireCd * (t.power === 'rapid' ? 0.55 : 1);
+  t.cloakT = 0;
   sfx.laser();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 8), t.y + Math.sin(t.a) * (TANK_R + 8), 8, '#ffffff', 120, 0.2);
 }
@@ -888,6 +918,7 @@ function startMatch(cfg) {
     battle: cfg.battle || null,
   };
   aiParams = AI_LEVELS[matchCfg.aiLevel] || AI_LEVELS.rookie;
+  trailOf = [profile.trail || '', (matchCfg.mode === 'online') ? (net.guestTrail || '') : ''];
   tanks = []; roundNum = 1; winReported = false; matchScrap = 0;
   startRound();
   mode = 'play'; paused = false;
@@ -900,7 +931,7 @@ function startRound() {
   genMaze(roundArena);
   genPools();
   spawnTanks();
-  shells = []; beams = []; particles = []; treads = []; powerup = null; confetti = [];
+  shells = []; beams = []; mines = []; particles = []; treads = []; powerup = null; confetti = [];
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
   roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
   phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
@@ -956,18 +987,31 @@ function endMatch() {
   document.getElementById('winWait').classList.add('hidden');
   show('victory', true);
   sfx.win();
-  if (humanWon) for (let i = 0; i < 120; i++) confetti.push({
-    x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
-    vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
-    col: [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
-    w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, spin: Math.random() * 6, a: Math.random() * 6,
-  });
+  if (humanWon) makeVicConfetti();
   if (humanWon && !winReported) {
     winReported = true;
     totalWins++;
     try { localStorage.setItem('tankwars_wins', String(totalWins)); } catch (e) {}
     try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'tank-wars', score: totalWins }, '*'); } catch (e) {}
     updateWinTag();
+  }
+}
+// Victory celebration styles (garage cosmetics): classic / golden rain / mega / storm
+function makeVicConfetti() {
+  const style = profile.vicsOwned[profile.vic] ? profile.vic : '';
+  const n = style === 'mega' ? 260 : style === 'storm' ? 300 : 120;
+  for (let i = 0; i < n; i++) {
+    const golden = style === 'golden';
+    confetti.push({
+      x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
+      vx: style === 'storm' ? 120 + Math.random() * 160 : (Math.random() - 0.5) * 60,
+      vy: golden ? 40 + Math.random() * 70 : 60 + Math.random() * 120,
+      col: golden ? ['#ffd166', '#ffdf8f', '#f7b733', '#ffe9b0'][(Math.random() * 4) | 0]
+                  : [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
+      w: (style === 'mega' ? 6 : 4) + Math.random() * 5,
+      h: (style === 'mega' ? 8 : 6) + Math.random() * 6,
+      spin: Math.random() * 6, a: Math.random() * 6,
+    });
   }
 }
 function updateWinTag() {
@@ -995,6 +1039,12 @@ function aiThink(t, foe, dt) {
       const sv = Math.sqrt(s.vx * s.vx + s.vy * s.vy) || 1;
       const dot = (rx * s.vx + ry * s.vy) / (dist * sv);
       if (dot > 0.94) { ai.dodge = 0.32; ai.dodgeDir = ((rx * s.vy - ry * s.vx) > 0) ? 1 : -1; break; }
+    }
+    for (const m of mines) {   // armed enemy mines: steer around, don't step on
+      if (m.owner === t.i || m.age < 1) continue;
+      const rx = t.x - m.x, ry = t.y - m.y;
+      const dist = Math.hypot(rx, ry);
+      if (dist < 62) { ai.dodge = 0.3; ai.dodgeDir = ((rx * (foe.y - t.y) - ry * (foe.x - t.x)) > 0) ? -1 : 1; break; }
     }
     if (ai.dodge > 0) {
       const escape = Math.atan2(t.y - foe.y, t.x - foe.x) + ai.dodgeDir * Math.PI / 2;
@@ -1167,6 +1217,58 @@ function updateShells(dt) {
     }
     if (dead) { const idx = shells.indexOf(s); if (idx >= 0) killShell(idx); }
   }
+}
+// MINELAYER: auto-lays a mine every 2.5s while the tank is moving (max 3 live —
+// oldest is recycled). Mines arm after 1s, then detonate on ENEMY contact only.
+function updateMines(dt) {
+  for (const t of tanks) {
+    if (!t.alive || !tankDef(t).mines) continue;
+    t.mineCd = (t.mineCd || 0) - dt;
+    const moving = Math.abs(t.lastVX || 0) > 20 || Math.abs(t.lastVY || 0) > 20;
+    if (moving && t.mineCd <= 0 && phase === 'play') {
+      t.mineCd = 2.5;
+      const own = mines.filter(m => m.owner === t.i);
+      if (own.length >= 3) mines.splice(mines.indexOf(own[0]), 1);
+      mines.push({ id: ++mineSeq, x: t.x - Math.cos(t.a) * (TANK_R + 6), y: t.y - Math.sin(t.a) * (TANK_R + 6),
+                   owner: t.i, age: 0, col: t.col });
+      sfx.click && sfx.click();
+    }
+  }
+  for (let i = mines.length - 1; i >= 0; i--) {
+    const m = mines[i];
+    m.age += dt;
+    if (m.age < 1) continue;   // arming
+    for (const t of tanks) {
+      if (!t.alive || t.i === m.owner) continue;   // no friendly fire — mines follow suit
+      if (Math.hypot(t.x - m.x, t.y - m.y) < TANK_R + 11) {
+        mines.splice(i, 1);
+        if (t.shield) {
+          t.shield = false; sfx.shield();
+          spawnParticles(t.x, t.y, 20, '#4de3c2', 180, 0.4);
+        } else explodeTank(t);
+        break;
+      }
+    }
+  }
+}
+// Cosmetic shell trails: spawn a wake particle every ~22px of travel for shells whose
+// owner has a trail equipped. trailOf[ownerIdx] is set at match start (and synced online).
+let trailOf = ['', ''];
+const trailPos = new Map();   // shell id -> last wake point (persistent: guest rebuilds shell objects every frame)
+function updateTrails() {
+  for (const sh of shells) {
+    if (sh.id === undefined || sh.owner === undefined) continue;
+    const st = TRAILS[trailOf[sh.owner]];
+    if (!st) continue;
+    const last = trailPos.get(sh.id);
+    if (!last) { trailPos.set(sh.id, { x: sh.x, y: sh.y }); continue; }
+    if (Math.hypot(sh.x - last.x, sh.y - last.y) > 22) {
+      last.x = sh.x; last.y = sh.y;
+      particles.push({ x: sh.x, y: sh.y, vx: (Math.random() - 0.5) * 14, vy: (Math.random() - 0.5) * 14,
+                       life: 0.5, max: 0.5, col: st.col(), r: 2.4 });
+    }
+  }
+  if (trailPos.size > 400) trailPos.clear();
 }
 function updatePowerups(dt) {
   if (powerup) {
@@ -1356,6 +1458,7 @@ function update(dt) {
   for (const t of tanks) {
     if (!t.alive) continue;
     t.cd -= dt;
+    if (tankDef(t).cloak) t.cloakT = (t.cloakT || 0) + dt;
     if (t.isAI) {
       const ox = t.x, oy = t.y;
       aiThink(t, tanks[1 - t.i], dt);
@@ -1383,6 +1486,8 @@ function update(dt) {
     }
   }
   updateShells(dt);
+  updateMines(dt);
+  updateTrails();
   updatePowerups(dt);
   updateParticles(dt);
   for (const tr of treads) tr.life -= dt;
@@ -1639,6 +1744,23 @@ function render() {
     }
     // powerup
     if (powerup) drawPowerup(powerup);
+    // mines (MINELAYER): yours are clear; ENEMY mines are faint — spot them or step on them
+    const myIdx0 = (net.role === 'guest') ? 1 : 0;
+    for (const m of mines) {
+      const mineIsMine = m.owner === myIdx0;
+      const armed = m.age >= 1;
+      const blink = armed ? (0.75 + 0.25 * Math.sin(performance.now() / 260)) : ((performance.now() / 90) % 2 < 1 ? 1 : 0.3);
+      ctx.save();
+      ctx.globalAlpha = (mineIsMine ? 0.95 : 0.32) * blink;
+      ctx.fillStyle = '#1a2233';
+      ctx.beginPath(); ctx.arc(m.x, m.y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = m.col; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(m.x, m.y, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = armed ? '#ff5b5b' : '#ffd166';
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 6;
+      ctx.beginPath(); ctx.arc(m.x, m.y, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     // shells — friend-or-foe readable at a glance (needed since friendly fire is off):
     // YOUR shells glow calm in your color; ENEMY shells burn brighter with a white-hot
     // core. One glance: my-color = harmless, their-color + hot core = get moving.
@@ -1761,6 +1883,14 @@ function render() {
 }
 function drawTank(t) {
   ctx.save();
+  // GHOST cloak: fades after ~1.2s without firing. Your own ghost stays readable to you;
+  // the ENEMY's fades to a whisper (tread marks remain — that's the counterplay).
+  if (tankDef(t).cloak && (t.cloakT || 0) > 1.2) {
+    const fade = Math.min(1, ((t.cloakT || 0) - 1.2) / 0.8);
+    const isMine = t.i === ((net.role === 'guest') ? 1 : 0);
+    const floor2 = isMine ? 0.45 : 0.07;
+    ctx.globalAlpha = 1 - fade * (1 - floor2) + (isMine ? 0 : 0.03 * Math.sin(performance.now() / 180));
+  }
   ctx.translate(t.x, t.y);
   // shield ring
   if (t.shield) {
@@ -2020,6 +2150,51 @@ function renderGarage() {
     card.appendChild(info); card.appendChild(btn);
     list.appendChild(card);
   }
+  // ---- cosmetics sections: shell trails + victory styles ----
+  const swatches = { ember: '#ff9a3c', frost: '#bfe6ff', rainbow: 'linear-gradient(90deg,#ff5f6d,#ffc371,#7ce07c,#5fb8ff,#b06ffb)', void: '#7b3ff2' };
+  const addHeader = (text) => {
+    const h = document.createElement('div');
+    h.textContent = text;
+    h.style.cssText = 'color:#7fd8c8;font-weight:900;font-size:13px;letter-spacing:3px;margin:16px 4px 2px;';
+    list.appendChild(h);
+  };
+  const addCosmetic = (key, d, ownedMap, selKey) => {
+    const card = document.createElement('div');
+    const sel = profile[selKey] === key;
+    const owned = !!profile[ownedMap][key];
+    card.className = 'gcard' + (sel ? ' sel' : '');
+    const dot = document.createElement('div');
+    dot.style.cssText = 'width:26px;height:26px;border-radius:50%;flex:none;background:' + (swatches[key] || '#ffd166') + ';box-shadow:0 0 10px rgba(255,255,255,0.15);';
+    card.appendChild(dot);
+    const info = document.createElement('div');
+    info.className = 'ginfo';
+    info.innerHTML = '<div class="gname" style="color:' + (sel ? '#ffd166' : '#dfe8ff') + '">' + d.name + '</div>'
+      + '<div class="gtag">' + d.tag + '</div>';
+    card.appendChild(info);
+    const btn = document.createElement('button');
+    if (sel) { btn.className = 'cardBtn sel'; btn.textContent = 'EQUIPPED'; }
+    else if (owned) { btn.className = 'cardBtn own'; btn.textContent = 'EQUIP'; }
+    else if (profile.scrap >= d.cost) { btn.className = 'cardBtn'; btn.textContent = 'BUY ' + d.cost; }
+    else { btn.className = 'cardBtn cant'; btn.textContent = d.cost + ' SCRAP'; }
+    btn.onclick = () => {
+      if (profile[selKey] === key) { profile[selKey] = ''; }   // tap equipped -> unequip
+      else {
+        if (!profile[ownedMap][key]) {
+          if (profile.scrap < d.cost) return;
+          profile.scrap -= d.cost;
+          profile[ownedMap][key] = true;
+        }
+        profile[selKey] = key;
+      }
+      saveProfile(); sfx.powerup(); updateWinTag(); renderGarage();
+    };
+    card.appendChild(btn);
+    list.appendChild(card);
+  };
+  addHeader('SHELL TRAILS');
+  for (const k of TRAIL_ORDER) addCosmetic(k, TRAILS[k], 'trailsOwned', 'trail');
+  addHeader('VICTORY STYLES');
+  for (const k of VIC_ORDER) addCosmetic(k, VICS[k], 'vicsOwned', 'vic');
 }
 
 // ---- Campaign ----
@@ -2172,7 +2347,7 @@ function rtcWireChannel(dc) {
     rtcSetState('CONNECTED! Measuring ping…');
     sfx.powerup();
     if (net.role === 'guest') {
-      try { dc.send(JSON.stringify({ t: 'hello', kind: profile.owned[profile.tank] ? profile.tank : 'scout' })); } catch (e) {}
+      try { dc.send(JSON.stringify({ t: 'hello', kind: profile.owned[profile.tank] ? profile.tank : 'scout', trail: profile.trail || '' })); } catch (e) {}
       rtcEl('rtcNote').textContent = 'Connected! The host starts the battle.';
     } else if (net.role === 'host') {
       rtcEl('btnRtcStart').classList.remove('hidden');
@@ -2298,7 +2473,7 @@ function unpackWalls(w) {
   buildWallRects();
   net.wallsDirty = false;
 }
-function serTank(t) { return [r1(t.x), r1(t.y), r2(t.a), t.alive ? 1 : 0, t.shield ? 1 : 0, t.power || '', r1(t.powerT || 0)]; }
+function serTank(t) { return [r1(t.x), r1(t.y), r2(t.a), t.alive ? 1 : 0, t.shield ? 1 : 0, t.power || '', r1(t.powerT || 0), r2(t.cloakT || 0)]; }
 function serShell(sh) { return [sh.id, r1(sh.x), r1(sh.y), r1(sh.vx), r1(sh.vy), sh.r, sh.owner, sh.big ? 1 : (sh.heavy ? 2 : 0)]; }
 
 // ---- host side ----
@@ -2310,6 +2485,7 @@ function netSendRound() {
   netSendGame({
     t: 'round', round: roundNum, rw: matchCfg.roundsToWin,
     sc: [tanks[0].score, tanks[1].score], walls: packWalls(), ar: roundArena,
+    tr: [trailOf[0], trailOf[1]],
     pl: pools.map(pp => [r1(pp.x), r1(pp.y), r1(pp.r)]),
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind]),
   });
@@ -2324,6 +2500,7 @@ function netHostTick() {
   netSendFast({
     t: 'snap', ack: net.lastInSeq,
     a: tanks.map(serTank), s: shells.map(serShell),
+    mn: mines.map(m => [m.id, r1(m.x), r1(m.y), m.owner, r1(m.age)]),
     pu: powerup ? [r1(powerup.x), r1(powerup.y), powerup.kind, r1(powerup.age)] : 0,
     ph: phase, rt: r1(roundTime), sd: suddenDeath ? 1 : 0,
   });
@@ -2334,6 +2511,7 @@ function gmGuestRound(m) {
   matchCfg = { mode: 'online', aiLevel: 'rookie', roundsToWin: m.rw, arena: 'net',
                playerTank: m.tk[1][3], foeTank: m.tk[0][3], battle: null };
   roundArena = m.ar || 'maze';
+  trailOf = [(m.tr && m.tr[0]) || '', profile.trail || ''];
   layersDirty = true;
   unpackWalls(m.walls);
   pools = (m.pl || []).map(pp => ({ x: pp[0], y: pp[1], r: pp[2] }));
@@ -2382,12 +2560,7 @@ function gmGuestGover(m) {
   show('victory', true);
   sfx.win();
   if (won) {
-    for (let i = 0; i < 120; i++) confetti.push({
-      x: Math.random() * W, y: -20 - Math.random() * H * 0.5,
-      vx: (Math.random() - 0.5) * 60, vy: 60 + Math.random() * 120,
-      col: [P1_COL, P2_COL, '#ffd166', '#c792ea', '#ff6b6b'][(Math.random() * 5) | 0],
-      w: 4 + Math.random() * 5, h: 6 + Math.random() * 6, spin: Math.random() * 6, a: Math.random() * 6,
-    });
+    makeVicConfetti();
     if (!net.guestReported) {
       net.guestReported = true;
       totalWins++;
@@ -2401,6 +2574,8 @@ function updateGuest(dt) {
   if (phase === 'countdown' && phaseT >= 1.8) { phase = 'play'; phaseT = 0; sfx.go(); }
   // 1) capture + send + remember input
   const inp = readLocalInput();
+  const meT = tanks[1];
+  if (meT && tankDef(meT).cloak) meT.cloakT = (meT.cloakT || 0) + dt;
   net.seq++;
   net.pending.push({ q: net.seq, st: inp.target, th: inp.throttle });
   if (net.pending.length > 180) net.pending.shift();
@@ -2413,6 +2588,7 @@ function updateGuest(dt) {
     if (inp.fire && me.cd <= 0) {
       me.cd = tankDef(me).laser ? tankDef(me).fireCd
             : tankDef(me).fireCd * (me.power === 'rapid' ? 0.45 : 1);
+      me.cloakT = 0;
       sfx.fire();
       const gmp = muzzlePoint(me, me.a);
       const mx = gmp.x, my = gmp.y;
@@ -2428,6 +2604,7 @@ function updateGuest(dt) {
   net.predShells = net.predShells.filter(ps => ps.age < 0.24 && ps.x > 0 && ps.x < W && ps.y > 0 && ps.y < H);
   // 3) world from snapshots
   applyInterp();
+  updateTrails();
   updateParticles(dt);
 }
 function applyInterp() {
@@ -2449,6 +2626,7 @@ function applyInterp() {
     t0.y = a0[1] + (b0[1] - a0[1]) * alpha;
     t0.a = a0[2] + angDiff(a0[2], b0[2]) * alpha;
     t0.alive = !!b0[3]; t0.shield = !!b0[4]; t0.power = b0[5] || null; t0.powerT = b0[6];
+    t0.cloakT = b0[7] || 0;
   }
   const me = tanks[1];
   if (me && B.a) {
@@ -2485,6 +2663,8 @@ function applyInterp() {
     }
     net.prevAlive[i] = alive;
   }
+  mines = (B.mn || []).map(mm => ({ id: mm[0], x: mm[1], y: mm[2], owner: mm[3], age: mm[4],
+                                    col: mm[3] === 0 ? P1_COL : P2_COL }));
   powerup = B.pu ? { x: B.pu[0], y: B.pu[1], kind: B.pu[2], age: B.pu[3] } : null;
   roundTime = B.rt || 0; suddenDeath = !!B.sd;
   if (B.ph === 'play' && phase === 'countdown') { phase = 'play'; phaseT = 0; }
@@ -2495,6 +2675,7 @@ function netHandleMsg(m) {
   switch (m.t) {
     case 'hello':
       net.guestKind = TANKS[m.kind] ? m.kind : 'scout';
+      net.guestTrail = TRAILS[m.trail] ? m.trail : '';
       break;
     case 'in':
       if (net.role === 'host' && m.q > net.lastInSeq) {
