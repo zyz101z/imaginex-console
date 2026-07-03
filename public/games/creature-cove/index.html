@@ -823,18 +823,10 @@ function drawBuilding(kind, p, emo, t, activeBreed) {
   ctx.beginPath(); ctx.ellipse(0, 18 * ds, 66 * ds, 19 * ds, 0, 0, Math.PI * 2); ctx.fill();
   ctx.save(); ctx.translate(0, 16 * ds); groundShadow(78 * ds, 24 * ds); ctx.restore();
   if (spr[kind]) {
+    // front-view art with grass baked into the base (regen 2026-07-03) — the bottom
+    // edge IS the ground line: anchor it right on the yard's center
     const im = spr[kind], h = 165 * ds, w = h * (im.width / im.height);
-    ctx.drawImage(im, -w / 2, -h + 30 * ds, w, h);   // sit deeper in the yard
-    // nestle: the yard's front lip overlaps the sprite's base — buries the diagonal
-    // isometric bottom edge that read as "hovering" (user feedback x2)
-    ctx.save();
-    ctx.beginPath(); ctx.rect(-95 * ds, 21 * ds, 190 * ds, 34 * ds);
-    ctx.clip();
-    ctx.fillStyle = 'rgba(82,116,62,0.8)';
-    ctx.beginPath(); ctx.ellipse(0, 22 * ds, 82 * ds, 20 * ds, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(64,94,50,0.55)';
-    ctx.beginPath(); ctx.ellipse(0, 24 * ds, 60 * ds, 13 * ds, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
+    ctx.drawImage(im, -w / 2, -h + 20 * ds, w, h);
   } else {
     ctx.fillStyle = 'rgba(30,60,80,0.9)'; ctx.strokeStyle = 'rgba(127,216,200,0.5)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.roundRect(-52 * ds, -72 * ds, 104 * ds, 92 * ds, 12); ctx.fill(); ctx.stroke();
@@ -1310,6 +1302,15 @@ function handleTap(wx, wy) {
     return;
   }
   hideSel();
+  // the incubating egg itself (it sits beside the nursery; kids tap the THING, not the hut)
+  if (S.egg) {
+    const np = PLOTS.nursery, nds = dscale(np.y);
+    const ex = np.x + 100 * nds, ey = np.y - 20 * nds;
+    if (Math.abs(wx - ex) < 55 * nds && Math.abs(wy - ey) < 70 * nds) {
+      if (now() >= S.egg.readyAt) doHatch(); else openBreed();
+      return;
+    }
+  }
   // buildings
   const near = (p, r) => p && Math.abs(wx - p.x) < r * dscale(p.y) && Math.abs(wy - (p.y - 60 * dscale(p.y))) < (r + 45) * dscale(p.y);
   if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
