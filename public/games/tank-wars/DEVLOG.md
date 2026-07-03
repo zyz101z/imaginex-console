@@ -21,7 +21,8 @@ Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVL
 ## Session log — 2026-07-03
 | Ver | Commit | What |
 |---|---|---|
-| THEME3 | (this) | **SNOW FORTRESS + LAVA FIELD** (Meshy ~36cr, balance 1043): snow=corridors layout w/ continuous ice-rampart slabs + frost glints + dusk-snow floor; lava=pillars layout w/ boulder stamps + ember glow dots + basalt floor. Campaign b4→snow, b7→lava (same layouts). 9 arenas in rotation |
+| FX | (this) | **First gameplay mutators** (user feedback): SNOW = bright-snow floor + 15% tank slow (shared applyDrive multiplier — all controllers consistent) + team-colored shells on white; LAVA = 3-5 pulsing molten POOLS (block tanks via shared mover, shells fly over, AI pathing avoids, synced in online round msg). GOTCHA: connectivity check must expect 150-minus-poolcells; clear stale pools before genMaze. Countdown announces effects |
+| THEME3 | `13bd771` | **SNOW FORTRESS + LAVA FIELD** (Meshy ~36cr, balance 1043): snow=corridors layout w/ continuous ice-rampart slabs + frost glints + dusk-snow floor; lava=pillars layout w/ boulder stamps + ember glow dots + basalt floor. Campaign b4→snow, b7→lava (same layouts). 9 arenas in rotation |
 | FIX | `748ba5c` | **No friendly fire** (user request): own shells/big-shot/laser reflections pass through owner; AI stops dodging own shells. T17 (+ vacuous-test trap: zero-velocity shells skip collision substeps) |
 | FIX3 | (this) | 3 playtest bugs: HUD backing plate + trimmed theme overhang (pips hidden under canopy/slabs; slabs swallowed tanks); muzzlePoint() clamp kills the shoot-through-wall exploit (T18); anti-stuck failsafe eases toward cell center after 0.5s of blocked input |
 
