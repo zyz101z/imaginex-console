@@ -115,6 +115,8 @@
       — press where you want to go (combine keys for diagonals)</p>
       <p><b>Fire:</b> <span class="k">SPACE</span> <span class="k">F</span> <span class="k">ENTER</span> or <span class="k">M</span></p>
       <p style="color:#8fa5cf">Your tank shoots the way it's facing — tap a direction to aim.</p>
+      <p style="color:#8fa5cf">Shells in <b>your color</b> are yours and can't hurt you. Enemy-colored
+      shells with a <b>white-hot core</b> are the ones that kill — dodge those.</p>
       <p><b>Touch:</b> press the left side — a joystick appears under your thumb (tilt more
       to drive faster). Hold the <b style="color:#ff8f8f">FIRE</b> button on the right to shoot.</p>
       <p><b>Power-ups:</b> <b style="color:#ffd166">&#9650; TRIPLE</b> 3-way spread &nbsp;&bull;&nbsp;
@@ -1637,14 +1639,23 @@ function render() {
     }
     // powerup
     if (powerup) drawPowerup(powerup);
-    // shells
+    // shells — friend-or-foe readable at a glance (needed since friendly fire is off):
+    // YOUR shells glow calm in your color; ENEMY shells burn brighter with a white-hot
+    // core. One glance: my-color = harmless, their-color + hot core = get moving.
+    const myShellIdx = (net.role === 'guest') ? 1 : 0;
     for (const s of shells) {
       ctx.save();
-      const col = s.big ? '#c792ea' : ((s.heavy || roundArena === 'snow') ? s.col : '#f4f8ff');   // white-hot vanishes on snow
+      const mine = s.owner === myShellIdx;
+      const col = s.big ? '#c792ea' : s.col;
       ctx.shadowColor = col;
-      ctx.shadowBlur = (s.big || s.heavy) ? 18 : 10;
+      ctx.shadowBlur = (s.big || s.heavy) ? 18 : (mine ? 8 : 15);
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+      if (!mine) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(1.6, s.r * 0.45), 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
     }
     // laser beams (Photon)
@@ -2462,7 +2473,7 @@ function applyInterp() {
     }
   }
   net.prevShellIds = new Set((B.s || []).map(sh => sh[0]));
-  shells = out.concat(net.predShells.map(ps => ({ x: ps.x, y: ps.y, r: ps.r, col: ps.col, big: false, heavy: false })));
+  shells = out.concat(net.predShells.map(ps => ({ x: ps.x, y: ps.y, r: ps.r, col: ps.col, big: false, heavy: false, owner: 1 })));
   // death FX from alive-flag transitions
   if (B.a) for (let i = 0; i < 2; i++) {
     const alive = !!B.a[i][3];
