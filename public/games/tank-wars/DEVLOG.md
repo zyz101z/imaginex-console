@@ -1,30 +1,22 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-0. **✅ TURN relay RESOLVED 2026-07-02 (`ff606e4`)** — saga: legacy openrelay creds dead
-   (0 relay grants, verified empirically) → Metered signup → dashboard Secret Key kept
-   401ing ("Invalid API Key") → user pasted the dashboard's STATIC ICE-servers array →
-   verified in harness (relay granted @7.9s!) → wired server-side as the floor in
-   /api/rtc (mint path still preferred if the key ever works). The 7.9s allocation also
-   forced ICE gather window 6.5s→11s (would have cut relay from the SDP). Live endpoint
-   confirmed: turn:true, mode:static, 4 relay urls. LESSONS: (a) ALWAYS empirically test
-   TURN/ICE configs via the phone-home harness (scratchpad turntest2.html pattern);
-   (b) budget >8s for relay allocation. ⏳ NEXT: user+son remote connection test.
-   (superseded) **⏳ TURN relay: waiting on USER 5-min task** (2026-07-02 remote test failed: symmetric
-   NAT both sides + legacy openrelay creds are DEAD — empirically 0 relay grants). Wired:
-   `/api/rtc {action:'ice'}` mints TURN creds from Metered Open Relay (20GB/mo free) when
-   Vercel env vars **METERED_TURN_APP** (app subdomain) + **METERED_TURN_KEY** (API key)
-   exist; ONLINE VS screen shows "relay server: READY / not configured". USER steps:
-   dashboard.metered.ca signup (free, no card) → create app → copy app name + API key →
-   Vercel project settings → Environment Variables → add both → redeploy. Then re-run the
-   remote test; expect "network paths ready: ... + relay" on both ends.
-1. **MULTIPLAYER PHASE 2** (see MULTIPLAYER_PLAN.md): host-authoritative snapshot sync
-   over the Phase-1 DataChannel (20/s state down, 30/s inputs up, interpolation).
-   Then Phase 3 client-side prediction (REQUIRED for the remote 50-100ms use case).
-   ⏳ First: ask the user how the REMOTE CONNECTION TEST with his son went (ONLINE VS →
-   code → ping readout) — the measured RTT decides how hard to lean on prediction.
-2. Balance feel-check (user hasn't reported on v2.0 yet): Photon vs Ace, campaign curve,
-   scrap rate. Touch controls v2.1: user said "pretty good" — done unless new complaints.
+1. **Multiplayer Phase 4 polish** (MULTIPLAYER_PLAN.md): in-match RTT indicator, reconnect
+   grace on connection blips, learnings from real dad↔son matches.
+2. **Balance feel-check** still open: Photon vs Ace ("Lights Out"), campaign curve, scrap
+   rate. Also watch: Viper's thin barrels at battle size (regen ~6 credits if muddy).
+3. **More themes if wanted** (snow fortress / lava field floated): recipe = 1 sprite +
+   1 floor tile + LAYOUT_OF entry + label + pickArena weight. LESSON: merge wall runs
+   into big shapes (city v1 mistake); organic blobs can overlap-stamp (jungle).
+4. Loose end: Metered dashboard Secret Key still 401s at the mint endpoint — static creds
+   (in /api/rtc) work fine; only matters if user rotates credentials in their dashboard.
+
+## STATE SUMMARY (end of 2026-07-02)
+LIVE at www.imaginex.games: 5-tank garage w/ Meshy art, scrap economy, 10-battle campaign,
+7 rotating arenas (incl. Meshy-art JUNGLE + night CITY BLOCKS), rebuilt touch controls,
+user music + autoplay-unlock, ONLINE MULTIPLAYER (room codes, TURN relay, host-authoritative
++ client-side prediction — real dad↔son match confirmed working, 12ms same-LAN ping).
+Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVLOG/SPEC docs).
 
 ## Session log — 2026-07-02
 | Ver | Commit | What |
