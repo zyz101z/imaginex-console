@@ -296,6 +296,27 @@ let aiParams = AI_LEVELS.rookie;
 let matchScrap = 0;              // scrap earned so far this match (rounds + bonus)
 let shiftTimer = 0;              // 'shifting' arena wall churn
 let roundArena = 'maze';         // the arena actually generated THIS round ('mix' rotates)
+// LAVA FIELD hazard: molten pools — tanks can't cross them, shells fly straight over.
+let pools = [];                  // { x, y, r }
+let poolCells = new Set();       // 'cx,cy' cells blocked for AI pathing / connectivity
+const SNOW_SPEED = 0.85;         // SNOW arenas: deep snow slows every tank by 15%
+function genPools() {
+  pools = []; poolCells = new Set();
+  if (roundArena !== 'lava') return;
+  for (let tries = 0; tries < 40 && pools.length < 5; tries++) {
+    const cx = 2 + ((Math.random() * (COLS - 4)) | 0);
+    const cy = 2 + ((Math.random() * (ROWS - 4)) | 0);
+    const key = cx + ',' + cy;
+    if (poolCells.has(key)) continue;
+    // keep spawn corners clear
+    if ((cx <= 2 && cy <= 2) || (cx >= COLS - 3 && cy >= ROWS - 3) ||
+        (cx >= COLS - 3 && cy <= 2) || (cx <= 2 && cy >= ROWS - 3)) continue;
+    poolCells.add(key);
+    pools.push({ x: cx * CELL + CELL / 2, y: cy * CELL + CELL / 2, r: 17 + Math.random() * 8 });
+  }
+  // pools must not seal off any part of the arena
+  if (!allCellsReachable()) { pools = []; poolCells = new Set(); }
+}
 const ARENA_LABELS = { maze: 'CLASSIC MAZE', dense: 'DENSE MAZE', pillars: 'PILLAR FIELD',
                        corridors: 'THE LONG HALLS', shifting: 'SHIFTING WALLS',
                        jungle: 'JUNGLE', city: 'CITY BLOCKS',
@@ -504,7 +525,8 @@ function allCellsReachable() {
       seen.add(k); count++; q.push([nx, ny]);
     }
   }
-  return count === COLS * ROWS;
+  // pool cells are deliberately blocked — they don't count as needing to be reachable
+  return count === COLS * ROWS - poolCells.size;
 }
 function buildArena(kind) {
   vWall = []; hWall = [];
@@ -579,6 +601,7 @@ function buildArena(kind) {
   }
 }
 function genMaze(kind) {
+  pools = []; poolCells = new Set();   // stale pools would poison the connectivity retries
   const layout = LAYOUT_OF[kind] || kind || 'maze';
   for (let tries = 0; tries < 25; tries++) {   // pillars/corridors can rarely trap a cell
     buildArena(layout);
@@ -600,7 +623,8 @@ function removeWallRect(r) {
   buildWallRects();
   net.wallsDirty = true;   // online host: broadcast on the next snapshot tick
 }
-function cellOpen(ax, ay, bx, by) { // adjacency for BFS
+function cellOpen(ax, ay, bx, by) { // adjacency for BFS (lava pools block their cell)
+  if (poolCells.size && poolCells.has(bx + ',' + by)) return false;
   if (bx === ax + 1) return !vWall[ax][ay];
   if (bx === ax - 1) return !vWall[bx][by];
   if (by === ay + 1) return !hWall[ax][ay];
@@ -872,6 +896,7 @@ function startMatch(cfg) {
 function startRound() {
   roundArena = matchCfg.arena === 'mix' ? pickArena() : matchCfg.arena;
   genMaze(roundArena);
+  genPools();
   spawnTanks();
   shells = []; beams = []; particles = []; treads = []; powerup = null; confetti = [];
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
@@ -1011,7 +1036,7 @@ function steerToward(t, targetA, dt, drive) {
   const d = angDiff(t.a, targetA);
   const rot = TANK_ROT * dt;
   if (Math.abs(d) <= rot) t.a = targetA; else t.a += Math.sign(d) * rot;
-  if (drive && Math.abs(d) < 1.0) moveTank(t, tankDef(t).speed * dt * (Math.abs(d) < 0.4 ? 1 : 0.55));
+  if (drive && Math.abs(d) < 1.0) moveTank(t, tankDef(t).speed * (roundArena === 'snow' ? SNOW_SPEED : 1) * dt * (Math.abs(d) < 0.4 ? 1 : 0.55));
 }
 function tryAIFire(t, foe, dt) {
   const ai = t.ai;
@@ -1053,6 +1078,15 @@ function moveTankVec(t, dx, dy) {
       for (const r of wallRects) {
         const hit = circleRectPush(t.x, t.y, TANK_R, r);
         if (hit) { t.x += hit.nx * hit.push; t.y += hit.ny * hit.push; hitAny = true; }
+      }
+      for (const pl of pools) {   // molten pools: solid for tanks (shells ignore them)
+        const dx = t.x - pl.x, dy = t.y - pl.y;
+        const dist = Math.hypot(dx, dy), min = pl.r + TANK_R - 2;
+        if (dist < min && dist > 0.01) {
+          t.x = pl.x + (dx / dist) * min;
+          t.y = pl.y + (dy / dist) * min;
+          hitAny = true;
+        }
       }
       if (!hitAny) break;
     }
@@ -1197,7 +1231,8 @@ function readLocalInput() {
 // Used by local play, by the HOST driving the remote guest's tank from received inputs,
 // and by the GUEST's client-side prediction — one implementation so they never diverge.
 function applyDrive(t, target, throttle, dt) {
-  const speedMul = (t.power === 'rapid' ? 1.12 : 1) * (throttle || 1);
+  const speedMul = (t.power === 'rapid' ? 1.12 : 1) * (throttle || 1)
+    * (roundArena === 'snow' ? SNOW_SPEED : 1);   // deep snow: everyone 15% slower
   const ox = t.x, oy = t.y;
   if (target !== null && target !== undefined) {
     const step = tankDef(t).speed * speedMul * dt;
@@ -1575,6 +1610,22 @@ function render() {
   }
 
   if (mode === 'play') {
+    // molten pools (lava arena): pulsing glow; tanks can't cross, shells fly over
+    for (const pl of pools) {
+      const pulse = 0.82 + 0.18 * Math.sin(performance.now() / 300 + pl.x);
+      const grad = ctx.createRadialGradient(pl.x, pl.y, 2, pl.x, pl.y, pl.r);
+      grad.addColorStop(0, 'rgba(255,190,90,' + (0.95 * pulse) + ')');
+      grad.addColorStop(0.55, 'rgba(255,110,30,' + (0.85 * pulse) + ')');
+      grad.addColorStop(1, 'rgba(120,30,5,0.9)');
+      ctx.save();
+      ctx.shadowColor = '#ff7a20'; ctx.shadowBlur = 18 * pulse;
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,12,4,0.9)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      if (Math.random() < 0.02) spawnParticles(pl.x + (Math.random() - 0.5) * pl.r, pl.y + (Math.random() - 0.5) * pl.r, 1, '#ffb060', 30, 0.8);
+    }
     // tread marks
     for (const tr of treads) {
       ctx.save();
@@ -1589,7 +1640,7 @@ function render() {
     // shells
     for (const s of shells) {
       ctx.save();
-      const col = s.big ? '#c792ea' : (s.heavy ? s.col : '#f4f8ff');
+      const col = s.big ? '#c792ea' : ((s.heavy || roundArena === 'snow') ? s.col : '#f4f8ff');   // white-hot vanishes on snow
       ctx.shadowColor = col;
       ctx.shadowBlur = (s.big || s.heavy) ? 18 : 10;
       ctx.fillStyle = col;
@@ -1641,6 +1692,9 @@ function render() {
       const label = phaseT < 1.5 ? String(Math.max(1, n)) : 'GO!';
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
       drawBanner(ARENA_LABELS[roundArena] || '', '#8fa5cf', 20, H / 2 + 64);
+      const fxNote = roundArena === 'snow' ? 'deep snow — all tanks 15% slower'
+        : roundArena === 'lava' ? 'molten pools — tanks blocked, shells fly over' : '';
+      if (fxNote) drawBanner(fxNote, '#6b7ea3', 14, H / 2 + 92);
       if (!render._lastCount || render._lastCount !== label) { render._lastCount = label; label === 'GO!' ? sfx.go() : sfx.count(); }
     } else render._lastCount = null;
     if (phase === 'roundover' && banner) drawBanner(banner, bannerCol, 46);
@@ -2245,6 +2299,7 @@ function netSendRound() {
   netSendGame({
     t: 'round', round: roundNum, rw: matchCfg.roundsToWin,
     sc: [tanks[0].score, tanks[1].score], walls: packWalls(), ar: roundArena,
+    pl: pools.map(pp => [r1(pp.x), r1(pp.y), r1(pp.r)]),
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind]),
   });
   net.wallsDirty = false;
@@ -2268,7 +2323,10 @@ function gmGuestRound(m) {
   matchCfg = { mode: 'online', aiLevel: 'rookie', roundsToWin: m.rw, arena: 'net',
                playerTank: m.tk[1][3], foeTank: m.tk[0][3], battle: null };
   roundArena = m.ar || 'maze';
+  layersDirty = true;
   unpackWalls(m.walls);
+  pools = (m.pl || []).map(pp => ({ x: pp[0], y: pp[1], r: pp[2] }));
+  poolCells = new Set();   // guest doesn't run BFS; circles alone drive its prediction
   tanks = [makeTank(0, 0, 0, m.tk[0][3]), makeTank(1, 0, 0, m.tk[1][3])];
   for (let i = 0; i < 2; i++) { tanks[i].x = m.tk[i][0]; tanks[i].y = m.tk[i][1]; tanks[i].a = m.tk[i][2]; }
   tanks[0].score = m.sc[0]; tanks[1].score = m.sc[1];
