@@ -8,9 +8,10 @@
 2. From playtest → M3: variant Meshy art waves (image-to-image restyles, ~270cr),
    day/night tint, more SFX/ambient, discovery fanfare polish, decorations as sprites.
 3. M4 launch: user cover art, flip `coming_soon` → `available`, announce.
-4. Known nits: farm plots sit high on the hill (overlap mountains a bit); Nessie's
-   water spot is near the right edge (drag to see her); leaderboard POST shape assumed
-   from siblings — verify against /api/leaderboard once real scores flow.
+4. Known nit: leaderboard POST shape assumed from siblings — verify once real scores flow.
+5. GROUNDING PASS shipped (user feedback: buildings hovered/scale off): dscale(y) depth
+   perspective + radial contact shadows + plots anchored to bg features + painter order.
+   LESSON for sprite-on-painting scenes: depth-scale EVERYTHING or it floats.
 
 ## STATE (2026-07-03, commit c19b0e7) — M0+M1+M2 SHIPPED IN ONE SESSION
 - **M0 engine**: 15-species element lattice, union→weighted-roll breeding (parents can
