@@ -792,7 +792,7 @@ function fireLaser(t) {
       const [x1, y1, x2, y2] = segs[si];
       for (const tk of tanks) {
         if (!tk.alive) continue;
-        if (si === 0 && tk.i === t.i) continue;   // can't shoot yourself point-blank; reflections CAN
+        if (tk.i === t.i) continue;   // no friendly fire — reflections included
         if (segCircleHit(x1, y1, x2, y2, tk.x, tk.y, TANK_R)) {
           if (tk.shield) {
             tk.shield = false; sfx.shield();
@@ -936,6 +936,7 @@ function aiThink(t, foe, dt) {
   if (aiParams.dodge) {
     ai.dodge -= dt;
     for (const s of shells) {
+      if (s.owner === t.i) continue;   // own shells are harmless now — don't dodge them
       const rx = t.x - s.x, ry = t.y - s.y;
       const dist = Math.sqrt(rx * rx + ry * ry);
       if (dist > 190) continue;
@@ -1077,10 +1078,11 @@ function updateShells(dt) {
         break;
       }
       if (dead) break;
-      // tank hits
+      // tank hits — NO FRIENDLY FIRE: your own shells never hurt you (user request;
+      // the classic self-kill rule was claiming too many of our own tanks)
       for (const t of tanks) {
         if (!t.alive) continue;
-        if (s.grace > 0 && s.owner === t.i) continue;
+        if (s.owner === t.i) continue;
         const d = Math.hypot(s.x - t.x, s.y - t.y);
         if (d < s.r + TANK_R - 2) {
           if (t.shield) {
