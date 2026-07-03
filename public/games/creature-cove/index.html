@@ -824,7 +824,17 @@ function drawBuilding(kind, p, emo, t, activeBreed) {
   ctx.save(); ctx.translate(0, 16 * ds); groundShadow(78 * ds, 24 * ds); ctx.restore();
   if (spr[kind]) {
     const im = spr[kind], h = 165 * ds, w = h * (im.width / im.height);
-    ctx.drawImage(im, -w / 2, -h + 24 * ds, w, h);
+    ctx.drawImage(im, -w / 2, -h + 30 * ds, w, h);   // sit deeper in the yard
+    // nestle: the yard's front lip overlaps the sprite's base — buries the diagonal
+    // isometric bottom edge that read as "hovering" (user feedback x2)
+    ctx.save();
+    ctx.beginPath(); ctx.rect(-95 * ds, 21 * ds, 190 * ds, 34 * ds);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(82,116,62,0.8)';
+    ctx.beginPath(); ctx.ellipse(0, 22 * ds, 82 * ds, 20 * ds, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(64,94,50,0.55)';
+    ctx.beginPath(); ctx.ellipse(0, 24 * ds, 60 * ds, 13 * ds, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   } else {
     ctx.fillStyle = 'rgba(30,60,80,0.9)'; ctx.strokeStyle = 'rgba(127,216,200,0.5)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.roundRect(-52 * ds, -72 * ds, 104 * ds, 92 * ds, 12); ctx.fill(); ctx.stroke();
