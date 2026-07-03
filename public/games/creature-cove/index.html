@@ -139,6 +139,25 @@
     border: 2px solid rgba(255,209,102,0.65); background: rgba(255,209,102,0.15); color: #ffd166; cursor: pointer;
   }
 
+  #hatchRays {
+    position: absolute; width: 480px; height: 480px; border-radius: 50%; opacity: 0;
+    background: conic-gradient(rgba(255,209,102,0.35) 0 12deg, transparent 12deg 30deg,
+      rgba(255,209,102,0.35) 30deg 42deg, transparent 42deg 60deg, rgba(255,209,102,0.35) 60deg 72deg,
+      transparent 72deg 90deg, rgba(255,209,102,0.35) 90deg 102deg, transparent 102deg 120deg,
+      rgba(255,209,102,0.35) 120deg 132deg, transparent 132deg 150deg, rgba(255,209,102,0.35) 150deg 162deg,
+      transparent 162deg 180deg, rgba(255,209,102,0.35) 180deg 192deg, transparent 192deg 210deg,
+      rgba(255,209,102,0.35) 210deg 222deg, transparent 222deg 240deg, rgba(255,209,102,0.35) 240deg 252deg,
+      transparent 252deg 270deg, rgba(255,209,102,0.35) 270deg 282deg, transparent 282deg 300deg,
+      rgba(255,209,102,0.35) 300deg 312deg, transparent 312deg 330deg, rgba(255,209,102,0.35) 330deg 342deg,
+      transparent 342deg 360deg);
+    animation: raysSpin 14s linear infinite; transition: opacity 0.5s; pointer-events: none;
+  }
+  @keyframes raysSpin { to { transform: rotate(360deg); } }
+  #hatchFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.45s; }
+  @keyframes popIn { 0% { transform: scale(0); } 55% { transform: scale(1.22); } 75% { transform: scale(0.94); } 100% { transform: scale(1); } }
+  .popIn { animation: popIn 0.55s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
+  .chip { position: absolute; width: 11px; height: 11px; border-radius: 3px; pointer-events: none; transition: transform 0.9s cubic-bezier(0.15, 0.6, 0.4, 1), opacity 0.9s; }
+
   /* toasts */
   #toasts { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
   .toast {
@@ -191,10 +210,12 @@
 </div></div>
 
 <div id="hatchWrap">
+  <div id="hatchRays"></div>
   <div id="hatchEgg">🥚</div>
   <div id="hatchName"></div>
   <div id="hatchSub"></div>
   <button id="hatchBtn" style="display:none">PLACE IN COVE</button>
+  <div id="hatchFlash"></div>
 </div>
 
 <div id="toasts"></div>
@@ -505,14 +526,60 @@ function tone(freq, dur, type, vol, when) {
   g.gain.setValueAtTime(vol || 0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + dur);
 }
+function noise(dur, vol, freq) {
+  if (muted) return;
+  const a = ac(); if (!a) return;
+  const len = Math.floor(a.sampleRate * dur);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq || 1600; f.Q.value = 0.9;
+  const g = a.createGain(); g.gain.value = vol || 0.15;
+  src.connect(f); f.connect(g); g.connect(a.destination); src.start();
+}
+function sweep(f0, f1, dur, type, vol) {
+  if (muted) return;
+  const a = ac(); if (!a) return;
+  const t0 = a.currentTime;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t0 + dur);
+  g.gain.setValueAtTime(vol || 0.08, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0 + dur);
+}
 const sfx = {
   coin:  () => { tone(880, 0.08, 'square', 0.05); tone(1320, 0.1, 'square', 0.04, 0.05); },
   feed:  () => { tone(330, 0.1, 'triangle', 0.08); tone(440, 0.12, 'triangle', 0.08, 0.08); },
   tap:   () => tone(520, 0.05, 'sine', 0.05),
   breed: () => { tone(392, 0.12, 'sine', 0.08); tone(494, 0.12, 'sine', 0.08, 0.1); tone(587, 0.2, 'sine', 0.08, 0.2); },
-  hatch: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, 'triangle', 0.09, i * 0.09)); },
-  disc:  () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'sine', 0.1, i * 0.11)); },
-  rare:  () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.2, 'sine', 0.08, i * 0.07)); },
+  knock: (n) => { noise(0.05 + n * 0.03, 0.14 + n * 0.08, 800 + n * 350); tone(115 - n * 12, 0.09, 'sine', 0.12); },
+  crackBig: () => { noise(0.3, 0.32, 1100); noise(0.14, 0.2, 2600); tone(75, 0.22, 'sine', 0.16); },
+  whoosh: () => sweep(750, 180, 0.5, 'sine', 0.1),
+  thump: () => { tone(65, 0.16, 'sine', 0.18); noise(0.08, 0.12, 450); },
+  hatch: () => {   // warm little fanfare + soft bass
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'triangle', 0.1, i * 0.09));
+    tone(131, 0.5, 'sine', 0.09, 0.05);
+  },
+  disc: () => {    // DISCOVERY: full rising fanfare + bass + sparkle shimmer
+    [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.26, 'triangle', 0.11, i * 0.11));
+    tone(98, 0.9, 'sine', 0.1, 0.1);
+    tone(1568, 0.5, 'sine', 0.06, 0.66);
+    for (let i = 0; i < 6; i++) tone(1400 + Math.random() * 1700, 0.14, 'sine', 0.045, 0.5 + i * 0.08);
+  },
+  rare: () => {    // magical glissando + chord
+    sweep(400, 1600, 0.5, 'sine', 0.09);
+    [784, 988, 1319].forEach((f, i) => tone(f, 0.4, 'triangle', 0.09, 0.35 + i * 0.03));
+    for (let i = 0; i < 4; i++) tone(1800 + Math.random() * 1200, 0.12, 'sine', 0.04, 0.4 + i * 0.09);
+  },
+  epicSting: () => {
+    sweep(250, 2000, 0.75, 'sawtooth', 0.05);
+    [659, 830, 988, 1319].forEach((f, i) => tone(f, 0.55, 'triangle', 0.1, 0.5 + i * 0.04));
+    noise(0.5, 0.08, 3200);
+    tone(82, 1.1, 'sine', 0.12, 0.45);
+  },
   buy:   () => { tone(660, 0.09, 'square', 0.06); tone(880, 0.12, 'square', 0.05, 0.07); },
   err:   () => tone(160, 0.15, 'sawtooth', 0.06),
 };
@@ -579,6 +646,7 @@ function resize() {
 window.addEventListener('resize', resize);
 
 let particles = [];
+let eggFly = null;   // { t0, dur, x0, y0, x1, y1 } — the breeding->nursery hand-off flight
 function puff(x, y, n, col, txt) {
   for (let i = 0; i < n; i++) particles.push({
     x, y, vx: (rng() - 0.5) * 90, vy: -60 - rng() * 90, life: 0.9, max: 0.9,
@@ -664,8 +732,26 @@ function drawScene(t) {
     const b = S.breeds[d], p = d === 0 ? PLOTS.den : PLOTS.den2;
     if (b) drawTimer(p.x, p.y - 165 * dscale(p.y), b.readyAt, '💕', now() >= b.readyAt);
   }
+  // egg flight from the den to the nursery (transition juice)
+  if (eggFly) {
+    const k = Math.min(1, (t - eggFly.t0) / eggFly.dur);
+    const fx = eggFly.x0 + (eggFly.x1 - eggFly.x0) * k;
+    const fy = eggFly.y0 + (eggFly.y1 - eggFly.y0) * k - Math.sin(Math.PI * k) * 160;
+    ctx.save();
+    ctx.translate(fx, fy);
+    ctx.rotate(Math.sin(k * 9) * 0.25);
+    if (spr.egg) ctx.drawImage(spr.egg, -20, -26, 40, 50);
+    else { ctx.font = '36px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 12); }
+    ctx.restore();
+    if (rng() < 0.6) particles.push({ x: fx, y: fy + 10, vx: (rng() - 0.5) * 40, vy: (rng() - 0.5) * 30, life: 0.5, max: 0.5, col: '#ffe9b0', r: 2.2 });
+    if (k >= 1) {
+      eggFly = null;
+      sfx.thump();
+      puff(fx, fy + 14, 12, '#cfc39e');
+    }
+  }
   // nursery egg
-  if (S.egg) {
+  if (S.egg && !eggFly) {
     const p = PLOTS.nursery;
     const wob = Math.sin(t / 130) * (now() >= S.egg.readyAt ? 6 : 2);
     ctx.save();
@@ -938,7 +1024,16 @@ function renderBreed(body) {
       row.appendChild(info);
       if (ready && !S.egg) {
         const btn = document.createElement('button'); btn.className = 'cardBtn green'; btn.textContent = 'TO NURSERY';
-        btn.onclick = () => { claimBreed(d); sfx.breed(); save(); renderBreed(body); refreshTop(); };
+        btn.onclick = () => {
+          claimBreed(d);
+          const from = d === 0 ? PLOTS.den : PLOTS.den2;
+          const nds = dscale(PLOTS.nursery.y);
+          eggFly = { t0: performance.now(), dur: 1100, x0: from.x, y0: from.y - 60 * dscale(from.y),
+                     x1: PLOTS.nursery.x + 100 * nds, y1: PLOTS.nursery.y - 20 * nds };
+          sfx.whoosh();
+          closeModal();   // let the flight play out in the scene
+          save(); refreshTop();
+        };
         row.appendChild(btn);
       } else if (ready && S.egg) {
         const btn = document.createElement('button'); btn.className = 'cardBtn cant'; btn.textContent = 'NURSERY FULL';
@@ -1031,35 +1126,91 @@ function doHatch() {
   const eggData = S.egg;
   const wrap = $('hatchWrap');
   wrap.style.display = 'flex';
-  const eggEl = $('hatchEgg');
+  const eggEl = $('hatchEgg'), rays = $('hatchRays'), flash = $('hatchFlash');
+  rays.style.opacity = '0';
+  flash.style.opacity = '0';
+  eggEl.classList.remove('popIn');
+  eggEl.style.display = 'block';
   eggEl.innerHTML = spr.egg ? '<img src="sprites/egg.png">' : '🥚';
+  eggEl.style.transform = 'none';
   if (eggData.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 24px #8fd8ff)';
   else if (eggData.v === 'epic') eggEl.style.filter = 'drop-shadow(0 0 34px #ffb64d)';
   else eggEl.style.filter = '';
-  $('hatchName').textContent = eggData.v !== 'normal' ? 'The egg is SHIMMERING…' : 'Tap the egg!';
-  $('hatchSub').textContent = 'crack it open';
+  $('hatchName').textContent = eggData.v !== 'normal' ? 'The egg is SHIMMERING…' : 'Tap the egg to crack it!';
+  $('hatchSub').textContent = 'tap tap tap!';
   $('hatchBtn').style.display = 'none';
+
+  const chipColors = ['#efe6d0', '#e0d4b8', '#f5eedd', '#cfc39e'];
+  function shellChips(n, spread) {
+    const rect = eggEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    for (let i = 0; i < n; i++) {
+      const ch = document.createElement('div');
+      ch.className = 'chip';
+      ch.style.background = chipColors[i % chipColors.length];
+      ch.style.left = cx + 'px'; ch.style.top = cy + 'px';
+      document.body.appendChild(ch);
+      const a = Math.random() * Math.PI * 2, dist = spread + Math.random() * spread;
+      requestAnimationFrame(() => {
+        ch.style.transform = 'translate(' + (Math.cos(a) * dist) + 'px,' + (Math.sin(a) * dist + 70) + 'px) rotate(' + ((Math.random() - 0.5) * 540) + 'deg)';
+        ch.style.opacity = '0';
+      });
+      setTimeout(() => ch.remove(), 1000);
+    }
+  }
+
   let taps = 0;
   eggEl.onclick = () => {
     taps++;
-    sfx.tap();
-    eggEl.style.transform = 'rotate(' + ((taps % 2 ? 1 : -1) * (6 + taps * 3)) + 'deg) scale(' + (1 + taps * 0.05) + ')';
-    if (taps >= 3) {
-      eggEl.onclick = null;
-      const res = hatchEgg();
-      if (!res) { wrap.style.display = 'none'; return; }
-      const c = res.c;
-      eggEl.style.transform = 'none';
-      eggEl.innerHTML = spr[c.sp] ? '<img src="sprites/' + c.sp + '.png">' : '<span style="font-size:110px">' + SPECIES[c.sp].emo + '</span>';
-      if (c.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 24px #8fd8ff)';
-      if (c.v === 'epic') eggEl.style.filter = 'drop-shadow(0 0 34px #ffb64d)';
-      $('hatchName').textContent = (res.isNew ? '🎉 NEW! ' : '') + vName(c);
-      $('hatchSub').textContent = res.isNew ? 'Added to your Bestiary!' : 'Another one for the cove.';
-      if (res.isNew) sfx.disc(); else if (c.v !== 'normal') sfx.rare(); else sfx.hatch();
-      $('hatchBtn').style.display = 'block';
-      $('hatchBtn').onclick = () => { wrap.style.display = 'none'; save(); refreshTop(); maybeSubmitScore(); };
-      save(); refreshTop();
+    if (taps < 3) {
+      sfx.knock(taps);
+      shellChips(3 + taps * 2, 40 + taps * 25);
+      // escalating shake
+      const mag = 5 + taps * 5;
+      let i = 0;
+      const shake = setInterval(() => {
+        i++;
+        eggEl.style.transform = 'translate(' + ((Math.random() - 0.5) * mag) + 'px,' + ((Math.random() - 0.5) * mag * 0.6) + 'px) rotate(' + ((Math.random() - 0.5) * (6 + taps * 5)) + 'deg) scale(' + (1 + taps * 0.06) + ')';
+        if (i > 6) { clearInterval(shake); eggEl.style.transform = 'scale(' + (1 + taps * 0.06) + ')'; }
+      }, 30);
+      $('hatchSub').textContent = taps === 1 ? 'it wobbled!' : 'something\u2019s moving in there!';
+      return;
     }
+    if (taps > 3) return;
+    // THE CRACK
+    eggEl.onclick = null;
+    sfx.crackBig();
+    shellChips(18, 150);
+    flash.style.opacity = '1';
+    setTimeout(() => {
+      const res = hatchEgg();
+      if (!res) { wrap.style.display = 'none'; flash.style.opacity = '0'; return; }
+      const c = res.c;
+      flash.style.opacity = '0';
+      eggEl.innerHTML = spr[c.sp] ? '<img src="sprites/' + c.sp + '.png">' : '<span style="font-size:110px">' + SPECIES[c.sp].emo + '</span>';
+      eggEl.classList.add('popIn');
+      eggEl.style.transform = 'none';
+      if (c.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 28px #8fd8ff)';
+      else if (c.v === 'epic') eggEl.style.filter = 'drop-shadow(0 0 40px #ffb64d)';
+      else eggEl.style.filter = 'drop-shadow(0 6px 20px rgba(0,0,0,0.6))';
+      if (res.isNew || c.v !== 'normal') {
+        rays.style.opacity = '1';
+        if (c.v === 'rare') rays.style.filter = 'hue-rotate(160deg)';
+        else if (c.v === 'epic') rays.style.filter = 'saturate(1.6)';
+        else rays.style.filter = '';
+      }
+      const nm = $('hatchName');
+      nm.textContent = (res.isNew ? '🎉 NEW! ' : '') + vName(c);
+      nm.classList.remove('popIn'); void nm.offsetWidth; nm.classList.add('popIn');
+      $('hatchSub').textContent = res.isNew ? 'Added to your Bestiary!' : 'Another one for the cove.';
+      if (c.v === 'epic') sfx.epicSting();
+      else if (res.isNew) sfx.disc();
+      else if (c.v === 'rare') sfx.rare();
+      else sfx.hatch();
+      $('hatchBtn').style.display = 'block';
+      $('hatchBtn').onclick = () => { wrap.style.display = 'none'; rays.style.opacity = '0'; save(); refreshTop(); maybeSubmitScore(); };
+      save(); refreshTop();
+    }, 380);
   };
 }
 
