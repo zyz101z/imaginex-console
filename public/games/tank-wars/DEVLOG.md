@@ -21,6 +21,7 @@ Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVL
 ## Session log — 2026-07-03
 | Ver | Commit | What |
 |---|---|---|
+| ORDER | (this) | Campaign 9/10 swap (user: 9 harder than 10): b9 = TILT! (ace pinball, shifting), b10 THE GENERAL = ace photon, corridors. Rewards positional |
 | SINKS | `237a3ab` | **MINELAYER (2.5k: auto-mines while driving, max 3, arm 1s, enemy-only, AI dodges) + GHOST (4k: cloak after 1.2s no-fire, treads stay visible, snapshot-synced) + 4 shell trails (300-900, online-synced, per-shell-id tracking for guest) + 3 victory styles (500). Garage cosmetics sections. Meshy sprites ~18cr (bal 1025). T21-T23; 76+29+6 green. ~10k new scrap sinks |
 | FX | `14415fd` | **First gameplay mutators** (user feedback): SNOW = bright-snow floor + 15% tank slow (shared applyDrive multiplier — all controllers consistent) + team-colored shells on white; LAVA = 3-5 pulsing molten POOLS (block tanks via shared mover, shells fly over, AI pathing avoids, synced in online round msg). GOTCHA: connectivity check must expect 150-minus-poolcells; clear stale pools before genMaze. Countdown announces effects |
 | THEME3 | `13bd771` | **SNOW FORTRESS + LAVA FIELD** (Meshy ~36cr, balance 1043): snow=corridors layout w/ continuous ice-rampart slabs + frost glints + dusk-snow floor; lava=pillars layout w/ boulder stamps + ember glow dots + basalt floor. Campaign b4→snow, b7→lava (same layouts). 9 arenas in rotation |
