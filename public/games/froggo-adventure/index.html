@@ -975,6 +975,10 @@ let shockbots;      // electrified patrollers (Zone 2+)
 let checkpoints;    // mid-level respawn totems (Zone 2+)
 let climbWalls = []; // climbable solid walls (Zone 3+)
 let oneUps = [];     // collectible 1UP heart pickups (one-shot per act)
+// Hearts already grabbed THIS RUN ('zone-act-index'). Without this, every death rebuilt
+// the act with collected:false — die near the heart, re-grab it, repeat forever (user
+// found the farm). Cleared when a fresh run starts; a new run earns them back.
+let collectedOneUps = new Set();
 let activeCheckpoint = null; // {x,y} of touched checkpoint for current act
 let currentZone = 0;
 let currentAct = 0;
@@ -1670,7 +1674,8 @@ function loadAct(actIdx) {
   checkpoints = [];
   springs = [];
   climbWalls = L.climbWalls ? L.climbWalls.map(w => ({ ...w })) : [];
-  oneUps = L.oneUps ? L.oneUps.map(o => ({ ...o, collected: false })) : [];
+  oneUps = L.oneUps ? L.oneUps.map((o, i) => ({ ...o, idx: i,
+    collected: collectedOneUps.has(currentZone + '-' + currentAct + '-' + i) })) : [];
   activeCheckpoint = null;
   L.makeEntities();
   goalParticles = [];
@@ -1857,6 +1862,7 @@ function resetLevel() {
   totalDropletsZone = 0;
   totalBugbotsZone = 0;
   lives = MAX_LIVES;
+  collectedOneUps = new Set();
   currentZone = 0;
   loadAct(0);
   bossArenaLocked = false;
@@ -2194,6 +2200,7 @@ function update(dt) {
       if (o.collected) continue;
       if (rectsOverlap(froggo.x, froggo.y, froggo.w, froggo.h, o.x - 14, o.y - 12, 28, 24)) {
         o.collected = true;
+        collectedOneUps.add(currentZone + '-' + currentAct + '-' + o.idx);
         if (lives < LIVES_CAP) lives += 1;
         oneUp = { startMs: now };   // re-uses the existing "1 UP!" banner + sfx
         sfxOneUp();
@@ -3546,6 +3553,7 @@ function startZone(zoneIdx) {
   totalDropletsZone = 0;
   totalBugbotsZone = 0;
   lives = MAX_LIVES;
+  collectedOneUps = new Set();
   currentZone = zoneIdx;
   loadAct(0);
   bossArenaLocked = false;
