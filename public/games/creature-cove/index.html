@@ -245,7 +245,8 @@ const SPECIES = {
   dragon:  { name: 'DRAGON',  el: 'EMNB', tier: 3, gpm: 50,  breedMin: 120, food: 150, cost: 50000, emo: '🐉', lore: 'All four elements. The crown of the cove.' },
 };
 const SP_KEYS = Object.keys(SPECIES);
-const TIER_WEIGHT = [40, 25, 8, 2];
+const TIER_WEIGHT = [30, 25, 12, 5];
+const PARENT_SHY = 0.4;   // the den likes making something NEW: parents at 40% weight (user tune)
 
 // Variants: gold multiplier / breed-time multiplier (user-set: rare 2x/2x, epic 4x/3x)
 const VARIANTS = {
@@ -391,7 +392,7 @@ function breedPool(spA, spB) {
 }
 function rollSpecies(spA, spB) {
   const pool = breedPool(spA, spB);
-  const weights = pool.map(k => TIER_WEIGHT[SPECIES[k].tier]);
+  const weights = pool.map(k => TIER_WEIGHT[SPECIES[k].tier] * ((k === spA || k === spB) ? PARENT_SHY : 1));
   let t = weights.reduce((a, b) => a + b, 0) * rng();
   for (let i = 0; i < pool.length; i++) { t -= weights[i]; if (t <= 0) return pool[i]; }
   return pool[pool.length - 1];

@@ -83,7 +83,10 @@ The roster fills the element lattice COMPLETELY (4 + 6 + 4 + 1 = **15 creatures*
    - Gnome × Fairy → usually Genie, sometimes a Gnome or Fairy back.
    - Genie × Yeti (union = all 4) → Dragon at ~2%, triples ~8% each, else hybrids/bases
      from the pool. Failed dragon rolls still give something useful.
-4. Species weights (tunable): base 40, hybrid 25, triple 8, dragon 2 — normalized over the pool.
+4. Species weights (TUNED 2026-07-03): base 30, hybrid 25, triple 12, dragon 5, and the
+   two PARENT species roll at 40% weight ("the den likes making something new" — user
+   asked for higher non-parent odds). Real numbers: Gnome×Fairy → Genie 51%; an
+   all-element pair → Dragon ~1.7%, any triple ~16%.
 5. Breed time = the *result's* time (a failed dragon attempt that rolls Ogre takes
    Ogre's 3 min, not 2 h — fast retries, and a long timer becomes the tell: something good!).
    Base-species results (a parent coming back) take 1 min. **Timer scale (user-set
