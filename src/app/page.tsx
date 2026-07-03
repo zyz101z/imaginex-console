@@ -579,6 +579,7 @@ const GAME_SCORE_LABELS: Record<string, string> = {
   "tennis-world": "REP",
   "divided-states": "Wins",
   "tank-wars": "Wins",
+  "creature-cove": "Lifetime Gold",
 };
 
 function LeaderboardView() {

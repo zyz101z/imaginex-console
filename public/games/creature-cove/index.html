@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Creature Cove</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #071420; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; color: #dff2f0; user-select: none; }
+  #cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+  /* ---------- top bar ---------- */
+  #topbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 52px; display: flex; gap: 10px;
+    align-items: center; padding: 0 12px; pointer-events: none; z-index: 10;
+    background: linear-gradient(180deg, rgba(4,12,20,0.85), rgba(4,12,20,0));
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px; background: rgba(10,26,38,0.9);
+    border: 1px solid rgba(120,220,200,0.25); border-radius: 20px; padding: 5px 14px;
+    font-weight: 800; font-size: 15px; pointer-events: auto;
+  }
+  .pill .ic { font-size: 16px; }
+  #goldPill { color: #ffd166; } #foodPill { color: #9be36e; } #padPill { color: #7fd8c8; }
+  #titleTag { margin-left: auto; font-weight: 900; letter-spacing: 2px; color: #7fd8c8; opacity: 0.85; font-size: 13px; }
+
+  /* ---------- bottom nav ---------- */
+  #nav {
+    position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; z-index: 10;
+  }
+  .navBtn {
+    min-width: 74px; padding: 10px 16px; border-radius: 14px; border: 1.5px solid rgba(120,220,200,0.35);
+    background: rgba(10,26,38,0.92); color: #dff2f0; font-weight: 800; font-size: 14px;
+    cursor: pointer; text-align: center; transition: transform 0.08s;
+  }
+  .navBtn:active { transform: scale(0.94); }
+  .navBtn .big { font-size: 20px; display: block; }
+  .navBtn.glow { border-color: #ffd166; box-shadow: 0 0 14px rgba(255,209,102,0.35); }
+
+  /* ---------- modals ---------- */
+  #modalWrap {
+    position: absolute; inset: 0; background: rgba(3,9,15,0.72); z-index: 20; display: none;
+    align-items: center; justify-content: center;
+  }
+  #modal {
+    width: min(560px, 94vw); max-height: 86vh; background: linear-gradient(180deg, #0d2233, #081826);
+    border: 1.5px solid rgba(120,220,200,0.4); border-radius: 18px; padding: 18px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #modalTitle { font-size: 19px; font-weight: 900; letter-spacing: 1px; color: #7fd8c8; margin-bottom: 10px; display: flex; align-items: center; }
+  #modalBody { overflow-y: auto; flex: 1; }
+  .closeX {
+    margin-left: auto; background: rgba(255,255,255,0.08); border: none; color: #9fb8c8;
+    width: 32px; height: 32px; border-radius: 10px; font-size: 15px; font-weight: 900; cursor: pointer;
+  }
+  .tabRow { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .tab {
+    padding: 7px 13px; border-radius: 10px; background: rgba(255,255,255,0.05); border: 1px solid transparent;
+    color: #9fb8c8; font-weight: 800; font-size: 13px; cursor: pointer;
+  }
+  .tab.on { background: rgba(127,216,200,0.15); border-color: rgba(127,216,200,0.5); color: #7fd8c8; }
+
+  .card {
+    display: flex; gap: 12px; align-items: center; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(120,220,200,0.18); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .card.sel { border-color: #ffd166; }
+  .cardArt { width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; flex: none; position: relative; }
+  .cardArt img { max-width: 100%; max-height: 100%; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5)); }
+  .cardArt .emo { font-size: 40px; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5)); }
+  .cardInfo { flex: 1; min-width: 0; }
+  .cardName { font-weight: 900; font-size: 15px; }
+  .cardSub { font-size: 12px; color: #9fb8c8; margin-top: 2px; }
+  .cardBtn {
+    flex: none; padding: 9px 14px; border-radius: 11px; border: 1.5px solid rgba(127,216,200,0.5);
+    background: rgba(127,216,200,0.12); color: #7fd8c8; font-weight: 900; font-size: 13px; cursor: pointer;
+  }
+  .cardBtn.gold { border-color: rgba(255,209,102,0.6); background: rgba(255,209,102,0.12); color: #ffd166; }
+  .cardBtn.cant { opacity: 0.4; cursor: default; }
+  .cardBtn.green { border-color: rgba(155,227,110,0.6); background: rgba(155,227,110,0.12); color: #9be36e; }
+
+  /* breed slots */
+  .slotRow { display: flex; gap: 12px; justify-content: center; align-items: center; margin: 8px 0 14px; }
+  .bSlot {
+    width: 96px; height: 96px; border-radius: 16px; border: 2px dashed rgba(127,216,200,0.4);
+    display: flex; align-items: center; justify-content: center; font-size: 44px; background: rgba(255,255,255,0.03);
+    position: relative;
+  }
+  .bSlot .lvl { position: absolute; bottom: 4px; right: 6px; font-size: 11px; font-weight: 800; color: #9fb8c8; }
+  .heartMid { font-size: 26px; }
+  .unionTag { text-align: center; font-size: 14px; color: #9fb8c8; margin-bottom: 10px; min-height: 20px; }
+  .goBtn {
+    display: block; margin: 4px auto 2px; padding: 12px 34px; border-radius: 14px; font-size: 16px;
+    font-weight: 900; border: 2px solid rgba(255,120,170,0.65); background: rgba(255,120,170,0.15);
+    color: #ff9ec2; cursor: pointer;
+  }
+  .goBtn.cant { opacity: 0.4; cursor: default; }
+
+  /* bestiary grid */
+  .bGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .bCard {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(120,220,200,0.18); border-radius: 12px;
+    padding: 10px; text-align: center;
+  }
+  .bCard .emo { font-size: 40px; height: 52px; display: flex; align-items: center; justify-content: center; }
+  .bCard img { max-height: 52px; max-width: 90%; }
+  .bCard .nm { font-weight: 900; font-size: 13px; margin-top: 4px; }
+  .bCard .els { font-size: 13px; margin-top: 2px; }
+  .bCard .pips { margin-top: 5px; font-size: 12px; letter-spacing: 3px; }
+  .bCard.locked { opacity: 0.55; }
+  .bCard.locked .emo, .bCard.locked img { filter: brightness(0) opacity(0.5); }
+
+  /* selection panel */
+  #selPanel {
+    position: absolute; bottom: 74px; left: 50%; transform: translateX(-50%); z-index: 12;
+    background: rgba(8,22,34,0.96); border: 1.5px solid rgba(127,216,200,0.45); border-radius: 16px;
+    padding: 10px 14px; display: none; gap: 10px; align-items: center; max-width: 94vw;
+  }
+  #selPanel .who { font-weight: 900; font-size: 14px; margin-right: 4px; }
+  #selPanel .sub { font-size: 12px; color: #9fb8c8; }
+  .selBtn {
+    padding: 8px 13px; border-radius: 11px; border: 1.5px solid rgba(155,227,110,0.5);
+    background: rgba(155,227,110,0.1); color: #9be36e; font-weight: 900; font-size: 13px; cursor: pointer;
+  }
+
+  /* hatch overlay */
+  #hatchWrap {
+    position: absolute; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center;
+    background: rgba(3,9,15,0.85); flex-direction: column; gap: 16px;
+  }
+  #hatchEgg { font-size: 110px; transition: transform 0.1s; cursor: pointer; filter: drop-shadow(0 6px 20px rgba(0,0,0,0.6)); }
+  #hatchEgg img { height: 150px; }
+  #hatchName { font-size: 26px; font-weight: 900; letter-spacing: 1px; color: #ffd166; text-align: center; min-height: 36px; }
+  #hatchSub { font-size: 15px; color: #9fb8c8; text-align: center; }
+  #hatchBtn {
+    padding: 12px 30px; border-radius: 14px; font-size: 16px; font-weight: 900;
+    border: 2px solid rgba(255,209,102,0.65); background: rgba(255,209,102,0.15); color: #ffd166; cursor: pointer;
+  }
+
+  /* toasts */
+  #toasts { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); z-index: 25; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+  .toast {
+    background: rgba(8,22,34,0.95); border: 1px solid rgba(255,209,102,0.5); color: #ffd166;
+    border-radius: 12px; padding: 8px 18px; font-weight: 800; font-size: 14px; animation: tIn 0.25s ease-out;
+  }
+  @keyframes tIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+  .muteBtn {
+    position: absolute; top: 58px; right: 10px; z-index: 11; background: rgba(10,26,38,0.9);
+    border: 1px solid rgba(120,220,200,0.3); color: #7fd8c8; border-radius: 10px; padding: 6px 10px;
+    font-weight: 800; font-size: 12px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="topbar">
+  <div class="pill" id="goldPill"><span class="ic">🪙</span><span id="goldVal">0</span></div>
+  <div class="pill" id="foodPill"><span class="ic">🍖</span><span id="foodVal">0</span></div>
+  <div class="pill" id="padPill"><span class="ic">🏠</span><span id="padVal">0/6</span></div>
+  <div id="titleTag">CREATURE COVE</div>
+</div>
+<button class="muteBtn" id="muteBtn">♪ ON</button>
+
+<div id="nav">
+  <button class="navBtn" id="navBreed"><span class="big">💕</span>Breed</button>
+  <button class="navBtn" id="navShop"><span class="big">🏪</span>Shop</button>
+  <button class="navBtn" id="navBook"><span class="big">📖</span>Bestiary</button>
+  <button class="navBtn" id="navBoard"><span class="big">🏆</span>Ranks</button>
+</div>
+
+<div id="selPanel"></div>
+
+<div id="modalWrap"><div id="modal">
+  <div id="modalTitle"><span id="modalTitleText"></span><button class="closeX" id="modalClose">✕</button></div>
+  <div id="modalBody"></div>
+</div></div>
+
+<div id="hatchWrap">
+  <div id="hatchEgg">🥚</div>
+  <div id="hatchName"></div>
+  <div id="hatchSub"></div>
+  <button id="hatchBtn" style="display:none">PLACE IN COVE</button>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(() => {
+'use strict';
+
+// ============================== DATA ==============================
+// Four elements. 15 species fill the lattice exactly (see GAME_DESIGN.md).
+const EL_ICON = { E: '🪨', M: '✨', N: '🌙', B: '🐾' };
+const SPECIES = {
+  gnome:   { name: 'Gnome',   el: 'E',    tier: 0, gpm: 0.8, breedMin: 1,   food: 10,  cost: 50,    emo: '🍄', lore: 'Small, grumpy, excellent at digging up shiny things.' },
+  fairy:   { name: 'Fairy',   el: 'M',    tier: 0, gpm: 1.0, breedMin: 1,   food: 10,  cost: 150,   emo: '🧚', lore: 'Pays rent in gold dust and mischief.' },
+  zombie:  { name: 'Zombie',  el: 'N',    tier: 0, gpm: 1.2, breedMin: 1,   food: 10,  cost: 300,   emo: '🧟', lore: 'Slow, cheerful, surprisingly good with money.' },
+  bigfoot: { name: 'Bigfoot', el: 'B',    tier: 0, gpm: 1.5, breedMin: 1,   food: 10,  cost: 500,   emo: '🦶', lore: 'Blurry in photos. Crisp in earnings.' },
+  genie:   { name: 'Genie',   el: 'EM',   tier: 1, gpm: 4,   breedMin: 2,   food: 25,  cost: 1500,  emo: '🧞', lore: 'Grants wishes. Mostly wishes for more gold.' },
+  giant:   { name: 'Giant',   el: 'EN',   tier: 1, gpm: 5,   breedMin: 3,   food: 25,  cost: 1500,  emo: '🗿', lore: 'Slept beneath the hills for a thousand years. Still tired.' },
+  ogre:    { name: 'Ogre',    el: 'EB',   tier: 1, gpm: 5,   breedMin: 3,   food: 25,  cost: 1500,  emo: '👹', lore: 'Big club, bigger heart, biggest appetite.' },
+  vampire: { name: 'Vampire', el: 'MN',   tier: 1, gpm: 6,   breedMin: 4,   food: 25,  cost: 1500,  emo: '🧛', lore: 'Works the night shift. Prefers it that way.' },
+  unicorn: { name: 'Unicorn', el: 'MB',   tier: 1, gpm: 6,   breedMin: 4,   food: 25,  cost: 1500,  emo: '🦄', lore: 'Majestic, sparkly, judges your lair decor.' },
+  yeti:    { name: 'Yeti',    el: 'NB',   tier: 1, gpm: 7,   breedMin: 5,   food: 25,  cost: 1500,  emo: '⛄', lore: 'Haunts the dark peaks. Loves hot cocoa.' },
+  phoenix: { name: 'Phoenix', el: 'EMN',  tier: 2, gpm: 16,  breedMin: 20,  food: 60,  cost: 8000,  emo: '🐦‍🔥', lore: 'Dies in the night, rises from the ashes. Repeat.' },
+  pegasus: { name: 'Pegasus', el: 'EMB',  tier: 2, gpm: 16,  breedMin: 20,  food: 60,  cost: 8000,  emo: '🪽', lore: 'Sky pony. Better than a regular pony.' },
+  griffin: { name: 'Griffin', el: 'ENB',  tier: 2, gpm: 18,  breedMin: 30,  food: 60,  cost: 8000,  emo: '🦅', lore: 'Half eagle, half lion, all business.' },
+  nessie:  { name: 'Loch Ness Monster', el: 'MNB', tier: 2, gpm: 18, breedMin: 30, food: 60, cost: 8000, emo: '🦕', lore: 'The cove is named after her. She knows it.', water: true },
+  dragon:  { name: 'DRAGON',  el: 'EMNB', tier: 3, gpm: 50,  breedMin: 120, food: 150, cost: 50000, emo: '🐉', lore: 'All four elements. The crown of the cove.' },
+};
+const SP_KEYS = Object.keys(SPECIES);
+const TIER_WEIGHT = [40, 25, 8, 2];
+
+// Variants: gold multiplier / breed-time multiplier (user-set: rare 2x/2x, epic 4x/3x)
+const VARIANTS = {
+  normal: { name: '',      g: 1, t: 1, icon: '' },
+  rare:   { name: 'Rare',  g: 2, t: 2, icon: '✨' },
+  epic:   { name: 'Epic',  g: 4, t: 3, icon: '🌟' },
+};
+// Variant odds by parents' variant ranks (sorted hi,lo): [rare%, epic%]
+const VAR_ODDS = { '00': [5, 0], '10': [12, 0], '11': [30, 10], '20': [15, 0], '21': [30, 15], '22': [30, 25] };
+const VRANK = { normal: 0, rare: 1, epic: 2 };
+
+const EXPANSIONS = [ { pads: 6, cost: 0 }, { pads: 8, cost: 500 }, { pads: 10, cost: 2000 }, { pads: 13, cost: 8000 }, { pads: 16, cost: 25000 }, { pads: 20, cost: 75000 } ];
+const FARM_COSTS = [200, 1000, 5000];
+const FOOD_BATCHES = [
+  { gold: 50,  food: 25,  min: 3 },
+  { gold: 200, food: 120, min: 10 },
+  { gold: 800, food: 550, min: 30 },
+];
+const VAULT_COST = 3000, DEN2_COST = 30000;
+const DECOR = [
+  { id: 'mush',    name: 'Glow Mushrooms', emo: '🍄', cost: 100 },
+  { id: 'torch',   name: 'Cove Torch',     emo: '🔥', cost: 250 },
+  { id: 'fount',   name: 'Fairy Fountain', emo: '⛲', cost: 600 },
+  { id: 'banner',  name: 'Cove Banner',    emo: '🚩', cost: 1200 },
+  { id: 'crystal', name: 'Moon Crystal',   emo: '💎', cost: 3000 },
+];
+const LEVEL_MAX = 10;
+
+// ============================== TIME & RNG (test-hookable) ==============================
+let _nowOffset = 0;
+const now = () => Date.now() + _nowOffset;
+let rng = Math.random;
+
+// ============================== STATE ==============================
+// creature: { id, sp, v, lvl, bank, t0 }  bank=banked uncollected gold, t0=accrual anchor
+let S = null;
+let creatureSeq = 0;
+
+function defaultState() {
+  return {
+    v: 1,
+    gold: 100, food: 0, lifetime: 0,
+    creatures: [],
+    expansion: 0,                       // index into EXPANSIONS
+    farms: [],                          // per farm: null | { food, readyAt }
+    vault: false, den2: false,
+    decor: {},                          // id -> count
+    breeds: [null, null],               // per den: null | { aId, bId, sp, v, readyAt }
+    egg: null,                          // { sp, v, readyAt }  (nursery)
+    disc: {},                           // 'sp:variant' -> true
+    lastSeen: now(),
+    seq: 0,
+    name: '',
+  };
+}
+
+function save() {
+  S.lastSeen = now(); S.seq = creatureSeq;
+  try { localStorage.setItem('creaturecove_save', JSON.stringify(S)); } catch (e) {}
+}
+function load() {
+  let raw = null;
+  try { raw = localStorage.getItem('creaturecove_save'); } catch (e) {}
+  if (!raw) { S = defaultState(); seedNewGame(); return false; }
+  try { S = JSON.parse(raw); } catch (e) { S = defaultState(); seedNewGame(); return false; }
+  if (!S || S.v !== 1) { S = defaultState(); seedNewGame(); return false; }
+  creatureSeq = S.seq || 0;
+  return true;
+}
+function seedNewGame() {
+  // day-1 kickstart: a Gnome on pad 0 (shop tutorial covers the Fairy)
+  addCreature('gnome', 'normal');
+  S.disc['gnome:normal'] = true;
+}
+
+function addCreature(sp, v) {
+  const c = { id: ++creatureSeq, sp, v, lvl: 1, bank: 0, t0: now() };
+  S.creatures.push(c);
+  return c;
+}
+
+// ============================== ECONOMY ==============================
+const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1));
+const capMinOf = (c) => 60 + 10 * (c.lvl - 1);
+const capOf = (c) => gpmOf(c) * capMinOf(c);
+const pendingOf = (c) => Math.min(capOf(c), c.bank + gpmOf(c) * (now() - c.t0) / 60000);
+function bankNow(c) { c.bank = pendingOf(c); c.t0 = now(); }
+function collect(c) {
+  const p = Math.floor(pendingOf(c));
+  if (p <= 0) return 0;
+  S.gold += p; S.lifetime += p;
+  c.bank = 0; c.t0 = now();
+  return p;
+}
+function collectAll() {
+  let sum = 0;
+  for (const c of S.creatures) sum += collect(c);
+  return sum;
+}
+const feedCostOf = (c) => SPECIES[c.sp].food * Math.pow(2, c.lvl - 1);
+function feed(c) {
+  if (c.lvl >= LEVEL_MAX) return false;
+  const cost = feedCostOf(c);
+  if (S.food < cost) return false;
+  bankNow(c);                            // don't let a level-up retroactively re-rate old accrual
+  S.food -= cost; c.lvl += 1;
+  return true;
+}
+
+// Farms
+function farmCount() { return S.farms.length; }
+function buyFarm() {
+  if (farmCount() >= FARM_COSTS.length) return false;
+  const cost = FARM_COSTS[farmCount()];
+  if (S.gold < cost) return false;
+  S.gold -= cost; S.farms.push(null);
+  return true;
+}
+function startBatch(farmIdx, batchIdx) {
+  if (farmIdx < 0 || farmIdx >= S.farms.length || S.farms[farmIdx]) return false;
+  const b = FOOD_BATCHES[batchIdx];
+  if (!b || S.gold < b.gold) return false;
+  S.gold -= b.gold;
+  S.farms[farmIdx] = { food: b.food, readyAt: now() + b.min * 60000 };
+  return true;
+}
+function claimBatch(farmIdx) {
+  const f = S.farms[farmIdx];
+  if (!f || now() < f.readyAt) return 0;
+  S.food += f.food; S.farms[farmIdx] = null;
+  return f.food;
+}
+
+// ============================== BREEDING ==============================
+const elSet = (str) => new Set(str.split(''));
+function elUnion(spA, spB) {
+  const u = new Set([...elSet(SPECIES[spA].el), ...elSet(SPECIES[spB].el)]);
+  return [...u].sort().join('');
+}
+function breedPool(spA, spB) {
+  const u = elSet(elUnion(spA, spB));
+  return SP_KEYS.filter(k => [...elSet(SPECIES[k].el)].every(e => u.has(e)));
+}
+function rollSpecies(spA, spB) {
+  const pool = breedPool(spA, spB);
+  const weights = pool.map(k => TIER_WEIGHT[SPECIES[k].tier]);
+  let t = weights.reduce((a, b) => a + b, 0) * rng();
+  for (let i = 0; i < pool.length; i++) { t -= weights[i]; if (t <= 0) return pool[i]; }
+  return pool[pool.length - 1];
+}
+function rollVariant(vA, vB) {
+  const key = [VRANK[vA], VRANK[vB]].sort((a, b) => b - a).join('');
+  const [rarePct, epicPct] = VAR_ODDS[key] || [5, 0];
+  const r = rng() * 100;
+  if (r < epicPct) return 'epic';
+  if (r < epicPct + rarePct) return 'rare';
+  return 'normal';
+}
+const breedTimeMs = (sp, v) => SPECIES[sp].breedMin * VARIANTS[v].t * 60000;
+
+function denCount() { return S.den2 ? 2 : 1; }
+function busyIds() {
+  const ids = new Set();
+  for (const b of S.breeds) if (b) { ids.add(b.aId); ids.add(b.bId); }
+  return ids;
+}
+function startBreed(aId, bId) {
+  if (aId === bId) return null;
+  const den = S.breeds.findIndex((b, i) => !b && i < denCount());
+  if (den < 0) return null;
+  const a = S.creatures.find(c => c.id === aId), b = S.creatures.find(c => c.id === bId);
+  if (!a || !b) return null;
+  const busy = busyIds();
+  if (busy.has(aId) || busy.has(bId)) return null;
+  const sp = rollSpecies(a.sp, b.sp);
+  const v = rollVariant(a.v, b.v);
+  const breed = { aId, bId, sp, v, readyAt: now() + breedTimeMs(sp, v) };
+  S.breeds[den] = breed;
+  return breed;
+}
+// breeding done -> egg moves to nursery (incubation = half breed time)
+function claimBreed(den) {
+  const b = S.breeds[den];
+  if (!b || now() < b.readyAt || S.egg) return null;
+  S.egg = { sp: b.sp, v: b.v, readyAt: now() + breedTimeMs(b.sp, b.v) / 2 };
+  S.breeds[den] = null;
+  return S.egg;
+}
+function landCount() { return S.creatures.filter(c => !SPECIES[c.sp].water).length; }
+function hatchEgg() {
+  if (!S.egg || now() < S.egg.readyAt) return null;
+  // water species (Nessie) live in the loch — they don't take a land pad
+  if (!SPECIES[S.egg.sp].water && landCount() >= EXPANSIONS[S.expansion].pads) return null;
+  const { sp, v } = S.egg;
+  const c = addCreature(sp, v);
+  const key = sp + ':' + v;
+  const isNew = !S.disc[key];
+  S.disc[key] = true;
+  S.egg = null;
+  return { c, isNew };
+}
+
+// ============================== SHOP ACTIONS ==============================
+function discoveredSpecies(sp) { return ['normal', 'rare', 'epic'].some(v => S.disc[sp + ':' + v]); }
+function buyCreature(sp) {
+  const d = SPECIES[sp];
+  const unlocked = d.tier === 0 || discoveredSpecies(sp);
+  if (!unlocked || S.gold < d.cost) return null;
+  if (!d.water && landCount() >= EXPANSIONS[S.expansion].pads) return null;
+  S.gold -= d.cost;
+  const c = addCreature(sp, 'normal');
+  S.disc[sp + ':normal'] = true;
+  return c;
+}
+function buyExpansion() {
+  const nxt = EXPANSIONS[S.expansion + 1];
+  if (!nxt || S.gold < nxt.cost) return false;
+  S.gold -= nxt.cost; S.expansion += 1;
+  return true;
+}
+function buyVault() { if (S.vault || S.gold < VAULT_COST) return false; S.gold -= VAULT_COST; S.vault = true; return true; }
+function buyDen2() { if (S.den2 || S.gold < DEN2_COST) return false; S.gold -= DEN2_COST; S.den2 = true; return true; }
+function buyDecor(id) {
+  const d = DECOR.find(x => x.id === id);
+  if (!d || S.gold < d.cost) return false;
+  S.gold -= d.cost; S.decor[id] = (S.decor[id] || 0) + 1;
+  return true;
+}
+
+// ============================== LEADERBOARD ==============================
+let lastSubmitted = 0;
+function maybeSubmitScore() {
+  if (S.lifetime - lastSubmitted < 10000 && lastSubmitted > 0) return;
+  lastSubmitted = S.lifetime;
+  const name = S.name || localStorage.getItem('imaginex_player') || 'Player';
+  try {
+    fetch('/api/leaderboard', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: 'creature-cove', player: name, score: Math.floor(S.lifetime) }),
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+// ============================== AUDIO (procedural) ==============================
+let AC = null, muted = false;
+function ac() { if (!AC && (window.AudioContext || window.webkitAudioContext)) AC = new (window.AudioContext || window.webkitAudioContext)(); return AC; }
+function tone(freq, dur, type, vol, when) {
+  if (muted) return;
+  const a = ac(); if (!a) return;
+  const t = a.currentTime + (when || 0);
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol || 0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  coin:  () => { tone(880, 0.08, 'square', 0.05); tone(1320, 0.1, 'square', 0.04, 0.05); },
+  feed:  () => { tone(330, 0.1, 'triangle', 0.08); tone(440, 0.12, 'triangle', 0.08, 0.08); },
+  tap:   () => tone(520, 0.05, 'sine', 0.05),
+  breed: () => { tone(392, 0.12, 'sine', 0.08); tone(494, 0.12, 'sine', 0.08, 0.1); tone(587, 0.2, 'sine', 0.08, 0.2); },
+  hatch: () => { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, 'triangle', 0.09, i * 0.09)); },
+  disc:  () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'sine', 0.1, i * 0.11)); },
+  rare:  () => { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.2, 'sine', 0.08, i * 0.07)); },
+  buy:   () => { tone(660, 0.09, 'square', 0.06); tone(880, 0.12, 'square', 0.05, 0.07); },
+  err:   () => tone(160, 0.15, 'sawtooth', 0.06),
+};
+
+// ============================== SPRITES ==============================
+// Meshy art with emoji fallback. sprites/<sp>.png ; variants use code fx over the same art.
+const spr = {};   // sp -> Image (loaded ok)
+const SPRITE_LIST = [...SP_KEYS, 'egg', 'den', 'nursery', 'farm', 'vault'];
+if (typeof Image !== 'undefined') {
+  for (const k of SPRITE_LIST) {
+    const im = new Image();
+    im.onload = () => { spr[k] = im; };
+    im.src = 'sprites/' + k + '.png';
+  }
+}
+let bgImg = null;
+if (typeof Image !== 'undefined') {
+  const b = new Image();
+  b.onload = () => { bgImg = b; };
+  b.src = 'sprites/cove_bg.jpg';
+}
+
+// ============================== WORLD LAYOUT ==============================
+const WORLD_W = 1700, WORLD_H = 900;
+// 20 land pads on gentle terraces + Nessie's water spot
+const PAD_POS = [
+  { x: 420, y: 620 }, { x: 560, y: 660 }, { x: 700, y: 630 }, { x: 850, y: 665 }, { x: 990, y: 625 }, { x: 1130, y: 660 },
+  { x: 360, y: 500 }, { x: 520, y: 520 }, { x: 680, y: 495 }, { x: 840, y: 520 }, { x: 1000, y: 495 }, { x: 1160, y: 520 }, { x: 1310, y: 560 },
+  { x: 470, y: 390 }, { x: 640, y: 370 }, { x: 810, y: 390 }, { x: 980, y: 370 }, { x: 1150, y: 395 },
+  { x: 730, y: 275 }, { x: 900, y: 280 },
+];
+const WATER_PAD = { x: 1450, y: 700 };
+const PLOTS = {
+  den:     { x: 195, y: 560, label: 'Breeding Den' },
+  nursery: { x: 185, y: 720, label: 'Nursery' },
+  farm0:   { x: 1340, y: 320 },
+  farm1:   { x: 1460, y: 380 },
+  farm2:   { x: 1560, y: 300 },
+  vault:   { x: 1580, y: 520 },
+  den2:    { x: 320, y: 750, label: 'Den II' },
+};
+const DECOR_POS = [
+  { x: 260, y: 430 }, { x: 1250, y: 700 }, { x: 600, y: 760 }, { x: 1050, y: 760 }, { x: 900, y: 180 },
+  { x: 380, y: 300 }, { x: 1240, y: 260 }, { x: 150, y: 400 }, { x: 700, y: 180 }, { x: 1350, y: 620 },
+];
+
+// ============================== RENDER ==============================
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1, scale = 1, camX = 0;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  VW = window.innerWidth; VH = window.innerHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR;
+  scale = VH / WORLD_H;
+  camX = Math.max(0, Math.min(camX, WORLD_W - VW / scale));
+}
+window.addEventListener('resize', resize);
+
+let particles = [];
+function puff(x, y, n, col, txt) {
+  for (let i = 0; i < n; i++) particles.push({
+    x, y, vx: (rng() - 0.5) * 90, vy: -60 - rng() * 90, life: 0.9, max: 0.9,
+    col, txt: i === 0 ? txt : null, r: 3 + rng() * 3,
+  });
+}
+
+const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 10000 ? (n / 1000).toFixed(1) + 'k' : Math.floor(n).toString();
+const fmtT = (ms) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+  if (s >= 60) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  return s + 's';
+};
+
+function drawScene(t) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, VW, VH);
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.translate(-camX, 0);
+
+  // ---- background ----
+  if (bgImg) {
+    ctx.drawImage(bgImg, 0, 0, WORLD_W, WORLD_H);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, WORLD_H);
+    g.addColorStop(0, '#12314a'); g.addColorStop(0.45, '#173a52'); g.addColorStop(1, '#0b2233');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    // terraces
+    ctx.fillStyle = 'rgba(46,96,86,0.55)';
+    [[240, 240, 760], [180, 340, 1180], [130, 450, 1400], [90, 580, 1700]].forEach(([, y, w]) => {
+      ctx.beginPath(); ctx.ellipse(w / 2 + 100, y + 260, w / 2 + 140, 200, 0, 0, Math.PI * 2); ctx.fill();
+    });
+    // cove water (bottom-right — Nessie's home)
+    const wg = ctx.createRadialGradient(1480, 740, 30, 1480, 740, 260);
+    wg.addColorStop(0, '#2a7d9c'); wg.addColorStop(1, '#123c55');
+    ctx.fillStyle = wg;
+    ctx.beginPath(); ctx.ellipse(1480, 750, 250, 120, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,220,240,0.35)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(1480, 750, 250, 120, 0, 0, Math.PI * 2); ctx.stroke();
+    // water shimmer
+    ctx.strokeStyle = 'rgba(160,230,250,0.2)';
+    for (let i = 0; i < 3; i++) {
+      const ph = t / 900 + i * 2.1;
+      ctx.beginPath(); ctx.ellipse(1480, 750, 120 + i * 55 + Math.sin(ph) * 8, 55 + i * 26, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  // ---- empty pads ----
+  const pads = EXPANSIONS[S.expansion].pads;
+  for (let i = 0; i < pads; i++) {
+    const p = PAD_POS[i];
+    const used = i < S.creatures.filter(c => !SPECIES[c.sp].water).length;
+    if (!used) {
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(127,216,200,0.3)';
+      ctx.lineWidth = 2; ctx.setLineDash([7, 6]);
+      ctx.beginPath(); ctx.ellipse(p.x, p.y + 18, 44, 18, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // ---- buildings ----
+  drawBuilding('den', PLOTS.den, '💕', t, S.breeds[0]);
+  drawBuilding('nursery', PLOTS.nursery, '🥚', t, null);
+  if (S.den2) drawBuilding('den', PLOTS.den2, '💕', t, S.breeds[1]);
+  for (let i = 0; i < farmCount(); i++) drawBuilding('farm', PLOTS['farm' + i], '🌾', t, null);
+  if (S.vault) drawBuilding('vault', PLOTS.vault, '🏦', t, null);
+
+  // farm timers
+  for (let i = 0; i < farmCount(); i++) {
+    const f = S.farms[i], p = PLOTS['farm' + i];
+    if (f) drawTimer(p.x, p.y - 70, f.readyAt, '🍖', now() >= f.readyAt);
+  }
+  // den timers
+  for (let d = 0; d < denCount(); d++) {
+    const b = S.breeds[d], p = d === 0 ? PLOTS.den : PLOTS.den2;
+    if (b) drawTimer(p.x, p.y - 78, b.readyAt, '💕', now() >= b.readyAt);
+  }
+  // nursery egg
+  if (S.egg) {
+    const p = PLOTS.nursery;
+    const wob = Math.sin(t / 130) * (now() >= S.egg.readyAt ? 6 : 2);
+    ctx.save();
+    ctx.translate(p.x, p.y - 46); ctx.rotate(wob * 0.02);
+    if (spr.egg) { ctx.drawImage(spr.egg, -26, -34, 52, 62); }
+    else { ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 14); }
+    if (S.egg.v !== 'normal') {
+      ctx.font = '18px serif';
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 160);
+      ctx.fillText(VARIANTS[S.egg.v].icon, 20, -18);
+    }
+    ctx.restore();
+    drawTimer(p.x, p.y - 100, S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
+  }
+
+  // ---- decorations ----
+  let dIdx = 0;
+  for (const d of DECOR) {
+    for (let n = 0; n < (S.decor[d.id] || 0) && dIdx < DECOR_POS.length; n++) {
+      const p = DECOR_POS[dIdx++];
+      ctx.font = '30px serif'; ctx.textAlign = 'center';
+      ctx.fillText(d.emo, p.x, p.y + Math.sin(t / 700 + dIdx) * 2);
+    }
+  }
+
+  // ---- creatures ----
+  let landIdx = 0;
+  for (const c of S.creatures) {
+    const d = SPECIES[c.sp];
+    const p = d.water ? WATER_PAD : PAD_POS[landIdx++];
+    if (!p) continue;
+    c._px = p.x; c._py = p.y;
+    const bob = Math.sin(t / 420 + c.id * 1.7) * 5;
+    const sway = Math.sin(t / 640 + c.id) * 0.04;
+    const size = (c.v === 'epic' ? 1.12 : 1) * (d.tier >= 2 ? 1.18 : 1) * (c.sp === 'dragon' ? 1.35 : 1);
+
+    ctx.save();
+    ctx.translate(p.x, p.y + (d.water ? Math.sin(t / 500 + 2) * 6 : bob));
+    ctx.rotate(sway);
+
+    // shadow / water ring
+    ctx.fillStyle = d.water ? 'rgba(180,240,255,0.18)' : 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, 26 * size, 34 * size, 11 * size, 0, 0, Math.PI * 2); ctx.fill();
+
+    // variant aura
+    if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 16; }
+    if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 26; }
+
+    if (spr[c.sp]) {
+      const im = spr[c.sp];
+      const h = 88 * size, w = h * (im.width / im.height);
+      if (c.v === 'rare') ctx.filter = 'hue-rotate(160deg) saturate(1.25)';
+      if (c.v === 'epic') ctx.filter = 'hue-rotate(-40deg) saturate(1.6) brightness(1.1)';
+      ctx.drawImage(im, -w / 2, -h + 26 * size, w, h);
+      ctx.filter = 'none';
+    } else {
+      ctx.font = Math.round(52 * size) + 'px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.emo, 0, 16);
+    }
+    ctx.shadowBlur = 0;
+
+    // sparkles for variants
+    if (c.v !== 'normal') {
+      const n = c.v === 'epic' ? 3 : 2;
+      ctx.font = '13px serif';
+      for (let i = 0; i < n; i++) {
+        const ph = t / 500 + i * 2.2 + c.id;
+        ctx.globalAlpha = 0.5 + 0.5 * Math.sin(ph * 2);
+        ctx.fillText(c.v === 'epic' ? '🌟' : '✨', Math.sin(ph) * 34, -46 - ((ph * 14) % 30));
+      }
+      ctx.globalAlpha = 1;
+    }
+    // level star
+    if (c.lvl >= LEVEL_MAX) { ctx.font = '16px serif'; ctx.fillText('⭐', 26, -46); }
+    ctx.restore();
+
+    // gold-ready bubble
+    const pend = pendingOf(c);
+    if (pend >= 1) {
+      const full = pend >= capOf(c) - 0.5;
+      ctx.save();
+      ctx.translate(p.x, p.y - 72 - (d.tier >= 2 ? 14 : 0) + bob * 0.5);
+      ctx.font = full ? '22px serif' : '17px serif';
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = full ? (0.75 + 0.25 * Math.sin(t / 220)) : 0.85;
+      ctx.fillText('🪙', 0, 0);
+      if (full) { ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#ffd166'; ctx.fillText('FULL', 0, 13); }
+      ctx.restore();
+    }
+  }
+
+  // ---- particles ----
+  for (const pt of particles) {
+    ctx.globalAlpha = Math.max(0, pt.life / pt.max);
+    if (pt.txt) { ctx.font = 'bold 15px sans-serif'; ctx.fillStyle = pt.col; ctx.textAlign = 'center'; ctx.fillText(pt.txt, pt.x, pt.y); }
+    else { ctx.fillStyle = pt.col; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawBuilding(kind, p, emo, t, activeBreed) {
+  if (!p) return;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(0, 22, 52, 16, 0, 0, Math.PI * 2); ctx.fill();
+  if (spr[kind]) {
+    const im = spr[kind], h = 110, w = h * (im.width / im.height);
+    ctx.drawImage(im, -w / 2, -h + 24, w, h);
+  } else {
+    ctx.fillStyle = 'rgba(30,60,80,0.9)'; ctx.strokeStyle = 'rgba(127,216,200,0.5)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect(-42, -58, 84, 78, 12); ctx.fill(); ctx.stroke();
+    ctx.font = '34px serif'; ctx.textAlign = 'center'; ctx.fillText(emo, 0, -8);
+  }
+  if (activeBreed) {
+    ctx.font = '16px serif'; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 250);
+    ctx.fillText('💗', -20 + Math.sin(t / 300) * 6, -66);
+    ctx.fillText('💗', 20 - Math.sin(t / 300) * 6, -66);
+    ctx.globalAlpha = 1;
+  }
+  if (p.label) {
+    ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.75)'; ctx.textAlign = 'center';
+    ctx.fillText(p.label, 0, 40);
+  }
+  ctx.restore();
+}
+function drawTimer(x, y, readyAt, icon, ready) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = ready ? 'rgba(60,90,40,0.95)' : 'rgba(8,22,34,0.92)';
+  ctx.strokeStyle = ready ? '#9be36e' : 'rgba(127,216,200,0.5)';
+  ctx.lineWidth = 1.5;
+  const txt = ready ? 'READY!' : fmtT(readyAt - now());
+  ctx.font = 'bold 13px sans-serif';
+  const w = ctx.measureText(txt).width + 38;
+  ctx.beginPath(); ctx.roundRect(-w / 2, -14, w, 28, 14); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.font = '14px serif'; ctx.fillText(icon, -w / 2 + 7, 1);
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillStyle = ready ? '#c9f59e' : '#dff2f0';
+  ctx.fillText(txt, -w / 2 + 27, 1);
+  ctx.restore();
+}
+
+// ============================== UI (DOM) ==============================
+const $ = (id) => document.getElementById(id);
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+function refreshTop() {
+  $('goldVal').textContent = fmt(S.gold);
+  $('foodVal').textContent = fmt(S.food);
+  $('padVal').textContent = S.creatures.filter(c => !SPECIES[c.sp].water).length + '/' + EXPANSIONS[S.expansion].pads;
+  $('navBreed').classList.toggle('glow', S.breeds.some((b, i) => b && now() >= b.readyAt) || (S.egg && now() >= S.egg.readyAt));
+}
+
+let modalOpen = null;
+function openModal(title, builder) {
+  modalOpen = title;
+  $('modalTitleText').textContent = title;
+  const body = $('modalBody');
+  body.innerHTML = '';
+  builder(body);
+  $('modalWrap').style.display = 'flex';
+}
+function closeModal() { modalOpen = null; $('modalWrap').style.display = 'none'; }
+$('modalClose').onclick = closeModal;
+$('modalWrap').addEventListener('click', (e) => { if (e.target === $('modalWrap')) closeModal(); });
+
+function artCell(sp, v) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cardArt';
+  if (spr[sp]) {
+    const img = document.createElement('img');
+    img.src = 'sprites/' + sp + '.png';
+    if (v === 'rare') img.style.filter = 'hue-rotate(160deg) saturate(1.25) drop-shadow(0 0 6px #8fd8ff)';
+    if (v === 'epic') img.style.filter = 'hue-rotate(-40deg) saturate(1.6) brightness(1.1) drop-shadow(0 0 8px #ffb64d)';
+    wrap.appendChild(img);
+  } else {
+    const e = document.createElement('div');
+    e.className = 'emo'; e.textContent = SPECIES[sp].emo;
+    if (v === 'rare') e.style.filter = 'drop-shadow(0 0 6px #8fd8ff)';
+    if (v === 'epic') e.style.filter = 'drop-shadow(0 0 8px #ffb64d)';
+    wrap.appendChild(e);
+  }
+  return wrap;
+}
+const vName = (c) => (VARIANTS[c.v].icon ? VARIANTS[c.v].icon + ' ' + VARIANTS[c.v].name + ' ' : '') + SPECIES[c.sp].name;
+const elIcons = (el) => [...el].map(e => EL_ICON[e]).join('');
+
+// ---------- BREED modal ----------
+let pickA = null, pickB = null;
+function openBreed() {
+  pickA = null; pickB = null;
+  openModal('BREEDING DEN', renderBreed);
+}
+function renderBreed(body) {
+  body.innerHTML = '';
+  // den status rows
+  for (let d = 0; d < denCount(); d++) {
+    const b = S.breeds[d];
+    if (b) {
+      const row = document.createElement('div'); row.className = 'card';
+      const info = document.createElement('div'); info.className = 'cardInfo';
+      const ready = now() >= b.readyAt;
+      info.innerHTML = '<div class="cardName">Den ' + (d + 1) + ': breeding… ' + (ready ? '💖 DONE!' : '') + '</div>' +
+        '<div class="cardSub">' + (ready ? 'The egg is ready to move to the Nursery' : 'Time left: ' + fmtT(b.readyAt - now())) + '</div>';
+      row.appendChild(info);
+      if (ready && !S.egg) {
+        const btn = document.createElement('button'); btn.className = 'cardBtn green'; btn.textContent = 'TO NURSERY';
+        btn.onclick = () => { claimBreed(d); sfx.breed(); save(); renderBreed(body); refreshTop(); };
+        row.appendChild(btn);
+      } else if (ready && S.egg) {
+        const btn = document.createElement('button'); btn.className = 'cardBtn cant'; btn.textContent = 'NURSERY FULL';
+        row.appendChild(btn);
+      }
+      body.appendChild(row);
+    }
+  }
+  if (S.egg) {
+    const row = document.createElement('div'); row.className = 'card';
+    const ready = now() >= S.egg.readyAt;
+    const shim = S.egg.v !== 'normal' ? ' — it’s shimmering!' : '';
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">🥚 Nursery' + (ready ? ': ready to HATCH!' : '') + '</div>' +
+      '<div class="cardSub">' + (ready ? 'Tap hatch — what’s inside?' + shim : 'Incubating: ' + fmtT(S.egg.readyAt - now()) + shim) + '</div>';
+    row.appendChild(info);
+    if (ready) {
+      const btn = document.createElement('button'); btn.className = 'cardBtn gold'; btn.textContent = 'HATCH!';
+      btn.onclick = () => { closeModal(); doHatch(); };
+      row.appendChild(btn);
+    }
+    body.appendChild(row);
+  }
+  const freeDen = S.breeds.findIndex((b, i) => !b && i < denCount()) >= 0;
+  if (!freeDen) return;
+
+  // picker slots
+  const slotRow = document.createElement('div'); slotRow.className = 'slotRow';
+  const mk = (c) => {
+    const s = document.createElement('div'); s.className = 'bSlot';
+    if (c) {
+      if (spr[c.sp]) { const im = document.createElement('img'); im.src = 'sprites/' + c.sp + '.png'; im.style.maxWidth = '84%'; im.style.maxHeight = '84%'; s.appendChild(im); }
+      else s.textContent = SPECIES[c.sp].emo;
+      const l = document.createElement('div'); l.className = 'lvl'; l.textContent = (VARIANTS[c.v].icon || '') + 'L' + c.lvl; s.appendChild(l);
+    } else s.textContent = '❓';
+    return s;
+  };
+  slotRow.appendChild(mk(pickA));
+  const heart = document.createElement('div'); heart.className = 'heartMid'; heart.textContent = '💕'; slotRow.appendChild(heart);
+  slotRow.appendChild(mk(pickB));
+  body.appendChild(slotRow);
+
+  const union = document.createElement('div'); union.className = 'unionTag';
+  union.textContent = (pickA && pickB) ? 'Elements combined: ' + elIcons(elUnion(pickA.sp, pickB.sp)) : 'Pick two creatures below';
+  body.appendChild(union);
+
+  const go = document.createElement('button'); go.className = 'goBtn' + ((pickA && pickB) ? '' : ' cant'); go.textContent = 'START BREEDING';
+  go.onclick = () => {
+    if (!pickA || !pickB) return;
+    const b = startBreed(pickA.id, pickB.id);
+    if (b) { sfx.breed(); save(); toast('💕 Breeding started!'); renderBreed(body); refreshTop(); }
+    else sfx.err();
+  };
+  body.appendChild(go);
+
+  // roster
+  const busy = busyIds();
+  for (const c of S.creatures) {
+    const row = document.createElement('div');
+    row.className = 'card' + ((pickA === c || pickB === c) ? ' sel' : '');
+    row.appendChild(artCell(c.sp, c.v));
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">' + vName(c) + ' <span style="color:#9fb8c8;font-weight:600">L' + c.lvl + '</span></div>' +
+      '<div class="cardSub">' + elIcons(SPECIES[c.sp].el) + (busy.has(c.id) ? ' — busy breeding' : '') + '</div>';
+    row.appendChild(info);
+    if (!busy.has(c.id)) {
+      const btn = document.createElement('button'); btn.className = 'cardBtn';
+      btn.textContent = (pickA === c || pickB === c) ? 'REMOVE' : 'PICK';
+      btn.onclick = () => {
+        if (pickA === c) pickA = null;
+        else if (pickB === c) pickB = null;
+        else if (!pickA) pickA = c;
+        else if (!pickB) pickB = c;
+        sfx.tap(); renderBreed(body);
+      };
+      row.appendChild(btn);
+    }
+    body.appendChild(row);
+  }
+}
+
+// ---------- HATCH flow ----------
+function doHatch() {
+  if (!S.egg || now() < S.egg.readyAt) return;
+  if (!SPECIES[S.egg.sp].water && S.creatures.filter(c => !SPECIES[c.sp].water).length >= EXPANSIONS[S.expansion].pads) {
+    toast('🏠 No free pads! Buy a Cove Expansion in the Shop.');
+    sfx.err();
+    return;
+  }
+  const eggData = S.egg;
+  const wrap = $('hatchWrap');
+  wrap.style.display = 'flex';
+  const eggEl = $('hatchEgg');
+  eggEl.innerHTML = spr.egg ? '<img src="sprites/egg.png">' : '🥚';
+  if (eggData.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 24px #8fd8ff)';
+  else if (eggData.v === 'epic') eggEl.style.filter = 'drop-shadow(0 0 34px #ffb64d)';
+  else eggEl.style.filter = '';
+  $('hatchName').textContent = eggData.v !== 'normal' ? 'The egg is SHIMMERING…' : 'Tap the egg!';
+  $('hatchSub').textContent = 'crack it open';
+  $('hatchBtn').style.display = 'none';
+  let taps = 0;
+  eggEl.onclick = () => {
+    taps++;
+    sfx.tap();
+    eggEl.style.transform = 'rotate(' + ((taps % 2 ? 1 : -1) * (6 + taps * 3)) + 'deg) scale(' + (1 + taps * 0.05) + ')';
+    if (taps >= 3) {
+      eggEl.onclick = null;
+      const res = hatchEgg();
+      if (!res) { wrap.style.display = 'none'; return; }
+      const c = res.c;
+      eggEl.style.transform = 'none';
+      eggEl.innerHTML = spr[c.sp] ? '<img src="sprites/' + c.sp + '.png">' : '<span style="font-size:110px">' + SPECIES[c.sp].emo + '</span>';
+      if (c.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 24px #8fd8ff)';
+      if (c.v === 'epic') eggEl.style.filter = 'drop-shadow(0 0 34px #ffb64d)';
+      $('hatchName').textContent = (res.isNew ? '🎉 NEW! ' : '') + vName(c);
+      $('hatchSub').textContent = res.isNew ? 'Added to your Bestiary!' : 'Another one for the cove.';
+      if (res.isNew) sfx.disc(); else if (c.v !== 'normal') sfx.rare(); else sfx.hatch();
+      $('hatchBtn').style.display = 'block';
+      $('hatchBtn').onclick = () => { wrap.style.display = 'none'; save(); refreshTop(); maybeSubmitScore(); };
+      save(); refreshTop();
+    }
+  };
+}
+
+// ---------- SHOP modal ----------
+let shopTab = 'creatures';
+function openShop(tab) {
+  shopTab = tab || 'creatures';
+  openModal('SHOP', renderShop);
+}
+function renderShop(body) {
+  body.innerHTML = '';
+  const tabs = document.createElement('div'); tabs.className = 'tabRow';
+  for (const [id, label] of [['creatures', '🐾 Creatures'], ['buildings', '🏗 Buildings'], ['decor', '🎪 Decor'], ['expand', '🏠 Expand']]) {
+    const t = document.createElement('button'); t.className = 'tab' + (shopTab === id ? ' on' : ''); t.textContent = label;
+    t.onclick = () => { shopTab = id; renderShop(body); };
+    tabs.appendChild(t);
+  }
+  body.appendChild(tabs);
+
+  const mkRow = (art, name, sub, btnText, cls, fn) => {
+    const row = document.createElement('div'); row.className = 'card';
+    if (art) row.appendChild(art);
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">' + name + '</div><div class="cardSub">' + sub + '</div>';
+    row.appendChild(info);
+    const btn = document.createElement('button'); btn.className = 'cardBtn ' + cls; btn.textContent = btnText;
+    if (fn) btn.onclick = fn;
+    row.appendChild(btn);
+    body.appendChild(row);
+  };
+
+  if (shopTab === 'creatures') {
+    for (const sp of SP_KEYS) {
+      const d = SPECIES[sp];
+      const unlocked = d.tier === 0 || discoveredSpecies(sp);
+      if (!unlocked) {
+        mkRow(artCell(sp, 'normal'), '???', 'Discover by breeding ' + elIcons(d.el), 'LOCKED', 'cant', null);
+        const last = body.lastChild;
+        last.querySelector('.cardArt').style.filter = 'brightness(0) opacity(0.5)';
+        continue;
+      }
+      const afford = S.gold >= d.cost, room = d.water || S.creatures.filter(c => !SPECIES[c.sp].water).length < EXPANSIONS[S.expansion].pads;
+      mkRow(artCell(sp, 'normal'), d.name, elIcons(d.el) + ' · ' + d.gpm + ' 🪙/min',
+        '🪙 ' + fmt(d.cost), afford && room ? 'gold' : 'cant',
+        () => {
+          const c = buyCreature(sp);
+          if (c) { sfx.buy(); toast('Welcome, ' + d.name + '!'); save(); refreshTop(); renderShop(body); }
+          else { sfx.err(); if (!room) toast('🏠 No free pads!'); }
+        });
+    }
+  } else if (shopTab === 'buildings') {
+    if (farmCount() < FARM_COSTS.length) {
+      const cost = FARM_COSTS[farmCount()];
+      mkRow(null, '🌾 Farm ' + (farmCount() + 1), 'Turns gold into creature food', '🪙 ' + fmt(cost),
+        S.gold >= cost ? 'gold' : 'cant',
+        () => { if (buyFarm()) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+    }
+    if (!S.vault) mkRow(null, '🏦 Vault', 'Unlocks the COLLECT ALL button', '🪙 ' + fmt(VAULT_COST),
+      S.gold >= VAULT_COST ? 'gold' : 'cant',
+      () => { if (buyVault()) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+    if (!S.den2) mkRow(null, '💕 Second Breeding Den', 'Run two breeds at once', '🪙 ' + fmt(DEN2_COST),
+      S.gold >= DEN2_COST ? 'gold' : 'cant',
+      () => { if (buyDen2()) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+    // farms management
+    for (let i = 0; i < farmCount(); i++) {
+      const f = S.farms[i];
+      if (!f) {
+        for (const [bi, b] of FOOD_BATCHES.entries()) {
+          mkRow(null, '🌾 Farm ' + (i + 1) + ': cook batch', b.food + ' 🍖 in ' + b.min + ' min', '🪙 ' + b.gold,
+            S.gold >= b.gold ? 'green' : 'cant',
+            () => { if (startBatch(i, bi)) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+        }
+      } else if (now() >= f.readyAt) {
+        mkRow(null, '🌾 Farm ' + (i + 1), 'Food is ready!', '🍖 COLLECT ' + f.food, 'green',
+          () => { claimBatch(i); sfx.feed(); save(); refreshTop(); renderShop(body); });
+      } else {
+        mkRow(null, '🌾 Farm ' + (i + 1), 'Cooking… ' + fmtT(f.readyAt - now()), '⏳', 'cant', null);
+      }
+    }
+  } else if (shopTab === 'decor') {
+    for (const d of DECOR) {
+      mkRow(null, d.emo + ' ' + d.name, 'Owned: ' + (S.decor[d.id] || 0), '🪙 ' + fmt(d.cost),
+        S.gold >= d.cost ? 'gold' : 'cant',
+        () => { if (buyDecor(d.id)) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+    }
+  } else if (shopTab === 'expand') {
+    const nxt = EXPANSIONS[S.expansion + 1];
+    if (nxt) {
+      mkRow(null, '🏠 Cove Expansion', EXPANSIONS[S.expansion].pads + ' → ' + nxt.pads + ' creature pads', '🪙 ' + fmt(nxt.cost),
+        S.gold >= nxt.cost ? 'gold' : 'cant',
+        () => { if (buyExpansion()) { sfx.buy(); toast('🏠 The cove grows!'); save(); refreshTop(); renderShop(body); } else sfx.err(); });
+    } else {
+      mkRow(null, '🏠 Cove Expansion', 'Your cove is at max size — 20 pads!', 'MAX', 'cant', null);
+    }
+  }
+}
+
+// ---------- BESTIARY modal ----------
+function openBook() {
+  openModal('BESTIARY — ' + Object.keys(S.disc).length + ' / 45 discovered', (body) => {
+    const grid = document.createElement('div'); grid.className = 'bGrid';
+    for (const sp of SP_KEYS) {
+      const d = SPECIES[sp];
+      const known = discoveredSpecies(sp);
+      const card = document.createElement('div'); card.className = 'bCard' + (known ? '' : ' locked');
+      const art = document.createElement('div'); art.className = 'emo';
+      if (spr[sp]) { const im = document.createElement('img'); im.src = 'sprites/' + sp + '.png'; art.appendChild(im); }
+      else art.textContent = d.emo;
+      card.appendChild(art);
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = known ? d.name : '???'; card.appendChild(nm);
+      const els = document.createElement('div'); els.className = 'els'; els.textContent = elIcons(d.el); card.appendChild(els);
+      const pips = document.createElement('div'); pips.className = 'pips';
+      pips.innerHTML = ['normal', 'rare', 'epic'].map(v =>
+        S.disc[sp + ':' + v] ? (v === 'normal' ? '●' : v === 'rare' ? '✨' : '🌟') : '<span style="opacity:0.25">○</span>').join(' ');
+      card.appendChild(pips);
+      if (known) {
+        const lore = document.createElement('div'); lore.className = 'cardSub'; lore.style.marginTop = '4px'; lore.textContent = d.lore;
+        card.appendChild(lore);
+      }
+      grid.appendChild(card);
+    }
+    body.appendChild(grid);
+  });
+}
+
+// ---------- LEADERBOARD modal ----------
+function openBoard() {
+  openModal('🏆 LIFETIME GOLD', async (body) => {
+    body.innerHTML = '<div class="cardSub" style="text-align:center;padding:16px">Loading…</div>';
+    maybeSubmitScore();
+    try {
+      const r = await fetch('/api/leaderboard?gameId=creature-cove');
+      const data = await r.json();
+      body.innerHTML = '';
+      const me = document.createElement('div'); me.className = 'card';
+      me.innerHTML = '<div class="cardInfo"><div class="cardName">You</div><div class="cardSub">Lifetime gold earned</div></div><div style="font-weight:900;color:#ffd166">🪙 ' + fmt(S.lifetime) + '</div>';
+      body.appendChild(me);
+      const rows = (data && data.scores) || [];
+      if (!rows.length) body.innerHTML += '<div class="cardSub" style="text-align:center;padding:12px">No scores yet — be the first!</div>';
+      rows.forEach((row, i) => {
+        const el = document.createElement('div'); el.className = 'card';
+        el.innerHTML = '<div style="font-weight:900;width:26px">' + (i + 1) + '</div><div class="cardInfo"><div class="cardName">' + (row.player || '???') + '</div></div><div style="font-weight:900;color:#ffd166">🪙 ' + fmt(row.score || 0) + '</div>';
+        body.appendChild(el);
+      });
+    } catch (e) {
+      body.innerHTML = '<div class="cardSub" style="text-align:center;padding:16px">Leaderboard unavailable offline.</div>';
+    }
+  });
+}
+
+// ---------- selection panel (tap creature) ----------
+let selected = null;
+function showSel(c) {
+  selected = c;
+  const p = $('selPanel');
+  p.innerHTML = '';
+  const who = document.createElement('div');
+  who.innerHTML = '<div class="who">' + vName(c) + ' <span style="color:#9fb8c8">L' + c.lvl + '</span></div>' +
+    '<div class="sub">' + gpmOf(c).toFixed(1) + ' 🪙/min · holds ' + fmt(capOf(c)) + '</div>';
+  p.appendChild(who);
+  if (c.lvl < LEVEL_MAX) {
+    const fb = document.createElement('button'); fb.className = 'selBtn';
+    fb.textContent = '🍖 Feed (' + fmt(feedCostOf(c)) + ')';
+    fb.onclick = () => {
+      if (feed(c)) { sfx.feed(); puff(c._px, c._py - 40, 8, '#9be36e', 'LEVEL UP!'); save(); refreshTop(); showSel(c); }
+      else { sfx.err(); toast('Not enough food — cook some at the Farm (Shop → Buildings)'); }
+    };
+    p.appendChild(fb);
+  } else {
+    const mx = document.createElement('div'); mx.className = 'sub'; mx.textContent = '⭐ MAX LEVEL';
+    p.appendChild(mx);
+  }
+  const x = document.createElement('button'); x.className = 'closeX'; x.textContent = '✕';
+  x.onclick = hideSel;
+  p.appendChild(x);
+  p.style.display = 'flex';
+}
+function hideSel() { selected = null; $('selPanel').style.display = 'none'; }
+
+// ============================== INPUT ==============================
+let dragX = null, dragged = false;
+cv.addEventListener('pointerdown', (e) => { dragX = e.clientX; dragged = false; });
+cv.addEventListener('pointermove', (e) => {
+  if (dragX === null) return;
+  const dx = e.clientX - dragX;
+  if (Math.abs(dx) > 6) dragged = true;
+  camX = Math.max(0, Math.min(camX - dx / scale, WORLD_W - VW / scale));
+  dragX = e.clientX;
+});
+window.addEventListener('pointerup', (e) => {
+  const wasDrag = dragged;
+  dragX = null; dragged = false;
+  if (wasDrag || e.target !== cv) return;
+  handleTap((e.clientX) / scale + camX, (e.clientY) / scale);
+});
+function handleTap(wx, wy) {
+  if (ac() && AC.state === 'suspended') AC.resume();
+  // creatures first (topmost)
+  let landIdx = 0;
+  let hit = null;
+  for (const c of S.creatures) {
+    const d = SPECIES[c.sp];
+    const p = d.water ? WATER_PAD : PAD_POS[landIdx++];
+    if (!p) continue;
+    if (Math.abs(wx - p.x) < 52 && wy > p.y - 105 && wy < p.y + 40) hit = c;
+  }
+  if (hit) {
+    const got = collect(hit);
+    if (got > 0) {
+      sfx.coin();
+      puff(hit._px, hit._py - 50, 10, '#ffd166', '+' + fmt(got) + ' 🪙');
+      save(); refreshTop(); maybeSubmitScore();
+    }
+    showSel(hit);
+    return;
+  }
+  hideSel();
+  // buildings
+  const near = (p, r) => p && Math.abs(wx - p.x) < r && Math.abs(wy - p.y + 20) < r + 30;
+  if (near(PLOTS.den, 70) || (S.den2 && near(PLOTS.den2, 70))) { openBreed(); return; }
+  if (near(PLOTS.nursery, 70)) {
+    if (S.egg && now() >= S.egg.readyAt) doHatch();
+    else openBreed();
+    return;
+  }
+  for (let i = 0; i < farmCount(); i++) {
+    if (near(PLOTS['farm' + i], 60)) {
+      const f = S.farms[i];
+      if (f && now() >= f.readyAt) { const got = claimBatch(i); sfx.feed(); toast('+' + got + ' 🍖'); save(); refreshTop(); }
+      else { openShop('buildings'); }
+      return;
+    }
+  }
+  if (S.vault && near(PLOTS.vault, 60)) {
+    const got = collectAll();
+    if (got > 0) { sfx.coin(); toast('🏦 Collected ' + fmt(got) + ' 🪙 from everyone!'); save(); refreshTop(); maybeSubmitScore(); }
+    return;
+  }
+}
+
+// ============================== NAV ==============================
+$('navBreed').onclick = () => { sfx.tap(); openBreed(); };
+$('navShop').onclick = () => { sfx.tap(); openShop(); };
+$('navBook').onclick = () => { sfx.tap(); openBook(); };
+$('navBoard').onclick = () => { sfx.tap(); openBoard(); };
+$('muteBtn').onclick = () => { muted = !muted; $('muteBtn').textContent = muted ? '♪ OFF' : '♪ ON'; };
+
+// ============================== MAIN LOOP ==============================
+let lastFrame = 0, lastAutoSave = 0, lastUI = 0;
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastFrame) / 1000 || 0.016);
+  lastFrame = t;
+  for (const pt of particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 140 * dt; pt.life -= dt; }
+  particles = particles.filter(p => p.life > 0);
+  drawScene(t);
+  if (t - lastUI > 500) { lastUI = t; refreshTop(); }
+  if (t - lastAutoSave > 15000) { lastAutoSave = t; save(); }
+  requestAnimationFrame(frame);
+}
+
+// ============================== BOOT ==============================
+function boot() {
+  // ?demo=1 — populated showcase state (screenshots/QA); never saved over a real game
+  if (/(\?|&)demo=1/.test(location.search)) {
+    S = defaultState();
+    S.gold = 12345; S.food = 480; S.expansion = 2; S.vault = true;
+    S.farms = [{ food: 120, readyAt: now() + 300000 }, null];
+    S.decor = { mush: 2, torch: 1, fount: 1 };
+    const seedList = [['gnome','normal',3],['fairy','rare',2],['genie','normal',4],['ogre','normal',1],
+      ['vampire','epic',5],['unicorn','normal',2],['yeti','rare',1],['phoenix','normal',1],['nessie','normal',2],['dragon','normal',1]];
+    for (const [sp, v, lvl] of seedList) { const c = addCreature(sp, v); c.lvl = lvl; c.t0 = now() - 40 * 60000; S.disc[sp + ':' + v] = true; }
+    S.breeds[0] = { aId: 1, bId: 2, sp: 'genie', v: 'normal', readyAt: now() + 95000 };
+    S.egg = { sp: 'unicorn', v: 'rare', readyAt: now() - 1000 };
+    save = () => {};   // demo state must never clobber a real save
+    resize(); refreshTop(); requestAnimationFrame(frame);
+    return;
+  }
+  const had = load();
+  resize();
+  if (had) {
+    // offline earnings summary (accrual is implicit via timestamps; this is the WELCOME)
+    let waiting = 0;
+    for (const c of S.creatures) waiting += pendingOf(c);
+    const away = now() - (S.lastSeen || now());
+    if (away > 90000 && waiting >= 1) toast('💤 While you were away, your creatures saved up ' + fmt(waiting) + ' 🪙!');
+  } else {
+    toast('🌊 Welcome to Creature Cove! Tap your Gnome to collect gold.');
+    setTimeout(() => toast('🏪 Buy a Fairy in the Shop, then visit the Breeding Den!'), 3800);
+    save();
+  }
+  refreshTop();
+  requestAnimationFrame(frame);
+}
+boot();
+
+// ---------------- test driver (headless harness injects via ?test hooks) ----------------
+globalThis.__CC = {
+  get S() { return S; }, set S(v) { S = v; },
+  SPECIES, VARIANTS, EXPANSIONS, FOOD_BATCHES, TIER_WEIGHT, VAR_ODDS, SP_KEYS, DECOR,
+  elUnion, breedPool, rollSpecies, rollVariant, breedTimeMs,
+  gpmOf, capOf, capMinOf, pendingOf, collect, collectAll, feed, feedCostOf,
+  addCreature, startBreed, claimBreed, hatchEgg, buyCreature, buyExpansion, buyFarm,
+  startBatch, claimBatch, buyVault, buyDen2, buyDecor, discoveredSpecies,
+  save, load, defaultState, denCount, busyIds, landCount,
+  setNow(msOffset) { _nowOffset = msOffset; },
+  setRng(fn) { rng = fn || Math.random; },
+  refreshTop, renderBreed, renderShop,
+};
+})();
+</script>
+</body>
+</html>
