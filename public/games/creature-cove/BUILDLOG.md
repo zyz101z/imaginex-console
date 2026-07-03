@@ -5,8 +5,11 @@
    times), hatch-moment juice, mobile taps. Play at
    https://www.imaginex.games/games/creature-cove/index.html (registered `coming_soon` —
    not on the console shelf yet; direct URL works).
-2. From playtest → M3: variant Meshy art waves (image-to-image restyles, ~270cr),
-   day/night tint, more SFX/ambient, discovery fanfare polish, decorations as sprites.
+2. From playtest → M3 remaining: variant Meshy art waves (image-to-image restyles, ~270cr),
+   decorations as sprites (~45cr). DONE since v1: sell mechanic, parent-shy odds (T14),
+   egg-flight transition + hatch ceremony + sound design, front-view buildings,
+   coin badges + Collect All (Vault=+50% storage now), DAY/NIGHT (real-clock tint,
+   fireflies, night-element glow; ?hour=22 to force).
 3. M4 launch: user cover art, flip `coming_soon` → `available`, announce.
 4. Known nit: leaderboard POST shape assumed from siblings — verify once real scores flow.
 5. GROUNDING PASS shipped (user feedback: buildings hovered/scale off): dscale(y) depth

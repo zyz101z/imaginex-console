@@ -633,6 +633,33 @@ const DECOR_POS = [
   { x: 380, y: 300 }, { x: 1240, y: 260 }, { x: 150, y: 400 }, { x: 700, y: 180 }, { x: 1350, y: 620 },
 ];
 
+// ============================== DAY / NIGHT ==============================
+// Real-clock ambiance: warm dawns, golden dusks, deep blue nights with fireflies.
+// NIGHT-element creatures glow after dark. ?hour=22 forces an hour (QA/screenshots).
+let forcedHour = null;
+{ const hm = (typeof location !== 'undefined' ? location.search : '').match(/(?:\?|&)hour=([0-9.]+)/); if (hm) forcedHour = parseFloat(hm[1]); }
+function gameHour() {
+  if (forcedHour !== null) return forcedHour;
+  const d = new Date();
+  return d.getHours() + d.getMinutes() / 60;
+}
+const DN_KEYS = [   // hour -> multiply tint (white = untouched daylight)
+  [0, [96, 116, 188]], [5, [96, 116, 188]], [6.5, [255, 224, 196]], [8, [255, 255, 255]],
+  [16.5, [255, 255, 255]], [18.5, [255, 198, 140]], [20.5, [96, 116, 188]], [24, [96, 116, 188]],
+];
+function dnTint() {
+  const h = gameHour() % 24;
+  for (let i = 0; i < DN_KEYS.length - 1; i++) {
+    const [h0, c0] = DN_KEYS[i], [h1, c1] = DN_KEYS[i + 1];
+    if (h >= h0 && h <= h1) {
+      const k = (h - h0) / ((h1 - h0) || 1);
+      return c0.map((v, j) => Math.round(v + (c1[j] - v) * k));
+    }
+  }
+  return [255, 255, 255];
+}
+const nightFactor = () => 1 - dnTint()[0] / 255;   // 0 by day, ~0.62 at deep night
+
 // ============================== RENDER ==============================
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
@@ -664,6 +691,8 @@ const fmtT = (ms) => {
 };
 
 function drawScene(t) {
+  const tint = dnTint();
+  const nf = 1 - tint[0] / 255;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.clearRect(0, 0, VW, VH);
   ctx.save();
@@ -804,9 +833,10 @@ function drawScene(t) {
       ctx.save(); ctx.translate(0, 26 * size); groundShadow(38 * size, 12 * size); ctx.restore();
     }
 
-    // variant aura
+    // variant aura (night-element creatures glow after dark when no variant owns it)
     if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 16; }
-    if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 26; }
+    else if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 26; }
+    else if (nf > 0.2 && d.el.includes('N')) { ctx.shadowColor = '#93aaff'; ctx.shadowBlur = 22 * nf; }
 
     if (spr[c.sp]) {
       const im = spr[c.sp];
@@ -841,6 +871,29 @@ function drawScene(t) {
     const pend = pendingOf(c);
     if (pend >= 1) badges.push({ c, p, d, size, pend });
 
+  }
+
+  // ---- day/night tint over the world (badges/timers drawn after stay bright) ----
+  if (tint[0] !== 255 || tint[1] !== 255 || tint[2] !== 255) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgb(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ')';
+    ctx.fillRect(camX - 4, -4, WORLD_W + 8, WORLD_H + 8);
+    ctx.restore();
+  }
+  // fireflies drift through the cove after dark
+  if (nf > 0.3) {
+    ctx.save();
+    for (let i = 0; i < 14; i++) {
+      const ph = t / 1000 + i * 7.31;
+      const fx = ((i * 131.7) % WORLD_W) + Math.sin(ph * 0.6 + i) * 70;
+      const fy = 340 + ((i * 97) % 420) + Math.sin(ph * 0.9) * 34;
+      const a = (0.35 + 0.65 * Math.abs(Math.sin(ph * 1.6 + i))) * Math.min(1, (nf - 0.3) / 0.3);
+      ctx.globalAlpha = a * 0.9;
+      ctx.fillStyle = '#d8ffa0'; ctx.shadowColor = '#d8ffa0'; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(fx, fy, 2.3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ---- coin badges (always on top — user asked for unmissable) ----
