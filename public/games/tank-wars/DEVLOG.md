@@ -29,6 +29,7 @@
 ## Session log — 2026-07-02
 | Ver | Commit | What |
 |---|---|---|
+| THEME2 | (this) | CITY v2 after user feedback ('doesn't look very good'): building SLABS w/ alleys + darkened texture + parapets + glowing roof lights — cohesion over repetition. LESSON: don't stamp sprites along thin walls; merge runs into big shapes |
 | THEME | `c642005` | **JUNGLE + CITY BLOCKS arenas** (Meshy tree/rooftop/floor art, ~51 credits): rendering skins over proven layouts (jungle=maze, city=dense via LAYOUT_OF); offscreen arena-layer prerender (perf win); deterministic placement (hashRand); themed debris; campaign b6=jungle b8=city; rotation now 7 arenas |
 | MAPS | `20cd4d0` | Arena rotation: quick/online rotate the 5 generators per ROUND (weighted, shifting 10%) + arena name under countdown; campaign unchanged; arena rides 'round' msg online. T16 added |
 | ART | `8b9400a` | **Meshy tank sprites:** 5 top-down realistic tanks (text-to-image, nano-banana-pro, ~30 credits) → magenta chroma-key → hull-center manifest (SPRITE_META) → in-game team-tinted sprites (amber/teal via offscreen source-atop, vector fallback) + garage thumbnails. Raw art archived in scratchpad meshy_output/ that session; game copies in img/. Regen recipe: scratchpad meshy_tanks.py pattern (flat magenta bg + hull-pointing-right prompts) |
