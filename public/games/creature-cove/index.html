@@ -427,6 +427,23 @@ function hatchEgg() {
   return { c, isNew };
 }
 
+// Sell/release: 25% of shop cost, scaled by variant earnings (rare 2x, epic 4x) and a
+// small level bonus. Guards: never the last creature, never one that's mid-breed.
+function sellValue(c) {
+  return Math.max(5, Math.round(SPECIES[c.sp].cost * 0.25 * VARIANTS[c.v].g * (1 + 0.1 * (c.lvl - 1))));
+}
+function sellCreature(id) {
+  const idx = S.creatures.findIndex(c => c.id === id);
+  if (idx < 0) return null;
+  if (S.creatures.length <= 1) return null;          // can't sell your last creature
+  if (busyIds().has(id)) return null;                // can't sell mid-breed
+  const c = S.creatures[idx];
+  const value = sellValue(c);
+  S.creatures.splice(idx, 1);
+  S.gold += value;
+  return { c, value };
+}
+
 // ============================== SHOP ACTIONS ==============================
 function discoveredSpecies(sp) { return ['normal', 'rare', 'epic'].some(v => S.disc[sp + ':' + v]); }
 function buyCreature(sp) {
@@ -1213,6 +1230,30 @@ function showSel(c) {
     const mx = document.createElement('div'); mx.className = 'sub'; mx.textContent = '⭐ MAX LEVEL';
     p.appendChild(mx);
   }
+  const canSell = S.creatures.length > 1 && !busyIds().has(c.id);
+  if (canSell) {
+    const sb = document.createElement('button'); sb.className = 'selBtn';
+    sb.style.borderColor = 'rgba(255,110,110,0.55)'; sb.style.background = 'rgba(255,110,110,0.1)'; sb.style.color = '#ff9a9a';
+    sb.textContent = '💰 Sell (' + fmt(sellValue(c)) + ')';
+    let armed = false, disarm = null;
+    sb.onclick = () => {
+      if (!armed) {   // two-tap confirm — kid-proofing an irreversible action
+        armed = true;
+        sb.textContent = '⚠ Really sell? Tap again';
+        disarm = setTimeout(() => { armed = false; sb.textContent = '💰 Sell (' + fmt(sellValue(c)) + ')'; }, 3000);
+        return;
+      }
+      clearTimeout(disarm);
+      const res = sellCreature(c.id);
+      if (res) {
+        sfx.coin();
+        if (c._px !== undefined) puff(c._px, c._py - 40, 10, '#ffd166', '+' + fmt(res.value) + ' 🪙');
+        toast(vName(c) + ' released for ' + fmt(res.value) + ' 🪙 (still in your Bestiary)');
+        hideSel(); save(); refreshTop();
+      } else sfx.err();
+    };
+    p.appendChild(sb);
+  }
   const x = document.createElement('button'); x.className = 'closeX'; x.textContent = '✕';
   x.onclick = hideSel;
   p.appendChild(x);
@@ -1359,7 +1400,7 @@ globalThis.__CC = {
   gpmOf, capOf, capMinOf, pendingOf, collect, collectAll, feed, feedCostOf,
   addCreature, startBreed, claimBreed, hatchEgg, buyCreature, buyExpansion, buyFarm,
   startBatch, claimBatch, buyVault, buyDen2, buyDecor, discoveredSpecies,
-  save, load, defaultState, denCount, busyIds, landCount,
+  save, load, defaultState, denCount, busyIds, landCount, sellValue, sellCreature,
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
