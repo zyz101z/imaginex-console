@@ -1802,7 +1802,16 @@ class Entity {
         const ladderSpeed = 3;
         if (left) { this.vx -= this.runSpeed; this.facingRight = false; }
         if (right) { this.vx += this.runSpeed; this.facingRight = true; }
-        if (this.onLadder) { if (climbUp) this.y -= ladderSpeed; if (climbDown) this.y += ladderSpeed; }
+        if (this.onLadder) {
+            if (climbUp) this.y -= ladderSpeed; if (climbDown) this.y += ladderSpeed;
+            // magnetic centering: while climbing, ease onto the ladder's centerline so
+            // small horizontal drift (thumb wobble) can't slide you off the 30px rail
+            if ((climbUp || climbDown) && !left && !right && this.ladderRef) {
+                const lc = this.ladderRef.x + this.ladderRef.width / 2;
+                this.x += (lc - (this.x + this.width / 2)) * 0.3;
+                this.vx *= 0.5;
+            }
+        }
         else { if (jump && this.isGrounded) this.vy = this.jumpPower; }
     }
 
@@ -2033,7 +2042,7 @@ class Entity {
     checkCollisions() {
         if (this.y + this.height > gameLevel.floorY) { this.y = gameLevel.floorY - this.height; this.vy = 0; this.isGrounded = true; }
         gameLevel.platforms.forEach(p => { if (this.vy >= 0 && this.y + this.height <= p.y + p.height && this.y + this.height + this.vy >= p.y && this.x + this.width > p.x && this.x < p.x + p.width) { this.y = p.y - this.height; this.vy = 0; this.isGrounded = true; } });
-        gameLevel.ladders.forEach(l => { if (this.x + this.width/2 > l.x && this.x + this.width/2 < l.x + l.width && this.y + this.height > l.y && this.y < l.y + l.height) this.onLadder = true; });
+        gameLevel.ladders.forEach(l => { if (this.x + this.width/2 > l.x && this.x + this.width/2 < l.x + l.width && this.y + this.height > l.y && this.y < l.y + l.height) { this.onLadder = true; this.ladderRef = l; } });
         
         // Lava/TNT handling
         gameLevel.tnts.forEach(t => { 
@@ -2335,9 +2344,12 @@ initAuth();
         thumb.classList.add('active');
 
         const norm = dist / radius;
-        // Determine active directions
-        const goLeft = (dx < 0 && norm > DEAD_ZONE);
-        const goRight = (dx > 0 && norm > DEAD_ZONE);
+        // Determine active directions. Horizontal needs |dx| > |dy|*0.85 (mirror of the
+        // vertical rule): a mostly-UP thumb used to still push left/right, which shoved
+        // you off 30px-wide ladders — the "climbing is hard on mobile" bug. Diagonals
+        // (roughly 40-60 degrees) still activate both, so run-and-climb flows fine.
+        const goLeft = (dx < 0 && norm > DEAD_ZONE && Math.abs(dx) > Math.abs(dy) * 0.85);
+        const goRight = (dx > 0 && norm > DEAD_ZONE && Math.abs(dx) > Math.abs(dy) * 0.85);
         const goUp = (dy < 0 && norm > DEAD_ZONE && Math.abs(dy) > Math.abs(dx) * 0.5);
         const goDown = (dy > 0 && norm > DEAD_ZONE && Math.abs(dy) > Math.abs(dx) * 0.5);
 
