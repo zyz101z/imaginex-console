@@ -1,32 +1,35 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-1. **Multiplayer Phase 4 polish** (MULTIPLAYER_PLAN.md): in-match RTT indicator, reconnect
+1. **User feel-checks pending:** Minelayer pace (mine every 2.5s — one number), Ghost cloak
+   strength in open arenas, snow 15% slow, lava pool density, friend-or-foe shell read at
+   speed (escalation if weak: red danger ring on enemy shells).
+2. **Multiplayer Phase 4 polish** (MULTIPLAYER_PLAN.md): in-match RTT indicator, reconnect
    grace on connection blips, learnings from real dad↔son matches.
-2. **Balance feel-check** still open: Photon vs Ace ("Lights Out"), campaign curve, scrap
-   rate. Also watch: Viper's thin barrels at battle size (regen ~6 credits if muddy).
-3. **More themes if wanted** (snow fortress / lava field floated): recipe = 1 sprite +
-   1 floor tile + LAYOUT_OF entry + label + pickArena weight. LESSON: merge wall runs
-   into big shapes (city v1 mistake); organic blobs can overlap-stamp (jungle).
-4. Loose end: Metered dashboard Secret Key still 401s at the mint endpoint — static creds
+3. Loose end: Metered dashboard Secret Key still 401s at the mint endpoint — static creds
    (in /api/rtc) work fine; only matters if user rotates credentials in their dashboard.
 
-## STATE SUMMARY (end of 2026-07-02)
-LIVE at www.imaginex.games: 5-tank garage w/ Meshy art, scrap economy, 10-battle campaign,
-7 rotating arenas (incl. Meshy-art JUNGLE + night CITY BLOCKS), rebuilt touch controls,
-user music + autoplay-unlock, ONLINE MULTIPLAYER (room codes, TURN relay, host-authoritative
-+ client-side prediction — real dad↔son match confirmed working, 12ms same-LAN ping).
-Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVLOG/SPEC docs).
+## STATE SUMMARY (end of 2026-07-03)
+LIVE at www.imaginex.games: **7-tank garage** (…Minelayer 2.5k auto-mines, Ghost 4k cloak) +
+**cosmetics** (4 shell trails, 3 victory styles — ~13k total scrap economy), 10-battle
+campaign (hardest fight = finale THE GENERAL: ace photon corridors), **9 rotating arenas**
+incl. SNOW (bright snow + 15% slow mutator) and LAVA (molten pools: block tanks, shells fly
+over) with Meshy art, no friendly fire + friend-or-foe shell colors (enemy = brighter +
+white-hot core), muzzle wall-clamp, anti-stuck failsafe, HUD backing plate, rebuilt touch
+controls, music + autoplay-unlock, ONLINE MULTIPLAYER (room codes, TURN relay, prediction —
+real dad↔son match verified; mines/cloak/trails all snapshot-synced).
+Test suites: tanktest 76 + netsim 29 + doortest 6 (scratchpad; recreate via DEVLOG/SPEC docs).
 
 ## Session log — 2026-07-03
 | Ver | Commit | What |
 |---|---|---|
-| ORDER | (this) | Campaign 9/10 swap (user: 9 harder than 10): b9 = TILT! (ace pinball, shifting), b10 THE GENERAL = ace photon, corridors. Rewards positional |
+| ORDER | `776d5fc` | Campaign 9/10 swap (user: 9 harder than 10): b9 = TILT! (ace pinball, shifting), b10 THE GENERAL = ace photon, corridors. Rewards positional |
 | SINKS | `237a3ab` | **MINELAYER (2.5k: auto-mines while driving, max 3, arm 1s, enemy-only, AI dodges) + GHOST (4k: cloak after 1.2s no-fire, treads stay visible, snapshot-synced) + 4 shell trails (300-900, online-synced, per-shell-id tracking for guest) + 3 victory styles (500). Garage cosmetics sections. Meshy sprites ~18cr (bal 1025). T21-T23; 76+29+6 green. ~10k new scrap sinks |
+| FOF | `9815859` | Friend-or-foe shells (friendly-fire-off ambiguity): all shells owner-colored; enemy = brighter + white-hot core; guest predShells tagged owner=1 |
 | FX | `14415fd` | **First gameplay mutators** (user feedback): SNOW = bright-snow floor + 15% tank slow (shared applyDrive multiplier — all controllers consistent) + team-colored shells on white; LAVA = 3-5 pulsing molten POOLS (block tanks via shared mover, shells fly over, AI pathing avoids, synced in online round msg). GOTCHA: connectivity check must expect 150-minus-poolcells; clear stale pools before genMaze. Countdown announces effects |
 | THEME3 | `13bd771` | **SNOW FORTRESS + LAVA FIELD** (Meshy ~36cr, balance 1043): snow=corridors layout w/ continuous ice-rampart slabs + frost glints + dusk-snow floor; lava=pillars layout w/ boulder stamps + ember glow dots + basalt floor. Campaign b4→snow, b7→lava (same layouts). 9 arenas in rotation |
 | FIX | `748ba5c` | **No friendly fire** (user request): own shells/big-shot/laser reflections pass through owner; AI stops dodging own shells. T17 (+ vacuous-test trap: zero-velocity shells skip collision substeps) |
-| FIX3 | (this) | 3 playtest bugs: HUD backing plate + trimmed theme overhang (pips hidden under canopy/slabs; slabs swallowed tanks); muzzlePoint() clamp kills the shoot-through-wall exploit (T18); anti-stuck failsafe eases toward cell center after 0.5s of blocked input |
+| FIX3 | `52f615b` | 3 playtest bugs: HUD backing plate + trimmed theme overhang (pips hidden under canopy/slabs; slabs swallowed tanks); muzzlePoint() clamp kills the shoot-through-wall exploit (T18); anti-stuck failsafe eases toward cell center after 0.5s of blocked input |
 
 ## Session log — 2026-07-02
 | Ver | Commit | What |
@@ -55,8 +58,8 @@ Test suites: tanktest 55 + netsim 29 + doortest 6 (scratchpad; recreate via DEVL
 
 ## Key facts
 - Location: `D:\ImagineX\imaginex-console\public\games\tank-wars\` (single-file index.html); LIVE at www.imaginex.games
-- Profile: localStorage `tankwars_profile` {scrap, owned, tank, stars, done}; wins `tankwars_wins`; leaderboard id `tank-wars` label "Wins"
-- Test harnesses (session scratchpad, recreate from SPEC/DEVLOG if lost): tanktest.js (54 checks, IIFE-injection technique per imaginex memory) + doortest.js (6 drivability)
+- Profile: localStorage `tankwars_profile` {scrap, owned, tank, stars, done, trailsOwned, trail, vicsOwned, vic}; wins `tankwars_wins`; leaderboard id `tank-wars` label "Wins"
+- Test harnesses (session scratchpad, recreate from SPEC/DEVLOG if lost): tanktest.js (76 checks, IIFE-injection; ⚠ garage index math: each renderGarage appends 16 children = 7 tanks + 2 headers + 7 cosmetics) + netsim.js (29) + doortest.js (6)
 - Screenshot hooks: `?demo=1` (AI match), `?screen=garage`, `?screen=campaign`
 - ⚠️ BREACH (`public/games/firewall/`) registry changes are UNCOMMITTED on purpose (awaiting user playtest) — every games.ts/route.ts commit uses the strip→commit→restore dance. Check `git status` before committing
 - ⚠️ If a push doesn't deploy in ~2 min: Vercel missed the webhook → empty commit retrigger
