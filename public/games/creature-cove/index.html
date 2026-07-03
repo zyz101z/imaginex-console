@@ -147,6 +147,15 @@
   }
   @keyframes tIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 
+  #collectAllBtn {
+    position: absolute; right: 12px; bottom: 86px; z-index: 11;
+    padding: 12px 18px; border-radius: 16px; font-size: 15px; font-weight: 900;
+    border: 2px solid rgba(255,209,102,0.7); background: rgba(60,45,10,0.92); color: #ffd166;
+    cursor: pointer; box-shadow: 0 0 16px rgba(255,209,102,0.25);
+    animation: caPulse 1.6s ease-in-out infinite;
+  }
+  #collectAllBtn:active { transform: scale(0.94); }
+  @keyframes caPulse { 0%,100% { box-shadow: 0 0 10px rgba(255,209,102,0.2); } 50% { box-shadow: 0 0 22px rgba(255,209,102,0.5); } }
   .muteBtn {
     position: absolute; top: 58px; right: 10px; z-index: 11; background: rgba(10,26,38,0.9);
     border: 1px solid rgba(120,220,200,0.3); color: #7fd8c8; border-radius: 10px; padding: 6px 10px;
@@ -164,6 +173,8 @@
   <div id="titleTag">CREATURE COVE</div>
 </div>
 <button class="muteBtn" id="muteBtn">♪ ON</button>
+
+<button id="collectAllBtn" style="display:none">💰 Collect All</button>
 
 <div id="nav">
   <button class="navBtn" id="navBreed"><span class="big">💕</span>Breed</button>
@@ -297,7 +308,7 @@ function addCreature(sp, v) {
 
 // ============================== ECONOMY ==============================
 const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1));
-const capMinOf = (c) => 60 + 10 * (c.lvl - 1);
+const capMinOf = (c) => (60 + 10 * (c.lvl - 1)) * (S.vault ? 1.5 : 1);   // Vault: +50% storage
 const capOf = (c) => gpmOf(c) * capMinOf(c);
 const pendingOf = (c) => Math.min(capOf(c), c.bank + gpmOf(c) * (now() - c.t0) / 60000);
 function bankNow(c) { c.bank = pendingOf(c); c.t0 = now(); }
@@ -654,6 +665,7 @@ function drawScene(t) {
   }
 
   // ---- creatures ----
+  const badges = [];
   let landIdx = 0;
   for (const c of S.creatures) {
     const d = SPECIES[c.sp];
@@ -710,19 +722,43 @@ function drawScene(t) {
     if (c.lvl >= LEVEL_MAX) { ctx.font = '16px serif'; ctx.fillText('⭐', 26, -46); }
     ctx.restore();
 
-    // gold-ready bubble
+    // gold-ready badge: queued for a final overlay pass so neighbors/buildings never cover it
     const pend = pendingOf(c);
-    if (pend >= 1) {
-      const full = pend >= capOf(c) - 0.5;
-      ctx.save();
-      ctx.translate(p.x, p.y - 72 - (d.tier >= 2 ? 14 : 0) + bob * 0.5);
-      ctx.font = full ? '22px serif' : '17px serif';
+    if (pend >= 1) badges.push({ c, p, d, size, pend });
+
+  }
+
+  // ---- coin badges (always on top — user asked for unmissable) ----
+  for (const bg2 of badges) {
+    const { c, p, d, size, pend } = bg2;
+    const full = pend >= capOf(c) - 0.5;
+    const bs = Math.max(0.85, size);
+    const bounce = Math.abs(Math.sin(t / 260 + c.id)) * (full ? 8 : 4);
+    ctx.save();
+    ctx.translate(p.x, p.y - (96 + (d.tier >= 2 ? 16 : 0)) * size - bounce);
+    const txt = '+' + fmt(pend);
+    ctx.font = 'bold ' + Math.round(13 * bs) + 'px sans-serif';
+    const tw = ctx.measureText(txt).width;
+    const w = tw + 34 * bs, h = 24 * bs;
+    ctx.fillStyle = full ? 'rgba(90,60,5,0.97)' : 'rgba(40,32,8,0.92)';
+    ctx.strokeStyle = full ? '#ffd166' : 'rgba(255,209,102,0.65)';
+    ctx.lineWidth = full ? 2.5 : 1.5;
+    if (full) { ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 12 + 6 * Math.sin(t / 180); }
+    ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, h / 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = Math.round(15 * bs) + 'px serif';
+    ctx.fillText('🪙', -w / 2 + 5 * bs, 1);
+    ctx.font = 'bold ' + Math.round(13 * bs) + 'px sans-serif';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(txt, -w / 2 + 24 * bs, 1);
+    if (full) {
       ctx.textAlign = 'center';
-      ctx.globalAlpha = full ? (0.75 + 0.25 * Math.sin(t / 220)) : 0.85;
-      ctx.fillText('🪙', 0, 0);
-      if (full) { ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#ffd166'; ctx.fillText('FULL', 0, 13); }
-      ctx.restore();
+      ctx.font = 'bold ' + Math.round(10 * bs) + 'px sans-serif';
+      ctx.fillStyle = '#ffe9b0';
+      ctx.fillText('FULL — TAP ME!', 0, h / 2 + 9 * bs);
     }
+    ctx.restore();
   }
 
   // ---- particles ----
@@ -801,6 +837,12 @@ function toast(msg) {
   setTimeout(() => t.remove(), 3200);
 }
 function refreshTop() {
+  // collect-all button: visible whenever meaningful gold is waiting (10+ so it isn't noisy)
+  let totalPend = 0;
+  for (const c of S.creatures) totalPend += pendingOf(c);
+  const ca = $('collectAllBtn');
+  if (totalPend >= 10) { ca.style.display = 'block'; ca.textContent = '💰 Collect All  +' + fmt(totalPend); }
+  else ca.style.display = 'none';
   $('goldVal').textContent = fmt(S.gold);
   $('foodVal').textContent = fmt(S.food);
   $('padVal').textContent = S.creatures.filter(c => !SPECIES[c.sp].water).length + '/' + EXPANSIONS[S.expansion].pads;
@@ -1040,7 +1082,7 @@ function renderShop(body) {
         S.gold >= cost ? 'gold' : 'cant',
         () => { if (buyFarm()) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
     }
-    if (!S.vault) mkRow(null, '🏦 Vault', 'Unlocks the COLLECT ALL button', '🪙 ' + fmt(VAULT_COST),
+    if (!S.vault) mkRow(null, '🏦 Vault', '+50% gold storage for EVERY creature', '🪙 ' + fmt(VAULT_COST),
       S.gold >= VAULT_COST ? 'gold' : 'cant',
       () => { if (buyVault()) { sfx.buy(); save(); refreshTop(); renderShop(body); } else sfx.err(); });
     if (!S.den2) mkRow(null, '💕 Second Breeding Den', 'Run two breeds at once', '🪙 ' + fmt(DEN2_COST),
@@ -1230,6 +1272,16 @@ $('navShop').onclick = () => { sfx.tap(); openShop(); };
 $('navBook').onclick = () => { sfx.tap(); openBook(); };
 $('navBoard').onclick = () => { sfx.tap(); openBoard(); };
 $('muteBtn').onclick = () => { muted = !muted; $('muteBtn').textContent = muted ? '♪ OFF' : '♪ ON'; };
+$('collectAllBtn').onclick = () => {
+  const perCreature = S.creatures.map(c => [c, Math.floor(pendingOf(c))]);
+  const got = collectAll();
+  if (got > 0) {
+    sfx.coin();
+    for (const [c, amt] of perCreature) if (amt >= 1 && c._px !== undefined) puff(c._px, c._py - 50, 6, '#ffd166', '+' + fmt(amt));
+    toast('💰 Collected ' + fmt(got) + ' 🪙 from the whole cove!');
+    save(); refreshTop(); maybeSubmitScore();
+  }
+};
 
 // ============================== MAIN LOOP ==============================
 let lastFrame = 0, lastAutoSave = 0, lastUI = 0;
