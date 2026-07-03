@@ -9,7 +9,11 @@
    decorations as sprites (~45cr). DONE since v1: sell mechanic, parent-shy odds (T14),
    egg-flight transition + hatch ceremony + sound design, front-view buildings,
    coin badges + Collect All (Vault=+50% storage now), DAY/NIGHT (real-clock tint,
-   fireflies, night-element glow; ?hour=22 to force).
+   fireflies, night-element glow; ?hour=22 to force), EXPEDITIONS (Wilds signpost
+   bottom-left: 3 destinations 30m/1h/2h, gold+food = gpm-scaled, wild-egg/decor
+   bonus rolls, creature leaves the lair + fully busy-locked while away).
+   Retention roadmap from design review: daily Cove Requests, naming, collection
+   milestones, weekly featured element, coin-chase micro-game, placement+harmony (big).
 3. M4 launch: user cover art, flip `coming_soon` → `available`, announce.
 4. Known nit: leaderboard POST shape assumed from siblings — verify once real scores flow.
 5. GROUNDING PASS shipped (user feedback: buildings hovered/scale off): dscale(y) depth

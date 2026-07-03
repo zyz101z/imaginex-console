@@ -274,6 +274,13 @@ const DECOR = [
   { id: 'crystal', name: 'Moon Crystal',   emo: '💎', cost: 3000 },
 ];
 const LEVEL_MAX = 10;
+// EXPEDITIONS ("The Wilds"): send an idle creature adventuring. Rewards scale with the
+// creature's earning power; longer trips = better bonus odds. egg/decor are % chances.
+const EXPEDITIONS = [
+  { name: 'Whispering Woods', emo: '🌲', min: 30,  egg: 10, decor: 5 },
+  { name: 'Crystal Caverns',  emo: '💎', min: 60,  egg: 18, decor: 8 },
+  { name: 'Ember Peaks',      emo: '🌋', min: 120, egg: 30, decor: 12 },
+];
 
 // ============================== TIME & RNG (test-hookable) ==============================
 let _nowOffset = 0;
@@ -295,6 +302,7 @@ function defaultState() {
     vault: false, den2: false,
     decor: {},                          // id -> count
     breeds: [null, null],               // per den: null | { aId, bId, sp, v, readyAt }
+    expedition: null,                   // { cId, dest, readyAt }
     egg: null,                          // { sp, v, readyAt }  (nursery)
     disc: {},                           // 'sp:variant' -> true
     lastSeen: now(),
@@ -349,6 +357,7 @@ function collectAll() {
 const feedCostOf = (c) => SPECIES[c.sp].food * Math.pow(2, c.lvl - 1);
 function feed(c) {
   if (c.lvl >= LEVEL_MAX) return false;
+  if (typeof isAway === 'function' && isAway(c.id)) return false;   // it's off adventuring
   const cost = feedCostOf(c);
   if (S.food < cost) return false;
   bankNow(c);                            // don't let a level-up retroactively re-rate old accrual
@@ -411,7 +420,53 @@ function denCount() { return S.den2 ? 2 : 1; }
 function busyIds() {
   const ids = new Set();
   for (const b of S.breeds) if (b) { ids.add(b.aId); ids.add(b.bId); }
+  if (S.expedition) ids.add(S.expedition.cId);
   return ids;
+}
+const isAway = (id) => !!(S.expedition && S.expedition.cId === id);
+
+// ---------- expeditions ----------
+const expGold = (c, destIdx) => Math.round(gpmOf(c) * EXPEDITIONS[destIdx].min * 1.35);
+function startExpedition(cId, destIdx) {
+  if (S.expedition) return null;                 // one party at a time
+  const dest = EXPEDITIONS[destIdx];
+  const c = S.creatures.find(x => x.id === cId);
+  if (!dest || !c || busyIds().has(cId)) return null;
+  bankNow(c);                                    // pocket what it earned; it stops earning while away
+  S.expedition = { cId, dest: destIdx, readyAt: now() + dest.min * 60000 };
+  return S.expedition;
+}
+function rollWildSpecies() {
+  const w = SP_KEYS.map(k => TIER_WEIGHT[SPECIES[k].tier]);
+  let t = w.reduce((a, b) => a + b, 0) * rng();
+  for (let i = 0; i < SP_KEYS.length; i++) { t -= w[i]; if (t <= 0) return SP_KEYS[i]; }
+  return 'gnome';
+}
+function claimExpedition() {
+  const e = S.expedition;
+  if (!e || now() < e.readyAt) return null;
+  const c = S.creatures.find(x => x.id === e.cId);
+  const dest = EXPEDITIONS[e.dest];
+  const res = { gold: 0, food: 0, egg: null, decor: null, c };
+  res.gold = c ? expGold(c, e.dest) : 25;
+  if (c) c.t0 = now();                           // away-time never counts as idle earnings
+  res.food = Math.round(res.gold / 4);
+  const roll = rng() * 100;
+  if (roll < dest.egg) {
+    if (!S.egg) {                                // wild egg! (fast 5-min incubation)
+      const sp = rollWildSpecies();
+      const v = rng() < 0.04 ? 'rare' : 'normal';
+      S.egg = { sp, v, readyAt: now() + 5 * 60000 };
+      res.egg = { sp, v };
+    } else res.gold = Math.round(res.gold * 1.5);   // nursery full -> treasure instead
+  } else if (roll < dest.egg + dest.decor) {
+    const d = DECOR[Math.floor(rng() * DECOR.length)];
+    S.decor[d.id] = (S.decor[d.id] || 0) + 1;
+    res.decor = d;
+  }
+  S.gold += res.gold; S.lifetime += res.gold; S.food += res.food;
+  S.expedition = null;
+  return res;
 }
 function startBreed(aId, bId) {
   if (aId === bId) return null;
@@ -621,6 +676,7 @@ const PLOTS = {
   nursery: { x: 420, y: 330, label: 'Nursery' },
   vault:   { x: 655, y: 325 },
   den2:    { x: 860, y: 330, label: 'Den II' },
+  wilds:   { x: 85,  y: 660, label: 'The Wilds' },
   farm0:   { x: 1080, y: 330 },
   farm1:   { x: 1290, y: 365 },
   farm2:   { x: 1480, y: 420 },
@@ -808,10 +864,40 @@ function drawScene(t) {
     }
   }
 
-  // ---- creatures ----
+  // ---- the Wilds trailhead ----
+  {
+    const p = PLOTS.wilds, ds = dscale(p.y);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.save(); ctx.translate(0, 14 * ds); groundShadow(52 * ds, 16 * ds); ctx.restore();
+    // flanking pines mark the trail into the wilds
+    ctx.font = Math.round(46 * ds) + 'px serif'; ctx.textAlign = 'center';
+    ctx.fillText('🌲', -40 * ds, 6 * ds);
+    ctx.font = Math.round(34 * ds) + 'px serif';
+    ctx.fillText('🌲', 38 * ds, 2 * ds);
+    // hand-drawn wooden signpost (emoji signs don't render everywhere)
+    ctx.fillStyle = '#6b4a2f';
+    ctx.fillRect(-3.5 * ds, -46 * ds, 7 * ds, 58 * ds);            // post
+    ctx.fillStyle = '#8a6440';
+    ctx.strokeStyle = '#4c3520'; ctx.lineWidth = 2;
+    ctx.beginPath();                                                // arrow board
+    ctx.moveTo(-34 * ds, -46 * ds); ctx.lineTo(22 * ds, -46 * ds); ctx.lineTo(34 * ds, -34 * ds);
+    ctx.lineTo(22 * ds, -22 * ds); ctx.lineTo(-34 * ds, -22 * ds); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.font = 'bold ' + Math.round(11 * ds) + 'px sans-serif';
+    ctx.fillStyle = '#2e1f10';
+    ctx.fillText('WILDS →', -4 * ds, -30 * ds);
+    ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.85)';
+    ctx.fillText('The Wilds', 0, 32 * ds);
+    ctx.restore();
+    if (S.expedition) drawTimer(p.x, p.y - 70 * ds, S.expedition.readyAt, '🎒', now() >= S.expedition.readyAt);
+  }
+
+  // ---- creatures (a creature on expedition is AWAY — not in the lair) ----
   const badges = [];
   let landIdx = 0;
   for (const c of S.creatures) {
+    if (isAway(c.id)) continue;
     const d = SPECIES[c.sp];
     const p = d.water ? WATER_PAD : PAD_POS[landIdx++];
     if (!p) continue;
@@ -1012,6 +1098,12 @@ function toast(msg) {
   setTimeout(() => t.remove(), 3200);
 }
 function refreshTop() {
+  if (S.expedition && now() >= S.expedition.readyAt && !expToastShown) {
+    expToastShown = true;
+    sfx.hatch();
+    const c = S.creatures.find(x => x.id === S.expedition.cId);
+    toast('🎒 ' + (c ? vName(c) : 'Your explorer') + ' is back from the Wilds! Tap the signpost.');
+  }
   // collect-all button: visible whenever meaningful gold is waiting (10+ so it isn't noisy)
   let totalPend = 0;
   for (const c of S.creatures) totalPend += pendingOf(c);
@@ -1024,6 +1116,7 @@ function refreshTop() {
   $('navBreed').classList.toggle('glow', S.breeds.some((b, i) => b && now() >= b.readyAt) || (S.egg && now() >= S.egg.readyAt));
 }
 
+let expToastShown = false;
 let modalOpen = null;
 function openModal(title, builder) {
   modalOpen = title;
@@ -1151,7 +1244,7 @@ function renderBreed(body) {
     row.appendChild(artCell(c.sp, c.v));
     const info = document.createElement('div'); info.className = 'cardInfo';
     info.innerHTML = '<div class="cardName">' + vName(c) + ' <span style="color:#9fb8c8;font-weight:600">L' + c.lvl + '</span></div>' +
-      '<div class="cardSub">' + elIcons(SPECIES[c.sp].el) + (busy.has(c.id) ? ' — busy breeding' : '') + '</div>';
+      '<div class="cardSub">' + elIcons(SPECIES[c.sp].el) + (isAway(c.id) ? ' — 🎒 off exploring' : busy.has(c.id) ? ' — busy breeding' : '') + '</div>';
     row.appendChild(info);
     if (!busy.has(c.id)) {
       const btn = document.createElement('button'); btn.className = 'cardBtn';
@@ -1266,6 +1359,84 @@ function doHatch() {
       save(); refreshTop();
     }, 380);
   };
+}
+
+// ---------- THE WILDS (expeditions) ----------
+let wildsDest = 1;
+function openWilds() { openModal('🌲 THE WILDS', renderWilds); }
+function renderWilds(body) {
+  body.innerHTML = '';
+  if (S.expedition) {
+    const e = S.expedition;
+    const c = S.creatures.find(x => x.id === e.cId);
+    const dest = EXPEDITIONS[e.dest];
+    const ready = now() >= e.readyAt;
+    const row = document.createElement('div'); row.className = 'card';
+    if (c) row.appendChild(artCell(c.sp, c.v));
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">' + (c ? vName(c) : '???') + ' is exploring ' + dest.emo + ' ' + dest.name + '</div>' +
+      '<div class="cardSub">' + (ready ? 'They\u2019re back — see what they found!' : 'Returns in ' + fmtT(e.readyAt - now())) + '</div>';
+    row.appendChild(info);
+    if (ready) {
+      const btn = document.createElement('button'); btn.className = 'cardBtn gold'; btn.textContent = 'WELCOME BACK!';
+      btn.onclick = () => {
+        const res = claimExpedition();
+        if (!res) return;
+        sfx.coin();
+        toast('🎒 ' + (res.c ? vName(res.c) : 'Your explorer') + ' returned: +' + fmt(res.gold) + ' 🪙  +' + res.food + ' 🍖');
+        if (res.egg) { sfx.disc(); setTimeout(() => toast('🥚 They found a WILD EGG! It\u2019s warming in your Nursery…'), 700); }
+        if (res.decor) { sfx.buy(); setTimeout(() => toast(res.decor.emo + ' They brought back a ' + res.decor.name + '!'), 700); }
+        expToastShown = false;
+        save(); refreshTop(); renderWilds(body);
+      };
+      row.appendChild(btn);
+    }
+    body.appendChild(row);
+    if (!ready) return;
+    return;
+  }
+  // destination picker
+  const tabs = document.createElement('div'); tabs.className = 'tabRow';
+  EXPEDITIONS.forEach((d, i) => {
+    const t = document.createElement('button'); t.className = 'tab' + (wildsDest === i ? ' on' : '');
+    t.textContent = d.emo + ' ' + d.name + ' · ' + (d.min >= 60 ? (d.min / 60) + 'h' : d.min + 'm');
+    t.onclick = () => { wildsDest = i; renderWilds(body); };
+    tabs.appendChild(t);
+  });
+  body.appendChild(tabs);
+  const d = EXPEDITIONS[wildsDest];
+  const note = document.createElement('div'); note.className = 'unionTag';
+  note.textContent = d.egg + '% chance of a WILD EGG 🥚 · ' + d.decor + '% chance of decor 🎪';
+  body.appendChild(note);
+  // pick your explorer
+  const busy = busyIds();
+  let any = false;
+  for (const c of S.creatures) {
+    if (busy.has(c.id)) continue;
+    any = true;
+    const row = document.createElement('div'); row.className = 'card';
+    row.appendChild(artCell(c.sp, c.v));
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">' + vName(c) + ' <span style="color:#9fb8c8;font-weight:600">L' + c.lvl + '</span></div>' +
+      '<div class="cardSub">would bring back ≈' + fmt(expGold(c, wildsDest)) + ' 🪙 + ' + fmt(Math.round(expGold(c, wildsDest) / 4)) + ' 🍖</div>';
+    row.appendChild(info);
+    const btn = document.createElement('button'); btn.className = 'cardBtn green'; btn.textContent = 'GO! ' + d.emo;
+    btn.onclick = () => {
+      if (startExpedition(c.id, wildsDest)) {
+        expToastShown = false;
+        sfx.breed();
+        toast('🎒 ' + vName(c) + ' set off for ' + d.name + '!');
+        closeModal(); save(); refreshTop();
+      } else sfx.err();
+    };
+    row.appendChild(btn);
+    body.appendChild(row);
+  }
+  if (!any) {
+    const e2 = document.createElement('div'); e2.className = 'cardSub'; e2.style.cssText = 'text-align:center;padding:14px';
+    e2.textContent = 'Everyone is busy breeding — free someone up first!';
+    body.appendChild(e2);
+  }
 }
 
 // ---------- SHOP modal ----------
@@ -1490,6 +1661,7 @@ function handleTap(wx, wy) {
   let landIdx = 0;
   let hit = null;
   for (const c of S.creatures) {
+    if (isAway(c.id)) continue;
     const d = SPECIES[c.sp];
     const p = d.water ? WATER_PAD : PAD_POS[landIdx++];
     if (!p) continue;
@@ -1518,6 +1690,7 @@ function handleTap(wx, wy) {
   }
   // buildings
   const near = (p, r) => p && Math.abs(wx - p.x) < r * dscale(p.y) && Math.abs(wy - (p.y - 60 * dscale(p.y))) < (r + 45) * dscale(p.y);
+  if (near(PLOTS.wilds, 60)) { openWilds(); return; }
   if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
   if (near(PLOTS.nursery, 75)) {
     if (S.egg && now() >= S.egg.readyAt) doHatch();
@@ -1617,6 +1790,7 @@ globalThis.__CC = {
   addCreature, startBreed, claimBreed, hatchEgg, buyCreature, buyExpansion, buyFarm,
   startBatch, claimBatch, buyVault, buyDen2, buyDecor, discoveredSpecies,
   save, load, defaultState, denCount, busyIds, landCount, sellValue, sellCreature,
+  EXPEDITIONS, expGold, startExpedition, claimExpedition, isAway,
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
