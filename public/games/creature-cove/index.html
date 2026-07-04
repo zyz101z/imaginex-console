@@ -728,14 +728,16 @@ function catchRoamer() {
 // ============================== SHOP ACTIONS ==============================
 function discoveredSpecies(sp) { return ['normal', 'rare', 'epic'].some(v => S.disc[sp + ':' + v]); }
 function buyCreature(sp) {
+  // Bought creatures arrive as an EGG in the nursery (user rule 2026-07-04): every
+  // creature enters the cove through the hatch ceremony. Nursery must be free; pad
+  // capacity is checked at hatch time like any other egg.
   const d = SPECIES[sp];
   const unlocked = d.tier === 0 || discoveredSpecies(sp);
   if (!unlocked || S.gold < d.cost) return null;
-  if (!d.water && landCount() >= EXPANSIONS[S.expansion].pads) return null;
+  if (S.egg) return null;
   S.gold -= d.cost;
-  const c = addCreature(sp, 'normal');
-  S.disc[sp + ':normal'] = true;
-  return c;
+  S.egg = { sp, v: 'normal', readyAt: now() + breedTimeMs(sp, 'normal') / 2, bought: true };
+  return S.egg;
 }
 function buyExpansion() {
   const nxt = EXPANSIONS[S.expansion + 1];
@@ -1880,13 +1882,13 @@ function renderShop(body) {
         last.querySelector('.cardArt').style.filter = 'brightness(0) opacity(0.5)';
         continue;
       }
-      const afford = S.gold >= d.cost, room = d.water || S.creatures.filter(c => !SPECIES[c.sp].water).length < EXPANSIONS[S.expansion].pads;
+      const afford = S.gold >= d.cost, nurseryFree = !S.egg;
       mkRow(artCell(sp, 'normal'), d.name, elIcons(d.el) + ' · ' + d.gpm + ' 🪙/min',
-        '🪙 ' + fmt(d.cost), afford && room ? 'gold' : 'cant',
+        nurseryFree ? '🪙 ' + fmt(d.cost) : '🥚 BUSY', afford && nurseryFree ? 'gold' : 'cant',
         () => {
-          const c = buyCreature(sp);
-          if (c) { sfx.buy(); toast('Welcome, ' + d.name + '!'); save(); refreshTop(); renderShop(body); }
-          else { sfx.err(); if (!room) toast('🏠 No free pads!'); }
+          const egg = buyCreature(sp);
+          if (egg) { sfx.buy(); toast('🥚 A ' + d.name + ' egg was delivered to the Nursery!'); save(); refreshTop(); renderShop(body); }
+          else { sfx.err(); if (S.egg) toast('The Nursery is busy — hatch the current egg first!'); }
         });
     }
   } else if (shopTab === 'buildings') {
@@ -2139,7 +2141,7 @@ function showSel(c) {
   p.innerHTML = '';
   const who = document.createElement('div');
   who.innerHTML = '<div class="who">' + vName(c) + ' <span style="color:#9fb8c8">L' + c.lvl + '</span></div>' +
-    '<div class="sub">' + gpmOf(c).toFixed(1) + ' 🪙/min · holds ' + fmt(capOf(c)) + '</div>';
+    '<div class="sub">' + elIcons(SPECIES[c.sp].el) + ' · ' + gpmOf(c).toFixed(1) + ' 🪙/min · holds ' + fmt(capOf(c)) + '</div>';
   p.appendChild(who);
   if (c.lvl < LEVEL_MAX) {
     const fb = document.createElement('button'); fb.className = 'selBtn';
