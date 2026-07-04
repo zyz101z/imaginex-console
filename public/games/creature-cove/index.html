@@ -305,6 +305,7 @@ function defaultState() {
     breeds: [null, null],               // per den: null | { aId, bId, sp, v, readyAt }
     expedition: null,                   // { cId, dest, readyAt }
     quests: null,                       // { day, list[3], chestClaimed }
+    treeStage: 0,
     egg: null,                          // { sp, v, readyAt }  (nursery)
     disc: {},                           // 'sp:variant' -> true
     lastSeen: now(),
@@ -339,7 +340,7 @@ function addCreature(sp, v) {
 }
 
 // ============================== ECONOMY ==============================
-const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1));
+const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1)) * treeBonus();
 const capMinOf = (c) => (60 + 10 * (c.lvl - 1)) * (S.vault ? 1.5 : 1);   // Vault: +50% storage
 const capOf = (c) => gpmOf(c) * capMinOf(c);
 const pendingOf = (c) => Math.min(capOf(c), c.bank + gpmOf(c) * (now() - c.t0) / 60000);
@@ -527,6 +528,34 @@ function sellCreature(id) {
   S.creatures.splice(idx, 1);
   S.gold += value;
   return { c, value };
+}
+
+// ---------- THE GREAT COVE TREE ----------
+// A monument that grows through 8 stages with LIFETIME gold — permanent, visible proof
+// of everything the cove has earned. Each stage: +2% gold for every creature.
+const TREE_STAGES = [
+  { at: 0,       name: 'Sprout' },
+  { at: 500,     name: 'Sapling' },
+  { at: 2500,    name: 'Young Tree' },
+  { at: 10000,   name: 'Sturdy Oak' },
+  { at: 50000,   name: 'Grand Tree' },
+  { at: 200000,  name: 'Elder Tree' },
+  { at: 750000,  name: 'Ancient Tree' },
+  { at: 2500000, name: 'Mythic World-Tree' },
+];
+function treeStage() {
+  let st = 0;
+  for (let i = 0; i < TREE_STAGES.length; i++) if (S.lifetime >= TREE_STAGES[i].at) st = i;
+  return st;
+}
+const treeBonus = () => 1 + 0.02 * treeStage();
+function checkTreeGrowth() {
+  const st = treeStage();
+  if (st <= (S.treeStage || 0)) return null;
+  S.treeStage = st;
+  const gift = st * 60;          // food gift, not gold (gold->tree->gold would be circular)
+  S.food += gift;
+  return { stage: st, name: TREE_STAGES[st].name, gift };
 }
 
 // ---------- DAILY COVE REQUESTS ----------
@@ -980,6 +1009,9 @@ function drawScene(t) {
     }
   }
 
+  // ---- the Great Cove Tree (behind the building band) ----
+  drawTree(t, treeStage());
+
   // ---- the Wilds trailhead ----
   {
     const p = PLOTS.wilds, ds = dscale(p.y);
@@ -1223,6 +1255,57 @@ function groundShadow(w, h) {
   ctx.beginPath(); ctx.arc(0, 0, w, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
+const TREE_POS = { x: 762, y: 300 };
+function drawTree(t, stage) {
+  const p = TREE_POS, ds = dscale(p.y);
+  const h = (30 + stage * 36) * ds;
+  const mythic = stage >= 7;
+  const sway = Math.sin(t / 1700) * 0.018 * (1 + stage * 0.12);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.save(); ctx.translate(0, 10 * ds); groundShadow((22 + stage * 10) * ds, (8 + stage * 2.5) * ds); ctx.restore();
+  ctx.rotate(sway);
+  // trunk
+  const tw = (3.5 + stage * 2.4) * ds;
+  ctx.fillStyle = mythic ? '#7a5f8f' : '#6b4a2f';
+  ctx.beginPath();
+  ctx.moveTo(-tw, 10 * ds);
+  ctx.quadraticCurveTo(-tw * 0.5, -h * 0.5, -tw * 0.35, -h * 0.7);
+  ctx.lineTo(tw * 0.35, -h * 0.7);
+  ctx.quadraticCurveTo(tw * 0.5, -h * 0.5, tw, 10 * ds);
+  ctx.closePath(); ctx.fill();
+  // canopy: layered blobs, more each stage
+  if (mythic) { ctx.shadowColor = '#9ff3d0'; ctx.shadowBlur = 34; }
+  const palette = mythic ? ['#3f9f7a', '#54b98d', '#7fd8a8'] : ['#3f7d3a', '#529a48', '#6ab85c'];
+  const blobs = 2 + stage * 2;
+  for (let i = 0; i < blobs; i++) {
+    const ang = (i / blobs) * Math.PI * 2 + i * 1.71;
+    const rad = h * (0.2 + 0.11 * ((i * 37) % 3));
+    const bx = Math.cos(ang) * h * 0.24;
+    const by = -h * 0.7 - Math.sin(ang * 1.3) * h * 0.16 - rad * 0.25;
+    ctx.fillStyle = palette[i % 3];
+    ctx.beginPath(); ctx.arc(bx, by, rad, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  // golden fruits from Grand Tree up
+  if (stage >= 4) {
+    for (let i = 0; i < stage + 1; i++) {
+      const fx = Math.sin(i * 2.7) * h * 0.3, fy = -h * (0.5 + 0.28 * (((i * 53) % 10) / 10));
+      const tw2 = 0.5 + 0.5 * Math.sin(t / 420 + i * 2.1);
+      ctx.fillStyle = 'rgba(255,209,102,' + (0.55 + 0.45 * tw2) + ')';
+      ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 9 * tw2;
+      ctx.beginPath(); ctx.arc(fx, fy, 3.6 * ds, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+  if (mythic && rng() < 0.05) particles.push({
+    x: p.x + (rng() - 0.5) * h * 0.7, y: p.y - h * 0.65,
+    vx: (rng() - 0.5) * 8, vy: -12 - rng() * 10, life: 1.6, max: 1.6, col: '#b8ffd9', r: 2,
+  });
+  ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.7)'; ctx.textAlign = 'center';
+  ctx.fillText('Cove Tree', p.x, p.y + 26 * ds);
+}
 function drawBuilding(kind, p, emo, t, activeBreed) {
   if (!p) return;
   const ds = dscale(p.y);
@@ -1284,6 +1367,13 @@ function toast(msg) {
   setTimeout(() => t.remove(), 3200);
 }
 function refreshTop() {
+  const grown = checkTreeGrowth();
+  if (grown) {
+    sfx.disc();
+    toast('🌳 The Cove Tree grew into a ' + grown.name + '! +' + grown.gift + ' 🍖 and +2% gold for everyone!');
+    puff(TREE_POS.x, TREE_POS.y - 60, 16, '#9be36e', '🌳');
+    save();
+  }
   if (refreshQuests()) { toast('📜 New Cove Requests for today!'); save(); }
   const qGlow = S.quests && (S.quests.list.some(q => q.done && !q.claimed) || chestReady());
   $('navQuest').classList.toggle('glow', !!qGlow);
@@ -1722,6 +1812,32 @@ function renderShop(body) {
   }
 }
 
+// ---------- COVE TREE modal ----------
+function openTree() {
+  openModal('🌳 THE GREAT COVE TREE', (body) => {
+    const st = treeStage();
+    const cur = TREE_STAGES[st], nxt = TREE_STAGES[st + 1];
+    const row = document.createElement('div'); row.className = 'card sel';
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    let html = '<div class="cardName">Stage ' + (st + 1) + ' / 8 — ' + cur.name + '</div>' +
+      '<div class="cardSub">Grown from ' + fmt(S.lifetime) + ' 🪙 lifetime gold · every creature earns <b>+' + (st * 2) + '%</b></div>';
+    if (nxt) {
+      const pct = Math.min(100, Math.round(100 * (S.lifetime - cur.at) / (nxt.at - cur.at)));
+      html += '<div style="height:8px;border-radius:4px;background:rgba(255,255,255,0.08);margin-top:8px">' +
+        '<div style="height:100%;width:' + pct + '%;border-radius:4px;background:#9be36e"></div></div>' +
+        '<div class="cardSub" style="margin-top:4px">' + fmt(nxt.at - S.lifetime) + ' 🪙 until it becomes a <b>' + nxt.name + '</b> (+2% more!)</div>';
+    } else {
+      html += '<div class="cardSub" style="margin-top:6px">🌟 Fully grown — the legend of the cove.</div>';
+    }
+    info.innerHTML = html;
+    row.appendChild(info);
+    body.appendChild(row);
+    const lore = document.createElement('div'); lore.className = 'unionTag';
+    lore.textContent = 'The tree grows with every coin your creatures ever earn. It never shrinks.';
+    body.appendChild(lore);
+  });
+}
+
 // ---------- DAILY REQUESTS modal ----------
 function openQuests() {
   refreshQuests();
@@ -1961,6 +2077,11 @@ function handleTap(wx, wy) {
   }
   // buildings
   const near = (p, r) => p && Math.abs(wx - p.x) < r * dscale(p.y) && Math.abs(wy - (p.y - 60 * dscale(p.y))) < (r + 45) * dscale(p.y);
+  {
+    const st = treeStage();
+    const r = 45 + st * 14;
+    if (Math.abs(wx - TREE_POS.x) < r && wy > TREE_POS.y - (40 + st * 38) && wy < TREE_POS.y + 30) { openTree(); return; }
+  }
   if (near(PLOTS.wilds, 60)) { openWilds(); return; }
   if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
   if (near(PLOTS.nursery, 75)) {
@@ -2028,6 +2149,7 @@ function boot() {
   if (/(\?|&)demo=1/.test(location.search)) {
     S = defaultState();
     S.gold = 12345; S.food = 480; S.expansion = 2; S.vault = true;
+    S.lifetime = 60000; S.treeStage = 4;
     S.farms = [{ food: 120, readyAt: now() + 300000 }, null];
     S.decor = { mush: 2, torch: 1, fount: 1 };
     const seedList = [['gnome','normal',3],['fairy','rare',2],['genie','normal',4],['ogre','normal',1],
@@ -2069,6 +2191,7 @@ globalThis.__CC = {
   EXPEDITIONS, expGold, startExpedition, claimExpedition, isAway,
   petCreature, spawnRoamer, catchRoamer, coveGpm, get roamer() { return roamer; },
   refreshQuests, questBump, questClaim, chestReady, claimChest, genQuests, questText,
+  TREE_STAGES, treeStage, treeBonus, checkTreeGrowth,
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
