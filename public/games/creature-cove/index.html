@@ -225,6 +225,26 @@
 (() => {
 'use strict';
 
+// Older Safari/WebViews lack ctx.roundRect — without this, every timer pill throws
+// mid-frame and the scene strobes (draws up to the throw point, then dies).
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+    if (typeof r === 'object') r = r[0] || 0;
+    r = Math.min(Math.abs(r), Math.abs(w) / 2, Math.abs(h) / 2) || 0;
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+    return this;
+  };
+}
+
+// ?safe=1 — disables the newest visual layers (variant rings/motes, roamers, cove tree,
+// day/night tint, fireflies) to bisect rendering glitches on specific devices.
+const SAFE_MODE = /(\?|&)safe=1/.test(typeof location !== 'undefined' ? location.search : '');
+
 // ============================== DATA ==============================
 // Four elements. 15 species fill the lattice exactly (see GAME_DESIGN.md).
 const EL_ICON = { E: '🪨', M: '✨', N: '🌙', B: '🐾' };
@@ -1010,7 +1030,7 @@ function drawScene(t) {
   }
 
   // ---- the Great Cove Tree (behind the building band) ----
-  drawTree(t, treeStage());
+  if (!SAFE_MODE) drawTree(t, treeStage());
 
   // ---- the Wilds trailhead ----
   {
@@ -1069,7 +1089,7 @@ function drawScene(t) {
       ctx.save(); ctx.translate(0, 26 * size); groundShadow(38 * size, 12 * size); ctx.restore();
     }
     // RARE/EPIC ground ring: pulsing, colored, unmissable (art-free variant identity)
-    if (c.v !== 'normal') {
+    if (c.v !== 'normal' && !SAFE_MODE) {
       const epic = c.v === 'epic';
       const pulse = 0.5 + 0.5 * Math.sin(t / 280 + c.id * 2.1);
       ctx.save();
@@ -1132,7 +1152,7 @@ function drawScene(t) {
   }
 
   // ---- day/night tint over the world (badges/timers drawn after stay bright) ----
-  if (tint[0] !== 255 || tint[1] !== 255 || tint[2] !== 255) {
+  if (!SAFE_MODE && (tint[0] !== 255 || tint[1] !== 255 || tint[2] !== 255)) {
     ctx.save();
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = 'rgb(' + tint[0] + ',' + tint[1] + ',' + tint[2] + ')';
@@ -1140,7 +1160,7 @@ function drawScene(t) {
     ctx.restore();
   }
   // fireflies drift through the cove after dark
-  if (nf > 0.3) {
+  if (nf > 0.3 && !SAFE_MODE) {
     ctx.save();
     for (let i = 0; i < 14; i++) {
       const ph = t / 1000 + i * 7.31;
@@ -2128,15 +2148,25 @@ $('collectAllBtn').onclick = () => {
 
 // ============================== MAIN LOOP ==============================
 let lastFrame = 0, lastAutoSave = 0, lastUI = 0;
+let renderErrShown = false;
 function frame(t) {
   const dt = Math.min(0.05, (t - lastFrame) / 1000 || 0.016);
   lastFrame = t;
   for (const pt of particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 140 * dt; pt.life -= dt; }
   particles = particles.filter(p => p.life > 0);
-  if (!roamer && !document.hidden && rng() < dt / 55) {   // a visitor about once a minute
+  if (!SAFE_MODE && !roamer && !document.hidden && rng() < dt / 55) {
     spawnRoamer(rng() < 0.6 ? 'coin' : 'bfly', 120 + rng() * (WORLD_W - 700), 460 + rng() * 320);
   }
-  drawScene(t);
+  try {
+    drawScene(t);
+  } catch (e) {
+    // never let one bad frame strobe the whole game — and SAY what broke
+    if (!renderErrShown) {
+      renderErrShown = true;
+      toast('⚠ render error: ' + (e && e.message ? e.message.slice(0, 80) : e));
+      try { console.error('render error', e); } catch (e2) {}
+    }
+  }
   if (t - lastUI > 500) { lastUI = t; refreshTop(); }
   if (t - lastAutoSave > 15000) { lastAutoSave = t; save(); }
   requestAnimationFrame(frame);
@@ -2192,6 +2222,7 @@ globalThis.__CC = {
   petCreature, spawnRoamer, catchRoamer, coveGpm, get roamer() { return roamer; },
   refreshQuests, questBump, questClaim, chestReady, claimChest, genQuests, questText,
   TREE_STAGES, treeStage, treeBonus, checkTreeGrowth,
+  drawScene, drawTree, resize, set eggFlyV(v) { eggFly = v; },
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
