@@ -1426,34 +1426,13 @@ function drawTree(t, stage) {
 function drawBuilding(kind, p, emo, t, activeBreed) {
   if (!p) return;
   const ds = dscale(p.y);
-  const sink = (kind === 'farm' ? 22 : kind === 'vault' ? 20 : 16) * ds;
-  const padW = ((kind === 'farm' || kind === 'vault') ? 118 : 96) * ds;
+  // Buildings sit DIRECTLY on the meadow: their art has grass bases painted in (they
+  // were generated for exactly this), so grounding = one soft AO contact shadow. The
+  // dirt-platform experiment made things WORSE (flat tan pancakes under painterly art).
+  const sink = (kind === 'farm' ? 18 : kind === 'vault' ? 20 : 14) * ds;
   ctx.save();
   ctx.translate(p.x, p.y);
-  // DESIGNED PLATFORM PAD (2026-07-04 rethink): every building sits on a prepared site —
-  // a dirt platform with a lit top, dark rim, stone flecks and grass ticks. This is what
-  // welds front-view sprites to the painted ground (fake grass ellipses never did).
-  ctx.fillStyle = 'rgba(88,72,48,0.85)';                                     // rim/underside
-  ctx.beginPath(); ctx.ellipse(0, 20 * ds, padW, padW * 0.30, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#a98f62';                                                 // lit dirt top
-  ctx.beginPath(); ctx.ellipse(0, 15 * ds, padW * 0.94, padW * 0.27, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(140,120,84,0.9)';                                    // inner wear
-  ctx.beginPath(); ctx.ellipse(0, 15 * ds, padW * 0.66, padW * 0.18, 0, 0, Math.PI * 2); ctx.fill();
-  for (let i = 0; i < 7; i++) {                                              // stone flecks
-    const a = (i / 7) * Math.PI * 2 + (kind.length + i) * 1.3;
-    ctx.fillStyle = i % 2 ? 'rgba(120,105,80,0.9)' : 'rgba(158,142,110,0.9)';
-    ctx.beginPath();
-    ctx.ellipse(Math.cos(a) * padW * 0.82, 16 * ds + Math.sin(a) * padW * 0.22, 3.4 * ds, 2.2 * ds, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.strokeStyle = 'rgba(96,128,64,0.8)';                                   // grass ticks at the rim
-  ctx.lineWidth = 1.6 * ds;
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI + 0.2 + i * 0.13;
-    const bx = Math.cos(a + Math.PI) * padW * 0.99, by = 18 * ds + Math.sin(a) * padW * 0.26;
-    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 2 * ds, by - 5 * ds); ctx.stroke();
-  }
-  ctx.save(); ctx.translate(0, 14 * ds); groundShadow(padW * 0.7, padW * 0.2); ctx.restore();
+  ctx.save(); ctx.translate(0, 12 * ds); groundShadow(92 * ds, 26 * ds); ctx.restore();
   if (spr[kind]) {
     const im = spr[kind], h = 165 * ds, w = h * (im.width / im.height);
     ctx.drawImage(im, -w / 2, -h + sink, w, h);
