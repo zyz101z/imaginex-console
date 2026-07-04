@@ -336,7 +336,9 @@ function defaultState() {
 
 function save() {
   S.lastSeen = now(); S.seq = creatureSeq;
-  try { localStorage.setItem('creaturecove_save', JSON.stringify(S)); } catch (e) {}
+  // strip _-prefixed transients (render caches like _petT/_px) — a leaked _petT once
+  // corrupted the pet animation after reload
+  try { localStorage.setItem('creaturecove_save', JSON.stringify(S, (k, v) => (k && k[0] === '_' ? undefined : v))); } catch (e) {}
 }
 function load() {
   let raw = null;
@@ -1072,7 +1074,12 @@ function drawScene(t) {
     c._px = p.x; c._py = p.y;
     const bob = Math.sin(t / 420 + c.id * 1.7) * 5;
     const sway = Math.sin(t / 640 + c.id) * 0.04;
-    const petK = c._petT ? Math.max(0, 1 - (t - c._petT) / 450) : 0;   // squash-stretch on pet
+    // squash-stretch on pet. CLAMPED to the 450ms window: _petT once leaked into saves,
+    // and after a reload (fresh performance.now clock) the stale timestamp produced a
+    // petK in the THOUSANDS -> creatures drawn enormous/flipped/strobing (the 2026-07-03
+    // "giant flashing creatures" bug). Guard against any weird delta forever.
+    const dtp = c._petT ? t - c._petT : -1;
+    const petK = (dtp >= 0 && dtp < 450) ? 1 - dtp / 450 : 0;
     const size = (c.v === 'epic' ? 1.12 : 1) * (d.tier >= 2 ? 1.18 : 1) * (c.sp === 'dragon' ? 1.35 : 1)
       * dscale(p.y);   // perspective: lower on screen = closer = bigger
 
