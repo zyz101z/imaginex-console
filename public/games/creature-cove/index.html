@@ -521,6 +521,34 @@ function sellCreature(id) {
   return { c, value };
 }
 
+// ---------- between-timer play: petting + roaming bonus critters ----------
+const PET_CD = 5 * 60000;   // a creature enjoys a pet every 5 minutes
+function petCreature(c) {
+  if (c.petAt && now() - c.petAt < PET_CD) return null;
+  c.petAt = now();
+  const gold = Math.max(1, Math.round(gpmOf(c)));   // one minute of production as a treat
+  S.gold += gold; S.lifetime += gold;
+  return { gold };
+}
+const coveGpm = () => S.creatures.reduce((a, c) => a + gpmOf(c), 0);
+let roamer = null;   // { kind:'coin'|'bfly', x, y, born, ttl } — not saved, pure moment
+function spawnRoamer(kind, x, y) {
+  roamer = { kind, x, y, born: now(), ttl: 9000, seed: rng() * 100 };
+  return roamer;
+}
+function catchRoamer() {
+  if (!roamer) return null;
+  const r = roamer; roamer = null;
+  if (r.kind === 'coin') {
+    const gold = Math.min(600, Math.max(20, Math.round(coveGpm() * 2)));
+    S.gold += gold; S.lifetime += gold;
+    return { kind: 'coin', gold };
+  }
+  const food = Math.min(250, Math.max(12, Math.round(coveGpm() * 0.8)));
+  S.food += food;
+  return { kind: 'bfly', food };
+}
+
 // ============================== SHOP ACTIONS ==============================
 function discoveredSpecies(sp) { return ['normal', 'rare', 'epic'].some(v => S.disc[sp + ':' + v]); }
 function buyCreature(sp) {
@@ -904,12 +932,14 @@ function drawScene(t) {
     c._px = p.x; c._py = p.y;
     const bob = Math.sin(t / 420 + c.id * 1.7) * 5;
     const sway = Math.sin(t / 640 + c.id) * 0.04;
+    const petK = c._petT ? Math.max(0, 1 - (t - c._petT) / 450) : 0;   // squash-stretch on pet
     const size = (c.v === 'epic' ? 1.12 : 1) * (d.tier >= 2 ? 1.18 : 1) * (c.sp === 'dragon' ? 1.35 : 1)
       * dscale(p.y);   // perspective: lower on screen = closer = bigger
 
     ctx.save();
-    ctx.translate(p.x, p.y + (d.water ? Math.sin(t / 500 + 2) * 6 : bob));
+    ctx.translate(p.x, p.y + (d.water ? Math.sin(t / 500 + 2) * 6 : bob) - petK * 16 * Math.sin(petK * Math.PI));
     ctx.rotate(sway);
+    if (petK > 0) ctx.scale(1 + petK * 0.12, 1 - petK * 0.1);
 
     // grounded contact shadow / water ring
     if (d.water) {
@@ -1013,6 +1043,52 @@ function drawScene(t) {
       ctx.fillText('FULL — TAP ME!', 0, h / 2 + 9 * bs);
     }
     ctx.restore();
+  }
+
+  // ---- roaming bonus critter (coin chase / butterfly) ----
+  if (roamer) {
+    const age = now() - roamer.born;
+    if (age > roamer.ttl) { roamer = null; }
+    else {
+      const k = age / roamer.ttl;
+      const spd = 1 + k * 1.6;                       // it gets nervous near escape
+      roamer.x += Math.sin(t / 400 + roamer.seed) * 1.6 * spd + 0.55 * spd;
+      if (roamer.kind === 'coin') {
+        roamer._dy = -Math.abs(Math.sin(t / 190 + roamer.seed)) * 34;   // hopping
+      } else {
+        roamer._dy = Math.sin(t / 300 + roamer.seed) * 26 - 46;         // fluttering
+      }
+      if (roamer.x > WORLD_W - 40) roamer.x = 40;
+      const rx = roamer.x, ry = roamer.y + (roamer._dy || 0);
+      ctx.save();
+      ctx.globalAlpha = k > 0.82 ? 1 - (k - 0.82) / 0.18 : 1;
+      ctx.translate(rx, ry);
+      if (roamer.kind === 'coin') {
+        const sq = 0.75 + 0.25 * Math.abs(Math.sin(t / 190 + roamer.seed));
+        ctx.scale(sq, 1);
+        ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 18;
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#b8860b';
+        ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', 0, 1);
+      } else {
+        const flap = Math.sin(t / 90) * 0.6;
+        ctx.shadowColor = '#ff9ec2'; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#ff9ec2';
+        ctx.save(); ctx.rotate(-0.4 + flap * 0.35);
+        ctx.beginPath(); ctx.ellipse(-9, -4, 11, 7, -0.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        ctx.save(); ctx.rotate(0.4 - flap * 0.35);
+        ctx.fillStyle = '#c792ea';
+        ctx.beginPath(); ctx.ellipse(9, -4, 11, 7, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        ctx.fillStyle = '#3a2b3f';
+        ctx.beginPath(); ctx.ellipse(0, 0, 2.6, 8, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      // shadow on the ground
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(rx, roamer.y + 12, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   // ---- particles ----
@@ -1657,6 +1733,19 @@ window.addEventListener('pointerup', (e) => {
 });
 function handleTap(wx, wy) {
   if (ac() && AC.state === 'suspended') AC.resume();
+  // the runaway critter takes priority — it's escaping!
+  if (roamer) {
+    const ry = roamer.y + (roamer._dy || 0);
+    if (Math.abs(wx - roamer.x) < 48 && Math.abs(wy - ry) < 48) {
+      const got = catchRoamer();
+      if (got) {
+        if (got.kind === 'coin') { sfx.coin(); sfx.buy(); puff(wx, wy, 14, '#ffd166', '+' + fmt(got.gold) + ' 🪙'); }
+        else { sfx.feed(); puff(wx, wy, 12, '#ff9ec2', '+' + got.food + ' 🍖'); }
+        save(); refreshTop();
+      }
+      return;
+    }
+  }
   // creatures first (topmost)
   let landIdx = 0;
   let hit = null;
@@ -1674,6 +1763,15 @@ function handleTap(wx, wy) {
       sfx.coin();
       puff(hit._px, hit._py - 50, 10, '#ffd166', '+' + fmt(got) + ' 🪙');
       save(); refreshTop(); maybeSubmitScore();
+    } else {
+      // nothing to collect -> a PET: bounce, hearts, its own little chirp, tiny treat
+      hit._petT = performance.now();
+      let hsh = 0; for (const ch of hit.sp) hsh = (hsh * 31 + ch.charCodeAt(0)) % 997;
+      tone(280 + (hsh % 11) * 55, 0.09, 'triangle', 0.09);
+      tone(280 + (hsh % 11) * 55 * 1.5, 0.12, 'triangle', 0.07, 0.07);
+      const treat = petCreature(hit);
+      puff(hit._px, hit._py - 55, 6, '#ff9ec2', treat ? '💕 +' + treat.gold : '💕');
+      if (treat) { save(); refreshTop(); }
     }
     showSel(hit);
     return;
@@ -1740,6 +1838,9 @@ function frame(t) {
   lastFrame = t;
   for (const pt of particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 140 * dt; pt.life -= dt; }
   particles = particles.filter(p => p.life > 0);
+  if (!roamer && !document.hidden && rng() < dt / 55) {   // a visitor about once a minute
+    spawnRoamer(rng() < 0.6 ? 'coin' : 'bfly', 120 + rng() * (WORLD_W - 700), 460 + rng() * 320);
+  }
   drawScene(t);
   if (t - lastUI > 500) { lastUI = t; refreshTop(); }
   if (t - lastAutoSave > 15000) { lastAutoSave = t; save(); }
@@ -1791,6 +1892,7 @@ globalThis.__CC = {
   startBatch, claimBatch, buyVault, buyDen2, buyDecor, discoveredSpecies,
   save, load, defaultState, denCount, busyIds, landCount, sellValue, sellCreature,
   EXPEDITIONS, expGold, startExpedition, claimExpedition, isAway,
+  petCreature, spawnRoamer, catchRoamer, coveGpm, get roamer() { return roamer; },
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
