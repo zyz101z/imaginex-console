@@ -1911,19 +1911,7 @@ function renderShop(body) {
     const note = document.createElement('div'); note.className = 'unionTag';
     note.textContent = 'Each level: +5% gold for every creature with that element';
     body.appendChild(note);
-    for (const e of ['E', 'M', 'N', 'B']) {
-      const lvl = shrineLvl(e);
-      const nCreatures = S.creatures.filter(c => SPECIES[c.sp].el.includes(e)).length;
-      if (lvl >= 3) {
-        mkRow(null, EL_ICON[e] + ' ' + SHRINES[e].name, 'MAX level — +15% to ' + nCreatures + ' creatures', '⭐ MAX', 'cant', null);
-      } else {
-        const cost = SHRINE_COSTS[lvl];
-        mkRow(null, EL_ICON[e] + ' ' + SHRINES[e].name + ' ' + '◆'.repeat(lvl) + '◇'.repeat(3 - lvl),
-          'Now +' + (lvl * 5) + '% → next +' + ((lvl + 1) * 5) + '% (boosts ' + nCreatures + ' of your creatures)',
-          '🪙 ' + fmt(cost), S.gold >= cost ? 'gold' : 'cant',
-          () => { if (buyShrine(e)) { sfx.disc(); toast('⛩ ' + SHRINES[e].name + ' empowered! ' + EL_ICON[e] + ' creatures +' + (shrineLvl(e) * 5) + '%'); save(); refreshTop(); renderShop(body); } else sfx.err(); });
-      }
-    }
+    shrineRows(body, () => renderShop(body));
   } else if (shopTab === 'decor') {
     for (const d of DECOR) {
       mkRow(null, d.emo + ' ' + d.name, 'Owned: ' + (S.decor[d.id] || 0), '🪙 ' + fmt(d.cost),
@@ -1965,6 +1953,54 @@ function openTree() {
     const lore = document.createElement('div'); lore.className = 'unionTag';
     lore.textContent = 'The tree grows with every coin your creatures ever earn. It never shrinks.';
     body.appendChild(lore);
+  });
+}
+
+// ---------- SHRINES modal (tapping the grove) ----------
+function shrineRows(body, refresh) {
+  for (const e of ['E', 'M', 'N', 'B']) {
+    const lvl = shrineLvl(e);
+    const mine = S.creatures.filter(c => SPECIES[c.sp].el.includes(e));
+    const row = document.createElement('div'); row.className = 'card' + (lvl >= 3 ? ' sel' : '');
+    const art = document.createElement('div'); art.className = 'cardArt';
+    const em = document.createElement('div'); em.className = 'emo'; em.textContent = EL_ICON[e];
+    if (lvl) em.style.filter = 'drop-shadow(0 0 8px #7fd8c8)';
+    art.appendChild(em); row.appendChild(art);
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    info.innerHTML = '<div class="cardName">' + SHRINES[e].name + ' ' + '◆'.repeat(lvl) + '<span style="opacity:0.35">' + '◆'.repeat(3 - lvl) + '</span></div>' +
+      '<div class="cardSub">All creatures with ' + EL_ICON[e] + ' earn <b>+' + (lvl * 5) + '%</b> gold' +
+      (lvl < 3 ? ' → next level: +' + ((lvl + 1) * 5) + '%' : ' (MAX)') +
+      ' · you have <b>' + mine.length + '</b></div>';
+    row.appendChild(info);
+    if (lvl < 3) {
+      const cost = SHRINE_COSTS[lvl];
+      const btn = document.createElement('button');
+      btn.className = 'cardBtn ' + (S.gold >= cost ? 'gold' : 'cant');
+      btn.textContent = '🪙 ' + fmt(cost);
+      btn.onclick = () => {
+        if (buyShrine(e)) {
+          sfx.disc();
+          toast('⛩ ' + SHRINES[e].name + ' empowered! ' + EL_ICON[e] + ' creatures now earn +' + (shrineLvl(e) * 5) + '%');
+          save(); refreshTop(); refresh();
+        } else sfx.err();
+      };
+      row.appendChild(btn);
+    } else {
+      const ok = document.createElement('div'); ok.style.cssText = 'font-size:20px'; ok.textContent = '⭐';
+      row.appendChild(ok);
+    }
+    body.appendChild(row);
+  }
+}
+function openShrines() {
+  openModal('⛩ THE ELEMENTAL SHRINES', (body) => {
+    const intro = document.createElement('div'); intro.className = 'unionTag';
+    intro.style.cssText = 'text-align:left;line-height:1.5;margin-bottom:12px';
+    intro.innerHTML = 'Four ancient shrines watch over the cove — one for each element. ' +
+      'Empower a shrine with gold and <b>every creature carrying that element earns more</b>. ' +
+      'Creatures with several elements are blessed by several shrines (a Dragon 🪨✨🌙🐾 by all four!).';
+    body.appendChild(intro);
+    shrineRows(body, () => openShrines());
   });
 }
 
@@ -2212,7 +2248,7 @@ function handleTap(wx, wy) {
     const r = 45 + st * 14;
     if (Math.abs(wx - TREE_POS.x) < r && wy > TREE_POS.y - (40 + st * 38) && wy < TREE_POS.y + 30) { openTree(); return; }
   }
-  if (wx > 65 && wx < 230 && wy > 435 && wy < 505) { openShop('shrines'); return; }
+  if (wx > 65 && wx < 230 && wy > 435 && wy < 505) { sfx.tap(); openShrines(); return; }
   if (near(PLOTS.wilds, 60)) { openWilds(); return; }
   if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
   if (near(PLOTS.nursery, 75)) {
