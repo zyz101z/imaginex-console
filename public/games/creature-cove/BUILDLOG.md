@@ -1,10 +1,17 @@
 # CREATURE COVE — BUILDLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-1. **USER + SON PLAYTEST** (the M2 gate): balance feel (gold rates, food costs, breed
-   times), hatch-moment juice, mobile taps. Play at
-   https://www.imaginex.games/games/creature-cove/index.html (registered `coming_soon` —
-   not on the console shelf yet; direct URL works).
+1. **USER + SON PLAYTEST** (still the gate): balance feel, mobile taps. Play at
+   https://www.imaginex.games/games/creature-cove/index.html (`coming_soon` — direct URL).
+1b. LATE-2026-07-03 BATCH (all live): daily REQUESTS (date-seeded, chest=25%-rare egg) +
+   variant ground rings (user chose over art spend), GREAT COVE TREE (8 lifetime-gold
+   stages, +2%/stage, MESHY ART per stage — tree_0..7.png), petting+roamers, feet-planted
+   idle (breathing squash at foot anchor + hops w/ grounded shrinking shadow — bob =
+   floating, user-confirmed fix), diagnostics (roundRect polyfill, drawScene try/catch
+   toast, ?safe=1 bisect). ⚠️ BUG CLASS FENCED: NEVER store performance.now() on saved
+   objects (_petT leak scaled creatures 100x after reload — "giant flashing creatures");
+   save() strips _-prefixed fields; render audit (cc_render_audit.js pattern) replays
+   stale-_petT with huge-scale tripwire.
 2. From playtest → M3 remaining: variant Meshy art waves (image-to-image restyles, ~270cr),
    decorations as sprites (~45cr). DONE since v1: sell mechanic, parent-shy odds (T14),
    egg-flight transition + hatch ceremony + sound design, front-view buildings,
