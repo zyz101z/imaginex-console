@@ -88,7 +88,7 @@ export const games: Game[] = [
     color: "#7fd8c8",
     cartridgeColor: "#0a2233",
     cartridgeLabelColor: "#7fd8c8",
-    status: "coming_soon",
+    status: "available",
   },
   {
     id: "x-bros",
