@@ -757,11 +757,21 @@ let lastSubmitted = 0;
 function maybeSubmitScore() {
   if (S.lifetime - lastSubmitted < 10000 && lastSubmitted > 0) return;
   lastSubmitted = S.lifetime;
-  const name = S.name || localStorage.getItem('imaginex_player') || 'Player';
+  const score = Math.min(100000000, Math.floor(S.lifetime));
+  const nickname = (S.name || 'Player').slice(0, 20);
+  // Inside the ImagineX console (iframe): postMessage — the console stamps the player's
+  // real profile nickname and does the POST (the sibling-games contract).
+  try {
+    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'imaginex-score', gameId: 'creature-cove', score, nickname }, '*');
+      return;
+    }
+  } catch (e) {}
+  // Standalone (direct URL): POST with the API's actual field names.
   try {
     fetch('/api/leaderboard', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gameId: 'creature-cove', player: name, score: Math.floor(S.lifetime) }),
+      body: JSON.stringify({ nickname, gameId: 'creature-cove', score }),
     }).catch(() => {});
   } catch (e) {}
 }
@@ -2100,16 +2110,19 @@ function openBoard() {
     maybeSubmitScore();
     try {
       const r = await fetch('/api/leaderboard?gameId=creature-cove');
-      const data = await r.json();
+      const rows = await r.json();   // plain array: [{ nickname, score, ... }] highest first
       body.innerHTML = '';
       const me = document.createElement('div'); me.className = 'card';
       me.innerHTML = '<div class="cardInfo"><div class="cardName">You</div><div class="cardSub">Lifetime gold earned</div></div><div style="font-weight:900;color:#ffd166">🪙 ' + fmt(S.lifetime) + '</div>';
       body.appendChild(me);
-      const rows = (data && data.scores) || [];
-      if (!rows.length) body.innerHTML += '<div class="cardSub" style="text-align:center;padding:12px">No scores yet — be the first!</div>';
-      rows.forEach((row, i) => {
+      if (!Array.isArray(rows) || !rows.length) {
+        const none = document.createElement('div'); none.className = 'cardSub';
+        none.style.cssText = 'text-align:center;padding:12px';
+        none.textContent = 'No scores yet — be the first!';
+        body.appendChild(none);
+      } else rows.slice(0, 25).forEach((row, i) => {
         const el = document.createElement('div'); el.className = 'card';
-        el.innerHTML = '<div style="font-weight:900;width:26px">' + (i + 1) + '</div><div class="cardInfo"><div class="cardName">' + (row.player || '???') + '</div></div><div style="font-weight:900;color:#ffd166">🪙 ' + fmt(row.score || 0) + '</div>';
+        el.innerHTML = '<div style="font-weight:900;width:26px">' + (i + 1) + '</div><div class="cardInfo"><div class="cardName">' + String(row.nickname || '???').slice(0, 20) + '</div></div><div style="font-weight:900;color:#ffd166">🪙 ' + fmt(row.score || 0) + '</div>';
         body.appendChild(el);
       });
     } catch (e) {

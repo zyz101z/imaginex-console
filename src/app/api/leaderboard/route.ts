@@ -8,6 +8,9 @@ const redis = Redis.fromEnv();
 
 const KNOWN_GAMES = new Set(["tennis-world", "bloot", "froggo-adventure", "divided-states", "tank-wars", "creature-cove"]);
 const MAX_SCORE = 1_000_000;
+// Creature Cove's metric is LIFETIME gold — it legitimately grows past 1M (the Mythic
+// Cove Tree alone requires 2.5M earned).
+const MAX_SCORE_BY_GAME: Record<string, number> = { "creature-cove": 100_000_000 };
 const KEEP_TOP = 100;
 
 type Entry = {
@@ -75,7 +78,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
   if (!KNOWN_GAMES.has(gameId))
     return NextResponse.json({ error: "unknown gameId" }, { status: 400 });
-  if (!Number.isFinite(score) || score < 0 || score > MAX_SCORE)
+  const maxScore = MAX_SCORE_BY_GAME[gameId] ?? MAX_SCORE;
+  if (!Number.isFinite(score) || score < 0 || score > maxScore)
     return NextResponse.json({ error: "invalid score" }, { status: 400 });
 
   const k = key(gameId);
