@@ -25,6 +25,11 @@
      GET returns a PLAIN ARRAY; per-game MAX_SCORE_BY_GAME in route.ts (CC: 100M).
 
 ## 2026-07-04 SESSION LOG
+- Decor fix (was 'sporadic': slots from 2 bgs ago landed in sky/lagoon/under buildings;
+  cheapest-first starved premium pieces): 12 curated slots, fanciest-first, prestige
+  sizing, n/12 counter in shop.
+- LEVEL BONUS to breeding (another reason to feed): +0.6%/avg-lvl rare (epic +0.3% only
+  where possible — gate holds), parent-shy deepens 35% by L10; shown in breed picker. T21.
 - Shop buys → NURSERY egg flow (user rule: everything hatches; nursery-free gate, pads
   checked at hatch) + elements shown in the tap-selection panel. T7/T11 reworked; 146.
 - Economy: expedition rebalance (rates .9/.8/.7, cap 1.2× storage — L4 unicorn 1700→880)
