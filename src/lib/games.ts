@@ -83,7 +83,7 @@ export const games: Game[] = [
     description:
       "Breed fantasy creatures and grow a magical cove! Combine elements to discover all 15 species — from Gnomes to the legendary Dragon — hunt shimmering Rare and Epic variants, and build your gold-earning lair.",
     genre: "Breeding / Idle Sim",
-    cover: "/games/creature-cove/sprites/dragon.png",
+    cover: "/games/creature-cove/cover.jpg",
     url: "/games/creature-cove/index.html",
     color: "#7fd8c8",
     cartridgeColor: "#0a2233",
