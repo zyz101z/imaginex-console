@@ -198,6 +198,7 @@
 <div id="nav">
   <button class="navBtn" id="navBreed"><span class="big">💕</span>Breed</button>
   <button class="navBtn" id="navShop"><span class="big">🏪</span>Shop</button>
+  <button class="navBtn" id="navQuest"><span class="big">📜</span>Requests</button>
   <button class="navBtn" id="navBook"><span class="big">📖</span>Bestiary</button>
   <button class="navBtn" id="navBoard"><span class="big">🏆</span>Ranks</button>
 </div>
@@ -303,6 +304,7 @@ function defaultState() {
     decor: {},                          // id -> count
     breeds: [null, null],               // per den: null | { aId, bId, sp, v, readyAt }
     expedition: null,                   // { cId, dest, readyAt }
+    quests: null,                       // { day, list[3], chestClaimed }
     egg: null,                          // { sp, v, readyAt }  (nursery)
     disc: {},                           // 'sp:variant' -> true
     lastSeen: now(),
@@ -347,6 +349,7 @@ function collect(c) {
   if (p <= 0) return 0;
   S.gold += p; S.lifetime += p;
   c.bank = 0; c.t0 = now();
+  questBump('gold', p);
   return p;
 }
 function collectAll() {
@@ -362,6 +365,7 @@ function feed(c) {
   if (S.food < cost) return false;
   bankNow(c);                            // don't let a level-up retroactively re-rate old accrual
   S.food -= cost; c.lvl += 1;
+  questBump('feed', 1);
   return true;
 }
 
@@ -466,6 +470,8 @@ function claimExpedition() {
   }
   S.gold += res.gold; S.lifetime += res.gold; S.food += res.food;
   S.expedition = null;
+  questBump('exped', 1);
+  questBump('gold', res.gold);
   return res;
 }
 function startBreed(aId, bId) {
@@ -480,6 +486,7 @@ function startBreed(aId, bId) {
   const v = rollVariant(a.v, b.v);
   const breed = { aId, bId, sp, v, readyAt: now() + breedTimeMs(sp, v) };
   S.breeds[den] = breed;
+  questBump('breedEl', 1, elUnion(a.sp, b.sp));
   return breed;
 }
 // breeding done -> egg moves to nursery (incubation = half breed time)
@@ -501,6 +508,7 @@ function hatchEgg() {
   const isNew = !S.disc[key];
   S.disc[key] = true;
   S.egg = null;
+  questBump('hatch', 1);
   return { c, isNew };
 }
 
@@ -521,6 +529,84 @@ function sellCreature(id) {
   return { c, value };
 }
 
+// ---------- DAILY COVE REQUESTS ----------
+// 3 quests a day, derived deterministically from the date (no server). Complete all
+// three -> the Daily Chest: a bonus egg with BOOSTED rare odds (25%).
+function dayKey() { const d = new Date(now()); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function mulberry(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t2 = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t2 = t2 + Math.imul(t2 ^ t2 >>> 7, 61 | t2) ^ t2;
+    return ((t2 ^ t2 >>> 14) >>> 0) / 4294967296;
+  };
+}
+const QUEST_TYPES = ['gold', 'feed', 'breedEl', 'hatch', 'roamer', 'exped', 'pet'];
+function genQuests(day) {
+  const r = mulberry(day * 7919 + 13);
+  const picks = [];
+  const pool = [...QUEST_TYPES];
+  while (picks.length < 3) picks.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
+  const base = Math.max(4, coveGpm());
+  return picks.map((type) => {
+    const el = 'EMNB'[Math.floor(r() * 4)];
+    const q = { type, el, prog: 0, done: false, claimed: false };
+    if (type === 'gold') { q.target = Math.max(150, Math.round(base * 45)); q.rGold = Math.round(q.target * 0.5); }
+    else if (type === 'feed') { q.target = 3; q.rFood = Math.max(40, Math.round(base * 8)); }
+    else if (type === 'breedEl') { q.target = 1; q.rGold = Math.max(120, Math.round(base * 25)); }
+    else if (type === 'hatch') { q.target = 1; q.rGold = Math.max(100, Math.round(base * 20)); }
+    else if (type === 'roamer') { q.target = 2; q.rGold = Math.max(100, Math.round(base * 18)); }
+    else if (type === 'exped') { q.target = 1; q.rFood = Math.max(50, Math.round(base * 10)); }
+    else { q.target = 5; q.rGold = Math.max(80, Math.round(base * 15)); }   // pet
+    return q;
+  });
+}
+function questText(q) {
+  switch (q.type) {
+    case 'gold': return 'Collect ' + fmt(q.target) + ' 🪙 gold';
+    case 'feed': return 'Feed creatures ' + q.target + ' times';
+    case 'breedEl': return 'Start a breed that includes ' + EL_ICON[q.el];
+    case 'hatch': return 'Hatch an egg';
+    case 'roamer': return 'Catch ' + q.target + ' runaway visitors';
+    case 'exped': return 'Complete a Wilds expedition';
+    default: return 'Pet ' + q.target + ' creatures';
+  }
+}
+function refreshQuests(forceDay) {
+  const day = forceDay || dayKey();
+  if (!S.quests || S.quests.day !== day) {
+    S.quests = { day, list: genQuests(day), chestClaimed: false };
+    return true;
+  }
+  return false;
+}
+function questBump(type, amt, el) {
+  if (!S.quests) return;
+  for (const q of S.quests.list) {
+    if (q.type !== type || q.done) continue;
+    if (type === 'breedEl' && (!el || !el.includes(q.el))) continue;
+    q.prog = Math.min(q.target, q.prog + (amt || 1));
+    if (q.prog >= q.target) q.done = true;
+  }
+}
+function questClaim(i) {
+  const q = S.quests && S.quests.list[i];
+  if (!q || !q.done || q.claimed) return null;
+  q.claimed = true;
+  if (q.rGold) { S.gold += q.rGold; S.lifetime += q.rGold; }
+  if (q.rFood) S.food += q.rFood;
+  return { gold: q.rGold || 0, food: q.rFood || 0 };
+}
+function chestReady() { return S.quests && S.quests.list.every(q => q.claimed) && !S.quests.chestClaimed; }
+function claimChest() {
+  if (!chestReady() || S.egg) return null;
+  const sp = rollWildSpecies();
+  const v = rng() < 0.25 ? 'rare' : 'normal';          // BOOSTED rare odds — the daily prize
+  S.egg = { sp, v, readyAt: now() + 5 * 60000 };
+  S.quests.chestClaimed = true;
+  return { sp, v };
+}
+
 // ---------- between-timer play: petting + roaming bonus critters ----------
 const PET_CD = 5 * 60000;   // a creature enjoys a pet every 5 minutes
 function petCreature(c) {
@@ -528,6 +614,7 @@ function petCreature(c) {
   c.petAt = now();
   const gold = Math.max(1, Math.round(gpmOf(c)));   // one minute of production as a treat
   S.gold += gold; S.lifetime += gold;
+  questBump('pet', 1);
   return { gold };
 }
 const coveGpm = () => S.creatures.reduce((a, c) => a + gpmOf(c), 0);
@@ -539,6 +626,7 @@ function spawnRoamer(kind, x, y) {
 function catchRoamer() {
   if (!roamer) return null;
   const r = roamer; roamer = null;
+  questBump('roamer', 1);
   if (r.kind === 'coin') {
     const gold = Math.min(600, Math.max(20, Math.round(coveGpm() * 2)));
     S.gold += gold; S.lifetime += gold;
@@ -948,10 +1036,32 @@ function drawScene(t) {
     } else {
       ctx.save(); ctx.translate(0, 26 * size); groundShadow(38 * size, 12 * size); ctx.restore();
     }
+    // RARE/EPIC ground ring: pulsing, colored, unmissable (art-free variant identity)
+    if (c.v !== 'normal') {
+      const epic = c.v === 'epic';
+      const pulse = 0.5 + 0.5 * Math.sin(t / 280 + c.id * 2.1);
+      ctx.save();
+      ctx.strokeStyle = epic ? 'rgba(255,182,77,' + (0.5 + 0.4 * pulse) + ')' : 'rgba(143,216,255,' + (0.45 + 0.4 * pulse) + ')';
+      ctx.lineWidth = 3 + pulse * 1.5;
+      ctx.shadowColor = epic ? '#ffb64d' : '#8fd8ff';
+      ctx.shadowBlur = 12 + 8 * pulse;
+      ctx.beginPath(); ctx.ellipse(0, 26 * size, (42 + 5 * pulse) * size, (14 + 2 * pulse) * size, 0, 0, Math.PI * 2); ctx.stroke();
+      if (epic) {   // inner second ring — epics are royalty
+        ctx.strokeStyle = 'rgba(255,226,150,' + (0.35 + 0.3 * (1 - pulse)) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 26 * size, 30 * size, 10 * size, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      if (rng() < 0.035) particles.push({   // rising sparkle motes
+        x: p.x + (rng() - 0.5) * 60 * size, y: p.y + 15,
+        vx: (rng() - 0.5) * 10, vy: -30 - rng() * 25, life: 1.1, max: 1.1,
+        col: epic ? '#ffd166' : '#aee2ff', r: 1.8 + rng() * 1.6,
+      });
+    }
 
     // variant aura (night-element creatures glow after dark when no variant owns it)
-    if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 16; }
-    else if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 26; }
+    if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 24; }
+    else if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 36; }
     else if (nf > 0.2 && d.el.includes('N')) { ctx.shadowColor = '#93aaff'; ctx.shadowBlur = 22 * nf; }
 
     if (spr[c.sp]) {
@@ -1174,6 +1284,9 @@ function toast(msg) {
   setTimeout(() => t.remove(), 3200);
 }
 function refreshTop() {
+  if (refreshQuests()) { toast('📜 New Cove Requests for today!'); save(); }
+  const qGlow = S.quests && (S.quests.list.some(q => q.done && !q.claimed) || chestReady());
+  $('navQuest').classList.toggle('glow', !!qGlow);
   if (S.expedition && now() >= S.expedition.readyAt && !expToastShown) {
     expToastShown = true;
     sfx.hatch();
@@ -1609,6 +1722,66 @@ function renderShop(body) {
   }
 }
 
+// ---------- DAILY REQUESTS modal ----------
+function openQuests() {
+  refreshQuests();
+  openModal('📜 DAILY COVE REQUESTS', renderQuests);
+}
+function renderQuests(body) {
+  body.innerHTML = '';
+  const note = document.createElement('div'); note.className = 'unionTag';
+  note.textContent = 'New requests every day — finish all 3 for the Daily Chest!';
+  body.appendChild(note);
+  S.quests.list.forEach((q, i) => {
+    const row = document.createElement('div'); row.className = 'card' + (q.claimed ? '' : q.done ? ' sel' : '');
+    const info = document.createElement('div'); info.className = 'cardInfo';
+    const pct = Math.round(100 * q.prog / q.target);
+    info.innerHTML = '<div class="cardName">' + questText(q) + '</div>' +
+      '<div class="cardSub">' + (q.claimed ? '✓ done!' : q.prog + ' / ' + q.target) +
+      ' &nbsp;·&nbsp; reward: ' + (q.rGold ? '🪙 ' + fmt(q.rGold) : '🍖 ' + fmt(q.rFood)) + '</div>' +
+      '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,0.08);margin-top:6px">' +
+      '<div style="height:100%;width:' + pct + '%;border-radius:3px;background:' + (q.done ? '#9be36e' : '#7fd8c8') + '"></div></div>';
+    row.appendChild(info);
+    if (q.done && !q.claimed) {
+      const btn = document.createElement('button'); btn.className = 'cardBtn gold'; btn.textContent = 'CLAIM';
+      btn.onclick = () => {
+        const r = questClaim(i);
+        if (r) { sfx.buy(); toast('📜 ' + (r.gold ? '+' + fmt(r.gold) + ' 🪙' : '+' + fmt(r.food) + ' 🍖')); save(); refreshTop(); renderQuests(body); }
+      };
+      row.appendChild(btn);
+    } else if (q.claimed) {
+      const ok = document.createElement('div'); ok.style.cssText = 'font-size:22px'; ok.textContent = '✅';
+      row.appendChild(ok);
+    }
+    body.appendChild(row);
+  });
+  // the chest
+  const chest = document.createElement('div'); chest.className = 'card' + (chestReady() ? ' sel' : '');
+  const ci = document.createElement('div'); ci.className = 'cardInfo';
+  const allClaimed = S.quests.list.every(q => q.claimed);
+  ci.innerHTML = '<div class="cardName">🎁 Daily Chest</div>' +
+    '<div class="cardSub">' + (S.quests.chestClaimed ? '✓ opened — come back tomorrow!' :
+      allClaimed ? 'A bonus egg with BOOSTED ✨ Rare odds!' : 'Finish all 3 requests to open') + '</div>';
+  chest.appendChild(ci);
+  if (chestReady()) {
+    const btn = document.createElement('button'); btn.className = 'cardBtn gold'; btn.textContent = S.egg ? 'NURSERY FULL' : 'OPEN!';
+    if (!S.egg) btn.onclick = () => {
+      const r = claimChest();
+      if (r) {
+        sfx.rare();
+        toast('🎁 A mystery egg tumbles out' + (r.v === 'rare' ? '… and it\u2019s SHIMMERING! ✨' : '! To the nursery!'));
+        save(); refreshTop(); renderQuests(body);
+      }
+    };
+    else btn.className = 'cardBtn cant';
+    chest.appendChild(btn);
+  } else if (S.quests.chestClaimed) {
+    const ok = document.createElement('div'); ok.style.cssText = 'font-size:22px'; ok.textContent = '✅';
+    chest.appendChild(ok);
+  }
+  body.appendChild(chest);
+}
+
 // ---------- BESTIARY modal ----------
 function openBook() {
   openModal('BESTIARY — ' + Object.keys(S.disc).length + ' / 45 discovered', (body) => {
@@ -1813,6 +1986,7 @@ function handleTap(wx, wy) {
 // ============================== NAV ==============================
 $('navBreed').onclick = () => { sfx.tap(); openBreed(); };
 $('navShop').onclick = () => { sfx.tap(); openShop(); };
+$('navQuest').onclick = () => { sfx.tap(); openQuests(); };
 $('navBook').onclick = () => { sfx.tap(); openBook(); };
 $('navBoard').onclick = () => { sfx.tap(); openBoard(); };
 $('muteBtn').onclick = () => {
@@ -1849,6 +2023,7 @@ function frame(t) {
 
 // ============================== BOOT ==============================
 function boot() {
+  // (quests refresh inside refreshTop's tick; seed here so the button works immediately)
   // ?demo=1 — populated showcase state (screenshots/QA); never saved over a real game
   if (/(\?|&)demo=1/.test(location.search)) {
     S = defaultState();
@@ -1893,6 +2068,7 @@ globalThis.__CC = {
   save, load, defaultState, denCount, busyIds, landCount, sellValue, sellCreature,
   EXPEDITIONS, expGold, startExpedition, claimExpedition, isAway,
   petCreature, spawnRoamer, catchRoamer, coveGpm, get roamer() { return roamer; },
+  refreshQuests, questBump, questClaim, chestReady, claimChest, genQuests, questText,
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
   refreshTop, renderBreed, renderShop,
