@@ -1810,8 +1810,23 @@ function renderWilds(body) {
       '<div class="cardSub">' + (ready ? 'They\u2019re back — see what they found!' : 'Returns in ' + fmtT(e.readyAt - now())) + '</div>';
     row.appendChild(info);
     if (ready) {
-      const btn = document.createElement('button'); btn.className = 'cardBtn gold'; btn.textContent = 'WELCOME BACK!';
+      const btn = document.createElement('button');
+      const nurseryFull = !!S.egg;
+      btn.className = 'cardBtn ' + (nurseryFull ? '' : 'gold');
+      if (nurseryFull) { btn.style.borderColor = 'rgba(255,180,90,0.6)'; btn.style.color = '#ffb85a'; }
+      btn.textContent = 'WELCOME BACK!';
+      let armed = false, disarm = null;
       btn.onclick = () => {
+        // the nursery-full trap: a found wild egg would be converted to gold — warn first
+        if (S.egg && !armed) {
+          armed = true;
+          btn.textContent = '⚠ Egg would become gold!';
+          toast('⚠ Your Nursery is full — any WILD EGG they found turns into gold. Hatch first, or tap again to claim anyway.');
+          sfx.err();
+          disarm = setTimeout(() => { armed = false; btn.textContent = 'WELCOME BACK!'; }, 4000);
+          return;
+        }
+        clearTimeout(disarm);
         const res = claimExpedition();
         if (!res) return;
         sfx.coin();
