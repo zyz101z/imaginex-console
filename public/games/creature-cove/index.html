@@ -876,15 +876,19 @@ const PAD_POS = [
 const WATER_PAD = { x: 1330, y: 745 };   // in the lagoon, visible without panning
 // buildings live along the upper terraces (midground) — the MSM structure:
 // structures in the back, creatures in front (user feedback 2026-07-03)
+// Layout 2026-07-04, spaced by MEASURED sprite widths (den ~200px, barn ~190, vault ~205
+// — far wider than the old eyeballed spacing; that's why things kept colliding):
+// left cluster = breeding (vault on the hill behind the den), tree center stays clear
+// even at Mythic size (canopy 644-880), farms stagger down the right slope.
 const PLOTS = {
-  den:     { x: 210, y: 365, label: 'Breeding Den' },
-  nursery: { x: 420, y: 330, label: 'Nursery' },
-  vault:   { x: 485, y: 258 },   // tucked BEHIND the nursery (painter order: smaller y draws first)
-  den2:    { x: 860, y: 330, label: 'Den II' },
-  wilds:   { x: 85,  y: 660, label: 'The Wilds' },
-  farm0:   { x: 1080, y: 330 },
-  farm1:   { x: 1290, y: 365 },
-  farm2:   { x: 1480, y: 420 },
+  vault:   { x: 150,  y: 245 },                        // hill behind the den
+  den:     { x: 185,  y: 380, label: 'Breeding Den' },
+  nursery: { x: 430,  y: 320, label: 'Nursery' },
+  den2:    { x: 985,  y: 315, label: 'Den II' },
+  farm0:   { x: 1215, y: 330 },
+  farm1:   { x: 1435, y: 375 },
+  farm2:   { x: 1590, y: 465 },
+  wilds:   { x: 85,   y: 660, label: 'The Wilds' },
 };
 // Depth scale: the painted background has perspective — lower on screen = closer = bigger.
 // This is what stops sprites from "hovering" on top of the painting.
@@ -1422,19 +1426,27 @@ function drawTree(t, stage) {
 function drawBuilding(kind, p, emo, t, activeBreed) {
   if (!p) return;
   const ds = dscale(p.y);
+  // wide flat-bottomed sprites (barn/vault) sink deeper + get wider yards, so their
+  // straight base is visibly buried in grass instead of resting ON it ("hovering")
+  const sink = (kind === 'farm' ? 30 : kind === 'vault' ? 26 : 20) * ds;
+  const yardW = (kind === 'farm' || kind === 'vault') ? 108 : 88;
   ctx.save();
   ctx.translate(p.x, p.y);
-  // grounding: a worn "yard" patch under the building, then the contact shadow
   ctx.fillStyle = 'rgba(70,105,55,0.5)';
-  ctx.beginPath(); ctx.ellipse(0, 18 * ds, 88 * ds, 26 * ds, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 18 * ds, yardW * ds, (yardW * 0.3) * ds, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(50,80,40,0.45)';
-  ctx.beginPath(); ctx.ellipse(0, 18 * ds, 66 * ds, 19 * ds, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 18 * ds, yardW * 0.74 * ds, (yardW * 0.215) * ds, 0, 0, Math.PI * 2); ctx.fill();
   ctx.save(); ctx.translate(0, 16 * ds); groundShadow(78 * ds, 24 * ds); ctx.restore();
   if (spr[kind]) {
-    // front-view art with grass baked into the base (regen 2026-07-03) — the bottom
-    // edge IS the ground line: anchor it right on the yard's center
     const im = spr[kind], h = 165 * ds, w = h * (im.width / im.height);
-    ctx.drawImage(im, -w / 2, -h + 20 * ds, w, h);
+    ctx.drawImage(im, -w / 2, -h + sink, w, h);
+    // grass lip over the buried base — completes the "planted" read for flat bottoms
+    ctx.save();
+    ctx.beginPath(); ctx.rect(-yardW * ds, sink * 0.55, yardW * 2 * ds, 26 * ds);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(74,108,58,0.55)';
+    ctx.beginPath(); ctx.ellipse(0, 18 * ds, yardW * 0.9 * ds, (yardW * 0.24) * ds, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   } else {
     ctx.fillStyle = 'rgba(30,60,80,0.9)'; ctx.strokeStyle = 'rgba(127,216,200,0.5)'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.roundRect(-52 * ds, -72 * ds, 104 * ds, 92 * ds, 12); ctx.fill(); ctx.stroke();
@@ -2325,14 +2337,16 @@ function boot() {
   // ?demo=1 — populated showcase state (screenshots/QA); never saved over a real game
   if (/(\?|&)demo=1/.test(location.search)) {
     S = defaultState();
-    S.gold = 12345; S.food = 480; S.expansion = 2; S.vault = true;
+    S.gold = 12345; S.food = 480; S.expansion = 2; S.vault = true; S.den2 = true;
     S.lifetime = 60000; S.treeStage = 4;
-    S.farms = [{ food: 120, readyAt: now() + 300000 }, null];
+    S.shrines = { E: 2, M: 0, N: 3, B: 1 };
+    S.farms = [{ food: 120, readyAt: now() + 300000 }, null, { food: 550, readyAt: now() - 1000 }];
     S.decor = { mush: 2, torch: 1, fount: 1 };
     const seedList = [['gnome','normal',3],['fairy','rare',2],['genie','normal',4],['ogre','normal',1],
       ['vampire','epic',5],['unicorn','normal',2],['yeti','rare',1],['phoenix','normal',1],['nessie','normal',2],['dragon','normal',1]];
     for (const [sp, v, lvl] of seedList) { const c = addCreature(sp, v); c.lvl = lvl; c.t0 = now() - 40 * 60000; S.disc[sp + ':' + v] = true; }
     S.breeds[0] = { aId: 1, bId: 2, sp: 'genie', v: 'normal', readyAt: now() + 95000 };
+    S.breeds[1] = { aId: 3, bId: 4, sp: 'ogre', v: 'rare', readyAt: now() + 400000 };
     S.egg = { sp: 'unicorn', v: 'rare', readyAt: now() - 1000 };
     save = () => {};   // demo state must never clobber a real save
     resize(); refreshTop(); requestAnimationFrame(frame);
