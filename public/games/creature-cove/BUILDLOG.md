@@ -25,6 +25,8 @@
      GET returns a PLAIN ARRAY; per-game MAX_SCORE_BY_GAME in route.ts (CC: 100M).
 
 ## 2026-07-04 SESSION LOG
+- Shop buys → NURSERY egg flow (user rule: everything hatches; nursery-free gate, pads
+  checked at hatch) + elements shown in the tap-selection panel. T7/T11 reworked; 146.
 - Economy: expedition rebalance (rates .9/.8/.7, cap 1.2× storage — L4 unicorn 1700→880)
   + ELEMENTAL SHRINES sink (4×3 lvls, 5k/25k/100k, +5%/lvl/element, grove left terrace,
   explainer modal on tap) + premium decor (8k/15k/25k). T20.
