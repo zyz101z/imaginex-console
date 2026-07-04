@@ -905,9 +905,12 @@ const PLOTS = {
 // Depth scale: the painted background has perspective — lower on screen = closer = bigger.
 // This is what stops sprites from "hovering" on top of the painting.
 const dscale = (y) => 0.6 + 0.55 * (y / WORLD_H);
+// Curated for the CURRENT low-angle background (2026-07-04): open meadow gaps, path
+// edges, one beach spot — all ≥70px clear of pads/buildings/lagoon/sky. 12 slots.
 const DECOR_POS = [
-  { x: 260, y: 430 }, { x: 1250, y: 700 }, { x: 600, y: 760 }, { x: 1050, y: 760 }, { x: 900, y: 180 },
-  { x: 380, y: 300 }, { x: 1240, y: 260 }, { x: 150, y: 400 }, { x: 700, y: 180 }, { x: 1350, y: 620 },
+  { x: 230, y: 762 }, { x: 450, y: 852 }, { x: 640, y: 762 }, { x: 720, y: 860 },
+  { x: 1030, y: 838 }, { x: 1180, y: 862 }, { x: 150, y: 595 }, { x: 95, y: 585 },
+  { x: 255, y: 640 }, { x: 355, y: 745 }, { x: 1420, y: 480 }, { x: 1560, y: 560 },
 ];
 
 // ============================== DAY / NIGHT ==============================
@@ -1075,13 +1078,23 @@ function drawScene(t) {
     drawTimer(p.x - 95 * dscale(p.y), p.y - 65 * dscale(p.y), S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
   }
 
-  // ---- decorations ----
+  // ---- decorations: EXPENSIVE FIRST (a new 25k throne must never lose its slot to a
+  // 100g mushroom), depth-scaled, grounded with a small shadow ----
   let dIdx = 0;
-  for (const d of DECOR) {
+  const decorSorted = [...DECOR].sort((a, b) => b.cost - a.cost);
+  for (const d of decorSorted) {
     for (let n = 0; n < (S.decor[d.id] || 0) && dIdx < DECOR_POS.length; n++) {
       const p = DECOR_POS[dIdx++];
-      ctx.font = '30px serif'; ctx.textAlign = 'center';
-      ctx.fillText(d.emo, p.x, p.y + Math.sin(t / 700 + dIdx) * 2);
+      const dds = dscale(p.y);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(0, 4 * dds, 15 * dds, 5.5 * dds, 0, 0, Math.PI * 2); ctx.fill();
+      const dsz = d.cost >= 8000 ? 58 : d.cost >= 600 ? 46 : 36;   // prestige pieces stand tall
+      ctx.font = Math.round(dsz * dds) + 'px serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(d.emo, 0, Math.sin(t / 700 + dIdx * 1.7) * 2);
+      ctx.restore();
     }
   }
 
@@ -1926,6 +1939,10 @@ function renderShop(body) {
     body.appendChild(note);
     shrineRows(body, () => renderShop(body));
   } else if (shopTab === 'decor') {
+    const totalDecor = Object.values(S.decor).reduce((a, b) => a + b, 0);
+    const dn = document.createElement('div'); dn.className = 'unionTag';
+    dn.textContent = 'Decorations placed around the cove — fanciest first (' + Math.min(totalDecor, DECOR_POS.length) + '/' + DECOR_POS.length + ' spots filled)';
+    body.appendChild(dn);
     for (const d of DECOR) {
       mkRow(null, d.emo + ' ' + d.name, 'Owned: ' + (S.decor[d.id] || 0), '🪙 ' + fmt(d.cost),
         S.gold >= d.cost ? 'gold' : 'cant',
@@ -2345,7 +2362,7 @@ function boot() {
     S.lifetime = 60000; S.treeStage = 4;
     S.shrines = { E: 2, M: 0, N: 3, B: 1 };
     S.farms = [{ food: 120, readyAt: now() + 300000 }, null, { food: 550, readyAt: now() - 1000 }];
-    S.decor = { mush: 2, torch: 1, fount: 1 };
+    S.decor = { mush: 3, torch: 2, fount: 1, banner: 1, crystal: 1, statue: 1, arch: 1, throne: 1 };
     const seedList = [['gnome','normal',3],['fairy','rare',2],['genie','normal',4],['ogre','normal',1],
       ['vampire','epic',5],['unicorn','normal',2],['yeti','rare',1],['phoenix','normal',1],['nessie','normal',2],['dragon','normal',1]];
     for (const [sp, v, lvl] of seedList) { const c = addCreature(sp, v); c.lvl = lvl; c.t0 = now() - 40 * 60000; S.disc[sp + ':' + v] = true; }
