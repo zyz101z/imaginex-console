@@ -293,6 +293,9 @@ const DECOR = [
   { id: 'fount',   name: 'Fairy Fountain', emo: '⛲', cost: 600 },
   { id: 'banner',  name: 'Cove Banner',    emo: '🚩', cost: 1200 },
   { id: 'crystal', name: 'Moon Crystal',   emo: '💎', cost: 3000 },
+  { id: 'statue',  name: 'Golden Dragon Statue', emo: '🐲', cost: 8000 },
+  { id: 'arch',    name: 'Rainbow Arch',   emo: '🌈', cost: 15000 },
+  { id: 'throne',  name: 'Mythic Throne',  emo: '👑', cost: 25000 },
 ];
 const LEVEL_MAX = 10;
 // EXPEDITIONS ("The Wilds"): send an idle creature adventuring. Rewards scale with the
@@ -326,6 +329,7 @@ function defaultState() {
     expedition: null,                   // { cId, dest, readyAt }
     quests: null,                       // { day, list[3], chestClaimed }
     treeStage: 0,
+    shrines: { E: 0, M: 0, N: 0, B: 0 },
     egg: null,                          // { sp, v, readyAt }  (nursery)
     disc: {},                           // 'sp:variant' -> true
     lastSeen: now(),
@@ -362,7 +366,7 @@ function addCreature(sp, v) {
 }
 
 // ============================== ECONOMY ==============================
-const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1)) * treeBonus();
+const gpmOf = (c) => SPECIES[c.sp].gpm * VARIANTS[c.v].g * (1 + 0.25 * (c.lvl - 1)) * treeBonus() * shrineBonus(c);
 const capMinOf = (c) => (60 + 10 * (c.lvl - 1)) * (S.vault ? 1.5 : 1);   // Vault: +50% storage
 const capOf = (c) => gpmOf(c) * capMinOf(c);
 const pendingOf = (c) => Math.min(capOf(c), c.bank + gpmOf(c) * (now() - c.t0) / 60000);
@@ -453,7 +457,14 @@ function busyIds() {
 const isAway = (id) => !!(S.expedition && S.expedition.cId === id);
 
 // ---------- expeditions ----------
-const expGold = (c, destIdx) => Math.round(gpmOf(c) * EXPEDITIONS[destIdx].min * 1.35);
+// Rebalanced 2026-07-04 (user: L4 unicorn pulled 1700g/2h — double her storage cap):
+// diminishing rate for longer trips, hard-capped at 1.2x what the creature could HOLD.
+// Expeditions = a full satchel + the egg/decor lottery, not the dominant gold engine.
+const EXP_RATE = [0.9, 0.8, 0.7];
+function expGold(c, destIdx) {
+  const raw = gpmOf(c) * EXPEDITIONS[destIdx].min * EXP_RATE[destIdx];
+  return Math.round(Math.min(raw, capOf(c) * 1.2));
+}
 function startExpedition(cId, destIdx) {
   if (S.expedition) return null;                 // one party at a time
   const dest = EXPEDITIONS[destIdx];
@@ -578,6 +589,32 @@ function checkTreeGrowth() {
   const gift = st * 60;          // food gift, not gold (gold->tree->gold would be circular)
   S.food += gift;
   return { stage: st, name: TREE_STAGES[st].name, gift };
+}
+
+// ---------- ELEMENTAL SHRINES ----------
+// The repeatable late-game gold sink: four shrines, three levels each (5k/25k/100k),
+// each level = +5% gold for every creature CARRYING that element (a Dragon benefits
+// from all four; maxing everything costs 520k and earns +60% on him).
+const SHRINES = {
+  E: { name: 'Stone Shrine' }, M: { name: 'Spark Shrine' },
+  N: { name: 'Moon Shrine' },  B: { name: 'Wild Shrine' },
+};
+const SHRINE_COSTS = [5000, 25000, 100000];
+function shrineLvl(e) { return (S.shrines || {})[e] || 0; }
+function shrineBonus(c) {
+  let b = 0;
+  for (const e of SPECIES[c.sp].el) b += 0.05 * shrineLvl(e);
+  return 1 + b;
+}
+function buyShrine(e) {
+  const lvl = shrineLvl(e);
+  if (!SHRINES[e] || lvl >= 3) return false;
+  const cost = SHRINE_COSTS[lvl];
+  if (S.gold < cost) return false;
+  S.gold -= cost;
+  if (!S.shrines) S.shrines = { E: 0, M: 0, N: 0, B: 0 };
+  S.shrines[e] = lvl + 1;
+  return true;
 }
 
 // ---------- DAILY COVE REQUESTS ----------
@@ -842,7 +879,7 @@ const WATER_PAD = { x: 1330, y: 745 };   // in the lagoon, visible without panni
 const PLOTS = {
   den:     { x: 210, y: 365, label: 'Breeding Den' },
   nursery: { x: 420, y: 330, label: 'Nursery' },
-  vault:   { x: 655, y: 325 },
+  vault:   { x: 550, y: 345 },   // moved 2026-07-04: tree canopy was swallowing it
   den2:    { x: 860, y: 330, label: 'Den II' },
   wilds:   { x: 85,  y: 660, label: 'The Wilds' },
   farm0:   { x: 1080, y: 330 },
@@ -1010,7 +1047,7 @@ function drawScene(t) {
     const wob = Math.sin(t / 130) * (now() >= S.egg.readyAt ? 6 : 2);
     ctx.save();
     // the nursery hut is itself egg-shaped — park the incubating egg in front-right of it
-    ctx.translate(p.x + 100 * dscale(p.y), p.y + 2 * dscale(p.y)); ctx.rotate(wob * 0.02);
+    ctx.translate(p.x - 95 * dscale(p.y), p.y + 2 * dscale(p.y)); ctx.rotate(wob * 0.02);
     if (spr.egg) { ctx.drawImage(spr.egg, -26, -34, 52, 62); }
     else { ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 14); }
     if (S.egg.v !== 'normal') {
@@ -1019,7 +1056,7 @@ function drawScene(t) {
       ctx.fillText(VARIANTS[S.egg.v].icon, 20, -18);
     }
     ctx.restore();
-    drawTimer(p.x + 100 * dscale(p.y), p.y - 65 * dscale(p.y), S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
+    drawTimer(p.x - 95 * dscale(p.y), p.y - 65 * dscale(p.y), S.egg.readyAt, '🐣', now() >= S.egg.readyAt);
   }
 
   // ---- decorations ----
@@ -1034,6 +1071,33 @@ function drawScene(t) {
 
   // ---- the Great Cove Tree (behind the building band) ----
   if (!SAFE_MODE) drawTree(t, treeStage());
+
+  // ---- the shrine grove ----
+  {
+    const keys = ['E', 'M', 'N', 'B'];
+    for (let i = 0; i < 4; i++) {
+      const e = keys[i], sx = 95 + i * 36, sy = 480, ds = dscale(sy);
+      const lvl = shrineLvl(e);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath(); ctx.ellipse(0, 8 * ds, 13 * ds, 5 * ds, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = lvl ? '#5a6f7d' : 'rgba(90,111,125,0.45)';
+      ctx.strokeStyle = lvl ? 'rgba(127,216,200,0.65)' : 'rgba(127,216,200,0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(-11 * ds, -26 * ds, 22 * ds, 34 * ds, 5); ctx.fill(); ctx.stroke();
+      if (lvl) { ctx.shadowColor = '#7fd8c8'; ctx.shadowBlur = 7 + lvl * 4; }
+      ctx.font = Math.round(15 * ds) + 'px serif'; ctx.textAlign = 'center';
+      ctx.globalAlpha = lvl ? 1 : 0.55;
+      ctx.fillText(EL_ICON[e], 0, -8 * ds);
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffd166';
+      for (let pp = 0; pp < lvl; pp++) { ctx.beginPath(); ctx.arc((-6 + pp * 6) * ds, 2 * ds, 1.8, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
+    ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = 'rgba(223,242,240,0.6)'; ctx.textAlign = 'center';
+    ctx.fillText('Shrines', 149, 510);
+  }
 
   // ---- the Wilds trailhead ----
   {
@@ -1776,7 +1840,7 @@ function openShop(tab) {
 function renderShop(body) {
   body.innerHTML = '';
   const tabs = document.createElement('div'); tabs.className = 'tabRow';
-  for (const [id, label] of [['creatures', '🐾 Creatures'], ['buildings', '🏗 Buildings'], ['decor', '🎪 Decor'], ['expand', '🏠 Expand']]) {
+  for (const [id, label] of [['creatures', '🐾 Creatures'], ['buildings', '🏗 Buildings'], ['shrines', '⛩ Shrines'], ['decor', '🎪 Decor'], ['expand', '🏠 Expand']]) {
     const t = document.createElement('button'); t.className = 'tab' + (shopTab === id ? ' on' : ''); t.textContent = label;
     t.onclick = () => { shopTab = id; renderShop(body); };
     tabs.appendChild(t);
@@ -1841,6 +1905,23 @@ function renderShop(body) {
           () => { claimBatch(i); sfx.feed(); save(); refreshTop(); renderShop(body); });
       } else {
         mkRow(null, '🌾 Farm ' + (i + 1), 'Cooking… ' + fmtT(f.readyAt - now()), '⏳', 'cant', null);
+      }
+    }
+  } else if (shopTab === 'shrines') {
+    const note = document.createElement('div'); note.className = 'unionTag';
+    note.textContent = 'Each level: +5% gold for every creature with that element';
+    body.appendChild(note);
+    for (const e of ['E', 'M', 'N', 'B']) {
+      const lvl = shrineLvl(e);
+      const nCreatures = S.creatures.filter(c => SPECIES[c.sp].el.includes(e)).length;
+      if (lvl >= 3) {
+        mkRow(null, EL_ICON[e] + ' ' + SHRINES[e].name, 'MAX level — +15% to ' + nCreatures + ' creatures', '⭐ MAX', 'cant', null);
+      } else {
+        const cost = SHRINE_COSTS[lvl];
+        mkRow(null, EL_ICON[e] + ' ' + SHRINES[e].name + ' ' + '◆'.repeat(lvl) + '◇'.repeat(3 - lvl),
+          'Now +' + (lvl * 5) + '% → next +' + ((lvl + 1) * 5) + '% (boosts ' + nCreatures + ' of your creatures)',
+          '🪙 ' + fmt(cost), S.gold >= cost ? 'gold' : 'cant',
+          () => { if (buyShrine(e)) { sfx.disc(); toast('⛩ ' + SHRINES[e].name + ' empowered! ' + EL_ICON[e] + ' creatures +' + (shrineLvl(e) * 5) + '%'); save(); refreshTop(); renderShop(body); } else sfx.err(); });
       }
     }
   } else if (shopTab === 'decor') {
@@ -2118,7 +2199,7 @@ function handleTap(wx, wy) {
   // the incubating egg itself (it sits beside the nursery; kids tap the THING, not the hut)
   if (S.egg) {
     const np = PLOTS.nursery, nds = dscale(np.y);
-    const ex = np.x + 100 * nds, ey = np.y - 20 * nds;
+    const ex = np.x - 95 * nds, ey = np.y - 20 * nds;
     if (Math.abs(wx - ex) < 55 * nds && Math.abs(wy - ey) < 70 * nds) {
       if (now() >= S.egg.readyAt) doHatch(); else openBreed();
       return;
@@ -2131,6 +2212,7 @@ function handleTap(wx, wy) {
     const r = 45 + st * 14;
     if (Math.abs(wx - TREE_POS.x) < r && wy > TREE_POS.y - (40 + st * 38) && wy < TREE_POS.y + 30) { openTree(); return; }
   }
+  if (wx > 65 && wx < 230 && wy > 435 && wy < 505) { openShop('shrines'); return; }
   if (near(PLOTS.wilds, 60)) { openWilds(); return; }
   if (near(PLOTS.den, 75) || (S.den2 && near(PLOTS.den2, 75))) { openBreed(); return; }
   if (near(PLOTS.nursery, 75)) {
@@ -2251,6 +2333,7 @@ globalThis.__CC = {
   petCreature, spawnRoamer, catchRoamer, coveGpm, get roamer() { return roamer; },
   refreshQuests, questBump, questClaim, chestReady, claimChest, genQuests, questText,
   TREE_STAGES, treeStage, treeBonus, checkTreeGrowth,
+  SHRINES, SHRINE_COSTS, shrineLvl, shrineBonus, buyShrine, EXP_RATE,
   drawScene, drawTree, resize, set eggFlyV(v) { eggFly = v; },
   setNow(msOffset) { _nowOffset = msOffset; },
   setRng(fn) { rng = fn || Math.random; },
