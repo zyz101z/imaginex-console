@@ -106,6 +106,11 @@ Every species exists in three variants — same creature, fancier form, bigger i
 | **Rare** ✨ | **2×** | **2×** | alt palette + sparkle drift | small chance on ANY breed |
 | **Epic** 🌟 | **4×** | **3×** | dramatic palette + aura + slightly larger | only from breeding **Rare × Rare** (or better) |
 
+**Level bonus (added 2026-07-04):** higher-level parents breed better — +0.6% rare odds
+per average level above 1 (max +5.4%), epic odds +0.3%/level ONLY where epics are already
+possible, and the parent-shy factor deepens ~35% by L10 (new species more likely). Gentle
+by design; makes food/leveling matter beyond gold rate.
+
 **Variant roll** happens AFTER the species roll, based on the *parents' variants*:
 
 | Parents | Rare chance | Epic chance |

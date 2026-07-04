@@ -430,16 +430,24 @@ function breedPool(spA, spB) {
   const u = elSet(elUnion(spA, spB));
   return SP_KEYS.filter(k => [...elSet(SPECIES[k].el)].every(e => u.has(e)));
 }
-function rollSpecies(spA, spB) {
+// LEVEL BONUS (user 2026-07-04, "another reason to level"): higher-level parents are
+// (a) shyer about repeating themselves and (b) likelier to produce variants. Gentle:
+// maxed L10 pair ≈ +5.4% rare / parents 35% shyer.
+function rollSpecies(spA, spB, avgLvl) {
   const pool = breedPool(spA, spB);
-  const weights = pool.map(k => TIER_WEIGHT[SPECIES[k].tier] * ((k === spA || k === spB) ? PARENT_SHY : 1));
+  const L = Math.max(0, (avgLvl || 1) - 1);
+  const shy = PARENT_SHY * (1 - 0.35 * L / 9);
+  const weights = pool.map(k => TIER_WEIGHT[SPECIES[k].tier] * ((k === spA || k === spB) ? shy : 1));
   let t = weights.reduce((a, b) => a + b, 0) * rng();
   for (let i = 0; i < pool.length; i++) { t -= weights[i]; if (t <= 0) return pool[i]; }
   return pool[pool.length - 1];
 }
-function rollVariant(vA, vB) {
+function rollVariant(vA, vB, avgLvl) {
   const key = [VRANK[vA], VRANK[vB]].sort((a, b) => b - a).join('');
-  const [rarePct, epicPct] = VAR_ODDS[key] || [5, 0];
+  let [rarePct, epicPct] = VAR_ODDS[key] || [5, 0];
+  const L = Math.max(0, (avgLvl || 1) - 1);
+  rarePct += L * 0.6;                       // level bonus: up to +5.4% rare at L10 pairs
+  if (epicPct > 0) epicPct += L * 0.3;      // epics improve ONLY where already possible
   const r = rng() * 100;
   if (r < epicPct) return 'epic';
   if (r < epicPct + rarePct) return 'rare';
@@ -516,8 +524,9 @@ function startBreed(aId, bId) {
   if (!a || !b) return null;
   const busy = busyIds();
   if (busy.has(aId) || busy.has(bId)) return null;
-  const sp = rollSpecies(a.sp, b.sp);
-  const v = rollVariant(a.v, b.v);
+  const avgLvl = (a.lvl + b.lvl) / 2;
+  const sp = rollSpecies(a.sp, b.sp, avgLvl);
+  const v = rollVariant(a.v, b.v, avgLvl);
   const breed = { aId, bId, sp, v, readyAt: now() + breedTimeMs(sp, v) };
   S.breeds[den] = breed;
   questBump('breedEl', 1, elUnion(a.sp, b.sp));
@@ -1642,7 +1651,12 @@ function renderBreed(body) {
   body.appendChild(slotRow);
 
   const union = document.createElement('div'); union.className = 'unionTag';
-  union.textContent = (pickA && pickB) ? 'Elements combined: ' + elIcons(elUnion(pickA.sp, pickB.sp)) : 'Pick two creatures below';
+  if (pickA && pickB) {
+    const avg = (pickA.lvl + pickB.lvl) / 2;
+    let txt = 'Elements combined: ' + elIcons(elUnion(pickA.sp, pickB.sp));
+    if (avg > 1) txt += '  ·  ⭐ L' + avg + ' parents: +' + ((avg - 1) * 0.6).toFixed(1) + '% rare odds, new species more likely';
+    union.textContent = txt;
+  } else union.textContent = 'Pick two creatures below';
   body.appendChild(union);
 
   const go = document.createElement('button'); go.className = 'goBtn' + ((pickA && pickB) ? '' : ' cant'); go.textContent = 'START BREEDING';
