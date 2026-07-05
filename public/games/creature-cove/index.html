@@ -877,6 +877,30 @@ if (typeof Image !== 'undefined') {
     im.src = 'sprites/' + k + '.png';
   }
 }
+// Pre-tinted variant sprites via composite wash — ctx.filter is NOT reliable (silently
+// ignored on some Windows GPU configs and iPad Safari; user's rare Bigfoot stayed brown).
+const variantSpr = {};
+function creatureSprite(sp, v) {
+  if (!spr[sp]) return null;
+  if (v === 'normal') return spr[sp];
+  const key = sp + ':' + v;
+  if (variantSpr[key]) return variantSpr[key];
+  const im = spr[sp];
+  const c = document.createElement('canvas');
+  c.width = im.width; c.height = im.height;
+  const x = c.getContext('2d');
+  x.drawImage(im, 0, 0);
+  x.globalCompositeOperation = 'source-atop';
+  x.fillStyle = v === 'rare' ? 'rgba(90,190,255,0.48)' : 'rgba(255,165,60,0.48)';
+  x.fillRect(0, 0, c.width, c.height);
+  if (v === 'epic') {   // molten highlight
+    x.globalCompositeOperation = 'lighter';
+    x.fillStyle = 'rgba(255,210,90,0.12)';
+    x.fillRect(0, 0, c.width, c.height);
+  }
+  variantSpr[key] = c;
+  return c;
+}
 let bgImg = null;
 if (typeof Image !== 'undefined') {
   const b = new Image();
@@ -1244,12 +1268,9 @@ function drawScene(t) {
     else if (nf > 0.2 && d.el.includes('N')) { ctx.shadowColor = '#93aaff'; ctx.shadowBlur = 22 * nf; }
 
     if (spr[c.sp]) {
-      const im = spr[c.sp];
+      const im = creatureSprite(c.sp, c.v);
       const h = 88 * size, w = h * (im.width / im.height);
-      if (c.v === 'rare') ctx.filter = 'hue-rotate(160deg) saturate(1.25)';
-      if (c.v === 'epic') ctx.filter = 'hue-rotate(-40deg) saturate(1.6) brightness(1.1)';
       ctx.drawImage(im, -w / 2, -h + 26 * size, w, h);
-      ctx.filter = 'none';
     } else {
       ctx.fillStyle = '#fff';
       ctx.font = Math.round(52 * size) + 'px serif';
@@ -1574,9 +1595,10 @@ function artCell(sp, v) {
   wrap.className = 'cardArt';
   if (spr[sp]) {
     const img = document.createElement('img');
-    img.src = 'sprites/' + sp + '.png';
-    if (v === 'rare') img.style.filter = 'hue-rotate(160deg) saturate(1.25) drop-shadow(0 0 6px #8fd8ff)';
-    if (v === 'epic') img.style.filter = 'hue-rotate(-40deg) saturate(1.6) brightness(1.1) drop-shadow(0 0 8px #ffb64d)';
+    const tinted = creatureSprite(sp, v);
+    img.src = (v !== 'normal' && tinted && tinted.toDataURL) ? tinted.toDataURL() : 'sprites/' + sp + '.png';
+    if (v === 'rare') img.style.filter = 'drop-shadow(0 0 6px #8fd8ff)';
+    if (v === 'epic') img.style.filter = 'drop-shadow(0 0 8px #ffb64d)';
     wrap.appendChild(img);
   } else {
     const e = document.createElement('div');
@@ -1778,7 +1800,8 @@ function doHatch() {
       if (!res) { wrap.style.display = 'none'; flash.style.opacity = '0'; return; }
       const c = res.c;
       flash.style.opacity = '0';
-      eggEl.innerHTML = spr[c.sp] ? '<img src="sprites/' + c.sp + '.png">' : '<span style="font-size:110px">' + SPECIES[c.sp].emo + '</span>';
+      const revealSpr = creatureSprite(c.sp, c.v);
+      eggEl.innerHTML = revealSpr ? '<img src="' + (c.v !== 'normal' && revealSpr.toDataURL ? revealSpr.toDataURL() : 'sprites/' + c.sp + '.png') + '">' : '<span style="font-size:110px">' + SPECIES[c.sp].emo + '</span>';
       eggEl.classList.add('popIn');
       eggEl.style.transform = 'none';
       if (c.v === 'rare') eggEl.style.filter = 'drop-shadow(0 0 28px #8fd8ff)';
