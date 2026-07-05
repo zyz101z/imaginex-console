@@ -1060,7 +1060,7 @@ function drawScene(t) {
     ctx.translate(fx, fy);
     ctx.rotate(Math.sin(k * 9) * 0.25);
     if (spr.egg) ctx.drawImage(spr.egg, -20, -26, 40, 50);
-    else { ctx.font = '36px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 12); }
+    else { ctx.fillStyle = '#fff'; ctx.font = '36px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 12); }
     ctx.restore();
     if (rng() < 0.6) particles.push({ x: fx, y: fy + 10, vx: (rng() - 0.5) * 40, vy: (rng() - 0.5) * 30, life: 0.5, max: 0.5, col: '#ffe9b0', r: 2.2 });
     if (k >= 1) {
@@ -1077,8 +1077,9 @@ function drawScene(t) {
     // the nursery hut is itself egg-shaped — park the incubating egg in front-right of it
     ctx.translate(p.x - 95 * dscale(p.y), p.y + 2 * dscale(p.y)); ctx.rotate(wob * 0.02);
     if (spr.egg) { ctx.drawImage(spr.egg, -26, -34, 52, 62); }
-    else { ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 14); }
+    else { ctx.fillStyle = '#fff'; ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.fillText('🥚', 0, 14); }
     if (S.egg.v !== 'normal') {
+      ctx.fillStyle = '#fff';
       ctx.font = '18px serif';
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 160);
       ctx.fillText(VARIANTS[S.egg.v].icon, 20, -18);
@@ -1100,6 +1101,10 @@ function drawScene(t) {
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath(); ctx.ellipse(0, 4 * dds, 15 * dds, 5.5 * dds, 0, 0, Math.PI * 2); ctx.fill();
       const dsz = d.cost >= 8000 ? 58 : d.cost >= 600 ? 46 : 36;   // prestige pieces stand tall
+      // OPAQUE fill before emoji: Windows Chrome applies fillStyle ALPHA to color emoji
+      // (iPad ignores it) — the 0.22 shadow fill was making decor near-invisible on PC
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 1;
       ctx.font = Math.round(dsz * dds) + 'px serif';
       ctx.textAlign = 'center';
       ctx.fillText(d.emo, 0, Math.sin(t / 700 + dIdx * 1.7) * 2);
@@ -1125,6 +1130,7 @@ function drawScene(t) {
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(-11 * ds, -26 * ds, 22 * ds, 34 * ds, 5); ctx.fill(); ctx.stroke();
       if (lvl) { ctx.shadowColor = '#7fd8c8'; ctx.shadowBlur = 7 + lvl * 4; }
+      ctx.fillStyle = '#ffffff';   // opaque: Windows applies fill alpha to color emoji
       ctx.font = Math.round(15 * ds) + 'px serif'; ctx.textAlign = 'center';
       ctx.globalAlpha = lvl ? 1 : 0.55;
       ctx.fillText(EL_ICON[e], 0, -8 * ds);
@@ -1144,6 +1150,7 @@ function drawScene(t) {
     ctx.translate(p.x, p.y);
     ctx.save(); ctx.translate(0, 14 * ds); groundShadow(52 * ds, 16 * ds); ctx.restore();
     // flanking pines mark the trail into the wilds
+    ctx.fillStyle = '#ffffff';
     ctx.font = Math.round(46 * ds) + 'px serif'; ctx.textAlign = 'center';
     ctx.fillText('🌲', -40 * ds, 6 * ds);
     ctx.font = Math.round(34 * ds) + 'px serif';
@@ -1244,6 +1251,7 @@ function drawScene(t) {
       ctx.drawImage(im, -w / 2, -h + 26 * size, w, h);
       ctx.filter = 'none';
     } else {
+      ctx.fillStyle = '#fff';
       ctx.font = Math.round(52 * size) + 'px serif';
       ctx.textAlign = 'center';
       ctx.fillText(d.emo, 0, 16);
@@ -1253,6 +1261,7 @@ function drawScene(t) {
     // sparkles for variants
     if (c.v !== 'normal') {
       const n = c.v === 'epic' ? 3 : 2;
+      ctx.fillStyle = '#fff';
       ctx.font = '13px serif';
       for (let i = 0; i < n; i++) {
         const ph = t / 500 + i * 2.2 + c.id;
@@ -1262,7 +1271,7 @@ function drawScene(t) {
       ctx.globalAlpha = 1;
     }
     // level star
-    if (c.lvl >= LEVEL_MAX) { ctx.font = '16px serif'; ctx.fillText('⭐', 26, -46); }
+    if (c.lvl >= LEVEL_MAX) { ctx.fillStyle = '#fff'; ctx.font = '16px serif'; ctx.fillText('⭐', 26, -46); }
     ctx.restore();
 
     if (!d.water && hopPh >= 0.38 && hopPh < 0.43 && rng() < 0.12) {
@@ -1317,6 +1326,7 @@ function drawScene(t) {
     ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, h / 2); ctx.fill(); ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd166';
     ctx.font = Math.round(15 * bs) + 'px serif';
     ctx.fillText('🪙', -w / 2 + 5 * bs, 1);
     ctx.font = 'bold ' + Math.round(13 * bs) + 'px sans-serif';
@@ -1477,6 +1487,7 @@ function drawBuilding(kind, p, emo, t, activeBreed) {
   }
   if (activeBreed) {
     const ds2 = dscale(p.y);
+    ctx.fillStyle = '#ff8fb3';
     ctx.font = Math.round(16 * ds2) + 'px serif'; ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 250);
     ctx.fillText('💗', -22 * ds2 + Math.sin(t / 300) * 6, -110 * ds2);
     ctx.fillText('💗', 22 * ds2 - Math.sin(t / 300) * 6, -110 * ds2);
@@ -1499,6 +1510,7 @@ function drawTimer(x, y, readyAt, icon, ready) {
   const w = ctx.measureText(txt).width + 38;
   ctx.beginPath(); ctx.roundRect(-w / 2, -14, w, 28, 14); ctx.fill(); ctx.stroke();
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
   ctx.font = '14px serif'; ctx.fillText(icon, -w / 2 + 7, 1);
   ctx.font = 'bold 13px sans-serif';
   ctx.fillStyle = ready ? '#c9f59e' : '#dff2f0';
