@@ -24,6 +24,19 @@
      nickname} to the console (it stamps profile nickname); API POST field is `nickname`,
      GET returns a PLAIN ARRAY; per-game MAX_SCORE_BY_GAME in route.ts (CC: 100M).
 
+## 2026-07-05..07 CROSS-DEVICE RENDERING FIXES (all user-found, PC-vs-iPad household QA)
+- ⚠️ LESSON: Windows Chrome applies fillStyle ALPHA to color emoji (iPad ignores fill)
+  → decorations rendered at 22% opacity on PC. Always set OPAQUE fill before emoji
+  fillText — swept all 11 sites.
+- ⚠️ LESSON: canvas ctx.filter silently NO-OPS on some Windows GPUs + all iPad Safari
+  → scene variant tints were broken for half of players (cards use CSS filters = fine).
+  Fix: pre-tinted sprite cache (creatureSprite(sp,v)) — 'color' blend hue-REPLACE (a
+  flat wash was invisible on already-blue sprites like rare Gnome) + destination-in
+  silhouette restore. Scene/cards/hatch share the same tinted art.
+- Night-element glow muted (nf>0.35, half blur) — was reading as false rare; ground
+  rings are the ONLY variant signal.
+- Also: expedition claim warns on full nursery (2-tap); wild-egg explainer given.
+
 ## 2026-07-04 SESSION LOG
 - Decor fix (was 'sporadic': slots from 2 bgs ago landed in sky/lagoon/under buildings;
   cheapest-first starved premium pieces): 12 curated slots, fanciest-first, prestige
