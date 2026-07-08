@@ -890,14 +890,19 @@ function creatureSprite(sp, v) {
   c.width = im.width; c.height = im.height;
   const x = c.getContext('2d');
   x.drawImage(im, 0, 0);
-  x.globalCompositeOperation = 'source-atop';
-  x.fillStyle = v === 'rare' ? 'rgba(90,190,255,0.48)' : 'rgba(255,165,60,0.48)';
+  // 'color' blend = hue REPLACE preserving shading — dramatic on every sprite (a flat
+  // wash was invisible on already-blue art like the Gnome's coat). Then destination-in
+  // restores the silhouette (blend fills would otherwise paint the whole rect).
+  x.globalCompositeOperation = 'color';
+  x.fillStyle = v === 'rare' ? 'rgba(130,200,255,0.85)' : 'rgba(255,150,45,0.8)';
   x.fillRect(0, 0, c.width, c.height);
-  if (v === 'epic') {   // molten highlight
+  if (v === 'epic') {
     x.globalCompositeOperation = 'lighter';
-    x.fillStyle = 'rgba(255,210,90,0.12)';
+    x.fillStyle = 'rgba(255,190,70,0.14)';
     x.fillRect(0, 0, c.width, c.height);
   }
+  x.globalCompositeOperation = 'destination-in';
+  x.drawImage(im, 0, 0);
   variantSpr[key] = c;
   return c;
 }
@@ -1265,7 +1270,7 @@ function drawScene(t) {
     // variant aura (night-element creatures glow after dark when no variant owns it)
     if (c.v === 'rare') { ctx.shadowColor = '#8fd8ff'; ctx.shadowBlur = 24; }
     else if (c.v === 'epic') { ctx.shadowColor = '#ffb64d'; ctx.shadowBlur = 36; }
-    else if (nf > 0.2 && d.el.includes('N')) { ctx.shadowColor = '#93aaff'; ctx.shadowBlur = 22 * nf; }
+    else if (nf > 0.35 && d.el.includes('N')) { ctx.shadowColor = '#8ea4e8'; ctx.shadowBlur = 11 * nf; }   // soft moonlight, deliberately quieter than variant auras
 
     if (spr[c.sp]) {
       const im = creatureSprite(c.sp, c.v);
