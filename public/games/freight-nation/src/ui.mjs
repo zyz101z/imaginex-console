@@ -733,11 +733,23 @@ function simPathGeometry(path) {
   if (!simGeoCache.has(key)) simGeoCache.set(key, buildSimPathGeometry(path));
   return simGeoCache.get(key);
 }
+// The lon/lat polyline for one sim edge: baked OSM centerline when we have it (home
+// region), otherwise the hand-placed `via` waypoints that trace the real corridor.
+// The straight a→b chord is the LAST resort only — on a long gentle arc like I-80
+// across Nebraska, a chord sags visibly south of the freeway, and the truck looked
+// like it was driving through farm fields half an inch below the road (Omaha bug).
+function edgeLonLats(e) {
+  return GEOM[edgeKey(e.a, e.b)] || [
+    [NODES[e.a].lon, NODES[e.a].lat],
+    ...(e.via || []),
+    [NODES[e.b].lon, NODES[e.b].lat],
+  ];
+}
 function buildSimPathGeometry(path) {
   const coordinates = [];
   for (let i = 0; i < path.length - 1; i++) {
     const e = findEdgeAB(path[i], path[i + 1]); if (!e) continue;
-    let pts = (GEOM[edgeKey(e.a, e.b)] || [[NODES[e.a].lon, NODES[e.a].lat], [NODES[e.b].lon, NODES[e.b].lat]]);
+    let pts = edgeLonLats(e);
     if (e.a !== path[i]) pts = [...pts].reverse();
     coordinates.push(...pts.slice(coordinates.length ? 1 : 0));
   }
@@ -944,7 +956,7 @@ function truckLngLat(tr) {
   }
   const p = truckPos(T), e = p.b ? findEdgeAB(p.a, p.b) : null;
   if (!e) return [NODES[p.a].lon, NODES[p.a].lat];
-  let pts = GEOM[edgeKey(e.a, e.b)] || [[NODES[e.a].lon, NODES[e.a].lat], [NODES[e.b].lon, NODES[e.b].lat]];
+  let pts = edgeLonLats(e);   // baked centerline, else via waypoints — never a bare chord
   if (e.a !== p.a) pts = [...pts].reverse();
   return alongCoordinates(pts, p.frac);
 }
@@ -1668,8 +1680,16 @@ function wireSide(el) {
     replanRoutes(); refreshRealRoutes(); renderSide();
   });
   el.querySelectorAll("[data-rr]").forEach(b => b.onclick = () => {
+    const tr2 = S.trucks.find(t => t.id === +b.dataset.t);
     const r = reroute(S, +b.dataset.t, b.dataset.rr);
     if (!r.ok && r.why) toast(r.why);
+    else if (r.ok && tr2 && tr2.trip) {
+      // the stored OSRM line describes the OLD route — riding it would put the truck
+      // on a road it isn't driving. Sim geometry (road-shaped) takes over from here.
+      tr2.trip.mapGeometry = null;
+      tr2.trip.mapLegGeometries = null;
+      lastPushed.route = undefined;   // force the drawn line to refresh
+    }
     renderSide();
   });
   el.querySelectorAll("[data-stopnext]").forEach(b => b.onclick = () => {
@@ -2162,6 +2182,7 @@ if (typeof window !== "undefined") window.__rd = {
   },
   settled: () => realRoutesInFlight || Promise.resolve(),
   passportRoads: () => PASSPORT_ROADS,
+  simGeo: path => buildSimPathGeometry(path),
   saveKey: () => CFG.SAVE_KEY,
   save: () => save(),
   load: raw => deserialize(raw),

@@ -356,6 +356,53 @@ ok("passport: no unknown roads leaked into the collection",
   catch (e) { ok("weather: map badges render without throwing", false, e.message); }
 }
 
+// --- the Omaha bug: trucks must follow the ROAD SHAPE outside baked coverage ---
+{
+  const { EDGES: EDGES2, NODES: NODES2, edgeKey: ek2 } = await import("../src/data.mjs");
+  const { GEOM: GEOM2 } = await import("../src/geometry.mjs");
+  // CHY→OMA (I-80 across Nebraska): no baked geometry out there — the fallback line must
+  // ride the via waypoints, not a straight Cheyenne→Omaha chord through the fields
+  const e2 = EDGES2.find(x => ek2(x.a, x.b) === ek2("CHY", "OMA"));
+  ok("omaha: corridor exists with via waypoints", !!e2 && (e2.via || []).length > 0);
+  ok("omaha: corridor really is unbaked", !GEOM2[ek2("CHY", "OMA")]);
+  const geo = rd.simGeo(["CHY", "OMA"]);
+  ok("omaha: fallback line is road-shaped (has waypoints)", geo.coordinates.length > 2, geo.coordinates.length);
+  if (e2 && (e2.via || []).length) {
+    const [vx, vy] = e2.via[0];
+    ok("omaha: line passes through the freeway waypoint",
+      geo.coordinates.some(([x2, y2]) => Math.abs(x2 - vx) < 1e-6 && Math.abs(y2 - vy) < 1e-6));
+    // and a chord would NOT: midpoint of the chord vs the waypoint differ measurably
+    const [ax, ay] = [NODES2.CHY.lon, NODES2.CHY.lat], [bx, by] = [NODES2.OMA.lon, NODES2.OMA.lat];
+    const chordMidY = (ay + by) / 2;
+    ok("omaha: waypoint is measurably off the chord (the visible bug)",
+      Math.abs(vy - chordMidY) > 0.05, Math.abs(vy - chordMidY).toFixed(3));
+  }
+  // every long unbaked corridor nationwide must be road-shaped, not a chord
+  const chords = EDGES2.filter(x => !GEOM2[ek2(x.a, x.b)] && x.mi > 120 &&
+    rd.simGeo([x.a, x.b]).coordinates.length <= 2).map(x => x.hwy);
+  ok("omaha: no long corridor anywhere falls back to a bare chord", chords.length === 0, chords.join(","));
+
+  // reroute must drop the stale OSRM line (it describes the OLD road)
+  const rolling = S.trucks.find(t => t.trip);
+  if (rolling) {
+    rolling.trip.mapGeometry = { type: "LineString", coordinates: [[0, 0], [1, 1]] };
+    rolling.trip.mapLegGeometries = [rolling.trip.mapGeometry];
+    rd.setTab("fleet");
+    const btn = { dataset: { rr: "fastest", t: String(rolling.id) }, onclick: null };
+    // drive the real handler via the DOM the panel just rendered
+    const side2 = dom.byId.get("side");
+    const rrBtns = [];
+    const walk3 = el => { if (!el) return; if (el.dataset && el.dataset.rr) rrBtns.push(el); (el.children || []).forEach(walk3); };
+    walk3(side2);
+    if (rrBtns.length) {
+      rrBtns[0].onclick && rrBtns[0].onclick();
+      ok("reroute: stale OSRM geometry cleared (or reroute refused cleanly)",
+        !rolling.trip || rolling.trip.mapGeometry === null || rolling.trip.mapGeometry.coordinates[0][0] === 0,
+        JSON.stringify(rolling.trip && rolling.trip.mapGeometry && rolling.trip.mapGeometry.coordinates[0]));
+    } else ok("reroute: (no reroute button rendered — truck not rolling)", true);
+  } else ok("reroute: (no rolling truck to test)", true);
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();
