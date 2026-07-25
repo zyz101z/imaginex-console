@@ -140,8 +140,11 @@ function frame(t) {
     const whole = Math.floor(acc);
     if (whole > 0) { acc -= whole; tick(S, whole); }
   }
-  // celebrate territory: a region unlock is a big deal — show what it actually opened
-  if (knownRegionCount == null) knownRegionCount = (S.regions || []).length;
+  // celebrate territory: a region unlock is a big deal — show what it actually opened.
+  // Resync DOWNWARD too: after a game reset the old count would otherwise swallow every
+  // celebration until the new game re-passed it.
+  if (knownRegionCount == null || (S.regions || []).length < knownRegionCount)
+    knownRegionCount = (S.regions || []).length;
   if ((S.regions || []).length > knownRegionCount && !$("#modal").classList.contains("open")) {
     const fresh = (S.regions || []).slice(knownRegionCount);
     knownRegionCount = S.regions.length;
@@ -2109,10 +2112,43 @@ function showRegionUnlock(rgIds) {
     </div>`;
   }).join("");
   $("#modalBody").innerHTML = `<h2>🗺️ NEW TERRITORY UNLOCKED!</h2>${cards}
-    <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">LET'S GO SEE IT →</button>`;
+    <button class="btn go" id="goSeeRegion">LET'S GO SEE IT →</button>`;
+  const goBtn = $("#modalBody").querySelector ? $("#modalBody").querySelector("#goSeeRegion")
+    : document.getElementById("goSeeRegion");
+  const wire = document.getElementById("goSeeRegion") || goBtn;
+  if (wire) wire.onclick = () => {
+    $("#modal").classList.remove("open");
+    flyToRegion(rgIds[0]);                       // the button now actually takes you there
+    toast(`🗺️ Welcome to <b>${REGIONS[rgIds[0]].name}</b> — fresh freight from here is already on the board!`);
+  };
   $("#modal").classList.add("open");
   confetti(40);
 }
+// Take the camera to a region — the payoff for "LET'S GO SEE IT". Works on both maps.
+function flyToRegion(rg) {
+  const cities = regionCities(rg);
+  if (!cities.length) return;
+  const lons = cities.map(([, n]) => n.lon), lats = cities.map(([, n]) => n.lat);
+  const pad = 1.2;
+  const w = [Math.min(...lons) - pad, Math.min(...lats) - pad];
+  const e = [Math.max(...lons) + pad, Math.max(...lats) + pad];
+  if (realMap && realMapReady && window.maplibregl) {
+    try {
+      realMap.fitBounds(new window.maplibregl.LngLatBounds(w, e), { padding: 60, maxZoom: 7, duration: 1400 });
+      return;
+    } catch (err) {}
+  }
+  // offline canvas: center the camera on the region at a comfortable zoom
+  const cv = canvas();
+  if (!cv) return;
+  const cLon = (w[0] + e[0]) / 2, cLat = (w[1] + e[1]) / 2;
+  const fit = Math.min(cv.clientWidth / MAP_W, cv.clientHeight / MAP_H);
+  cam.init = true;
+  cam.z = 2.6;
+  cam.x = -(px(cLon) - MAP_W / 2) * fit * cam.z;
+  cam.y = -(py(cLat) - MAP_H / 2) * fit * cam.z;
+}
+
 // the 🗺️ counter in the top bar opens this: every region, what it holds, what it costs
 function showRegionsOverview() {
   const open = unlockedRegions(S);
@@ -2297,6 +2333,8 @@ if (typeof window !== "undefined") window.__rd = {
   passportRoads: () => PASSPORT_ROADS,
   simGeo: path => buildSimPathGeometry(path),
   selTruck: () => selTruckId,
+  flyToRegion,
+  showRegionUnlock,
   saveKey: () => CFG.SAVE_KEY,
   save: () => save(),
   load: raw => deserialize(raw),

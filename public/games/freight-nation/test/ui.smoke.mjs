@@ -250,19 +250,41 @@ ok("passport: no unknown roads leaked into the collection",
   ok("stars: every contract card advertises its ⭐ value", board2.includes("star-chip"),
     board2.includes("JOBS") ? "no star-chip in board html" : "board missing");
 
-  // unlocking a region must pop the celebration modal that lists the new cities
+  // unlocking a region must pop the celebration modal that lists the new cities.
+  // Force the scenario from scratch — earlier blocks already unlocked the whole country
+  // (which silently skipped these checks for several sessions: lesson learned).
   const modal = dom.byId.get("modal");
+  // drain queued trip-report modals first — they'd claim the modal ahead of the celebration
+  for (let i = 0; i < 12; i++) {
+    modal.classList.remove("open");
+    rd.frame(19000 + i * 30);
+    if (!modal.classList.contains("open")) break;
+  }
   modal.classList.remove("open");
+  S.regions = ["west"];
+  rd.frame(20000);                    // watcher must resync DOWN (the post-reset bug)
   const before2 = S.regions.length;
   const nextRg = REGION_ORDER[before2];
+  ok("unlock: forced scenario has a next region", !!nextRg, S.regions.join());
   if (nextRg) {
     S.rep = Math.max(S.rep, REGIONS[nextRg].repReq);
     checkRegionUnlocks(S);
-    rd.frame(20000);
+    rd.frame(20100);
     const body2 = dom.byId.get("modalBody").innerHTML;
     ok("unlock: celebration modal opens", modal.classList.contains("open"), "modal not open");
     ok("unlock: modal names the region", body2.includes(REGIONS[nextRg].name), body2.slice(0, 100));
     ok("unlock: modal lists new cities", body2.includes("new cities"), body2.slice(0, 100));
+    // the LET'S GO SEE IT button must close the modal AND travel to the region
+    const goBtn = dom.byId.get("modalBody").querySelector("#goSeeRegion");
+    ok("unlock: go-see button exists and is wired", !!goBtn && !!goBtn.onclick, goBtn ? "no handler" : "no button");
+    if (goBtn && goBtn.onclick) {
+      let flew = false;
+      try { goBtn.onclick(); flew = true; } catch (e) { ok("unlock: go-see click throws", false, e.message); }
+      ok("unlock: click closes the modal", !modal.classList.contains("open"));
+      ok("unlock: click announces the destination",
+        (dom.byId.get("toast").innerHTML || "").includes("Welcome to"), dom.byId.get("toast").innerHTML);
+      ok("unlock: flyToRegion is safe to call directly", (() => { try { rd.flyToRegion(nextRg); return true; } catch (e) { return false; } })());
+    }
     modal.classList.remove("open");
   }
 
