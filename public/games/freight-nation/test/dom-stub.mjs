@@ -97,9 +97,9 @@ export function installDom() {
     if (!byId.has(id)) byId.set(id, new El("div", { id }));
     return byId.get(id);
   };
-  for (const id of ["map", "mapCanvas", "side", "cash", "rep", "clock", "ticker", "tickerLine",
-    "modal", "modalBody", "toast", "dev", "speedCtl", "helpBtn", "resetBtn", "zoomIn", "zoomOut",
-    "findTruck", "followTruck", "inspectRoad", "mapWrap", "mapKey"]) ensure(id);
+  for (const id of ["map", "mapCanvas", "side", "cash", "rep", "clock", "territory", "ticker",
+    "tickerLine", "modal", "modalBody", "toast", "dev", "speedCtl", "helpBtn", "resetBtn",
+    "zoomIn", "zoomOut", "findTruck", "followTruck", "inspectRoad", "mapWrap", "mapKey"]) ensure(id);
 
   const speedButtons = [0, 1, 4, 16].map(s => {
     const b = new El("button", {});

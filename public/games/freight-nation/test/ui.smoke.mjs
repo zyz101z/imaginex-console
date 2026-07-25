@@ -129,6 +129,118 @@ ok("passport: no unknown roads leaked into the collection",
   (S.discoveredFreeways || []).every(r => rd.passportRoads().includes(r)),
   (S.discoveredFreeways || []).filter(r => !rd.passportRoads().includes(r)).join(","));
 
+// --- the national map: regions, unlocks, multi-day copy ----------------------
+{
+  const { REGIONS, REGION_ORDER, PASSPORT_ROADS } = await import("../src/data.mjs");
+  const { checkRegionUnlocks } = await import("../src/sim.mjs");
+
+  ok("passport: the whole country is collectable", rd.passportRoads().length >= 45,
+    `${rd.passportRoads().length} shields`);
+  ok("passport: home region shields render", passportHtml.includes("California"));
+  ok("passport: locked regions are shown but marked",
+    passportHtml.includes("locked-region") && passportHtml.includes("🔒"));
+  ok("passport: a far region is still locked at low rep",
+    passportHtml.includes(REGIONS.northeast.name));
+
+  // the territory chip must tell the player what's next
+  rd.frame(9000);
+  const terr = dom.byId.get("territory").innerHTML;
+  ok("hud: territory chip renders", terr.includes("regions"), terr);
+  ok("hud: territory chip names the next unlock",
+    terr.includes(REGIONS[REGION_ORDER[S.regions.length]] ? REGIONS[REGION_ORDER[S.regions.length]].name : "Coast"),
+    terr);
+
+  // unlocking a region must repopulate the board with freight you can actually see
+  const before = S.regions.length;
+  S.rep = Math.max(S.rep, REGIONS.southwest.repReq);
+  const opened = checkRegionUnlocks(S);
+  ok("unlock: reputation opened new country", S.regions.length > before, opened.join());
+  try {
+    rd.setTab("contracts"); rd.frame(9100);
+    ok("unlock: contract board re-renders after a region opens",
+      dom.byId.get("side").innerHTML.length > 50);
+  } catch (e) { ok("unlock: board re-renders", false, e.message); }
+  try {
+    rd.setTab("passport"); rd.frame(9200);
+    ok("unlock: the newly opened region is no longer marked locked",
+      !new RegExp(`locked-region[\\s\\S]{0,200}${REGIONS.southwest.name}`).test(dom.byId.get("side").innerHTML));
+  } catch (e) { ok("unlock: passport re-renders", false, e.message); }
+
+  // a cross-country haul must be describable without lying about the clock
+  const { findRoute, fmtDur } = await import("../src/sim.mjs");
+  S.rep = 100; checkRegionUnlocks(S);
+  const long = findRoute(S, "LKW", "NYC", { type: "semi", upgrades: {} }, null, "fastest");
+  ok("transcon: route exists once the country is open", !!long);
+  ok("transcon: duration reads in days", !!long && fmtDur(long.mins).includes("d"), long && fmtDur(long.mins));
+  ok("transcon: quoted time includes nights", !!long && long.nights >= 3, long && long.nights);
+  rd.setTab("contracts");
+}
+
+// --- the freeway badge, and the panel not fighting your scroll -----------------
+{
+  const { truckHighway } = await import("../src/sim.mjs");
+  const rolling = S.trucks.find(t => t.trip);
+  if (rolling) {
+    ok("badge: a rolling truck reports a freeway", !!truckHighway(rolling), truckHighway(rolling));
+    rd.setTab("fleet");
+    const fleet = dom.byId.get("side").innerHTML;
+    ok("badge: the fleet card shows NOW ON", fleet.includes("NOW ON"), fleet.slice(0, 200));
+    ok("badge: the fleet card names the road", fleet.includes(truckHighway(rolling)));
+  } else {
+    ok("badge: (no truck rolling to check)", true);
+  }
+
+  // the panel re-renders on a timer; that must not throw away where the player scrolled to
+  rd.setTab("passport");
+  const body = () => dom.byId.get("side").querySelector?.(".tabbody");
+  const b1 = body();
+  if (b1) {
+    b1.scrollTop = 420;
+    rd.renderSide();
+    const b2 = body();
+    ok("scroll: passport keeps its scroll position across a re-render",
+      b2 && b2.scrollTop === 420, b2 && b2.scrollTop);
+    // switching tabs SHOULD start at the top, not inherit the old offset
+    rd.setTab("fleet");
+    // falsy, not ===0: a freshly created element has no scrollTop set at all
+    ok("scroll: a different tab starts at the top", !(body() || {}).scrollTop,
+      (body() || {}).scrollTop);
+  } else { ok("scroll: tabbody exists", false, "no .tabbody found"); }
+  rd.setTab("contracts");
+}
+
+// --- special deliveries + the garage ------------------------------------------
+{
+  const { paintTruck, renameTruck } = await import("../src/sim.mjs");
+  // plant a special on the board and make sure the gold card renders
+  S.contracts.unshift({ id: 424242, shipper: "Smoke Co", cargoType: "general", pallets: 2,
+    from: "LKW", to: "LA", pay: 999, mi: 22, urgent: false, dlMins: 600,
+    special: { name: "20,000 Rubber Ducks", icon: "🦆", blurb: "Quack." },
+    expires: S.time + 999, tier: "LOCAL" });
+  S.stats.delivered = Math.max(S.stats.delivered, 2); // past the tutorial: show the full board
+  rd.setTab("contracts");
+  const board = dom.byId.get("side").innerHTML;
+  ok("special: gold banner renders", board.includes("SPECIAL DELIVERY"), board.slice(0, 120));
+  ok("special: the story shows", board.includes("Rubber Ducks"));
+  S.contracts = S.contracts.filter(c => c.id !== 424242);
+
+  // garage: rename + paint buttons exist, painting reflects in the card and doesn't break a frame
+  rd.setTab("fleet");
+  ok("garage: rename button renders", dom.byId.get("side").innerHTML.includes("data-rename"));
+  ok("garage: paint button renders", dom.byId.get("side").innerHTML.includes("data-paint-open"));
+  S.cash += 500;
+  const t0 = S.trucks[0];
+  ok("garage: paintTruck works from the UI's state", paintTruck(S, t0.id, "teal").ok && t0.color === "teal");
+  ok("garage: renameTruck works", renameTruck(S, t0.id, "Duck Force One").ok);
+  rd.renderSide();
+  const fleet = dom.byId.get("side").innerHTML;
+  ok("garage: the new name shows", fleet.includes("Duck Force One"));
+  ok("garage: the paint dot shows", fleet.includes("paint-dot"));
+  try { rd.frame(12000); rd.frame(12016); ok("garage: painted truck renders without throwing", true); }
+  catch (e) { ok("garage: painted truck renders without throwing", false, e.message); }
+  rd.setTab("contracts");
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();

@@ -1,8 +1,10 @@
 // FREIGHT NATION — simulation core. No DOM access: runs headless for tests (GDD §18).
-// All times are game-minutes. Single time zone for the CA MVP (nodes carry tz for the
-// nationwide version). Deterministic under a seed via mulberry32.
+// All times are game-minutes on the HOME (Pacific) clock; every node carries a `tz` offset
+// so rush hour and night are evaluated in LOCAL time wherever the truck actually is.
+// Deterministic under a seed via mulberry32.
 import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, SHIPPERS, DRIVER_NAMES,
-  CFG, WEATHER, ZONE_WEATHER, EVENT_DEFS } from "./data.mjs";
+  CFG, WEATHER, ZONE_WEATHER, EVENT_DEFS, REGIONS, REGION_ORDER, HOME_REGION,
+  PASSPORT_ROADS, parseHighways, SPECIAL_LOADS, PAINT_COLORS } from "./data.mjs";
 
 // ---------------------------------------------------------------- rng
 function rand(S) {
@@ -28,27 +30,34 @@ for (const e of EDGES) {
 }
 export const edgeOf = key => EDGES.find(e => edgeKey(e.a, e.b) === key);
 const other = (e, n) => e.a === n ? e.b : e.a;
-const PASSPORT_REFS = new Set(["I-5", "I-10", "I-15", "I-80", "I-205", "I-215", "I-405", "I-580",
-  "I-605", "I-710", "I-880", "US-101", "CA-22", "CA-57", "CA-60", "CA-91", "CA-99", "CA-152"]);
+// Shields are derived from the graph in data.mjs, so this set can never drift from the map.
+const PASSPORT_REFS = new Set(PASSPORT_ROADS);
 function edgeFreeways(e) {
-  return (e.hwy.match(/(?:I|US|CA|SR)-?\d+/gi) || []).map(x => {
-    const m = x.match(/^(I|US|CA|SR)-?(\d+)$/i);
-    const p = m[1].toUpperCase() === "SR" ? "CA" : m[1].toUpperCase();
-    return `${p}-${m[2]}`;
-  }).filter(x => PASSPORT_REFS.has(x));
+  return parseHighways(e.hwy).filter(x => PASSPORT_REFS.has(x));
+}
+
+// ---------------------------------------------------------------- regions (progression)
+// Regions stay unlocked once earned — a bad week shouldn't repossess half the country.
+export const regionOf = id => NODES[id].region;
+export const unlockedRegions = S => (S.regions || [HOME_REGION]);
+export const cityUnlocked = (S, id) => unlockedRegions(S).includes(regionOf(id));
+export const unlockedCities = S => Object.keys(NODES).filter(id => cityUnlocked(S, id));
+export function nextRegion(S) {
+  return REGION_ORDER.find(r => !unlockedRegions(S).includes(r)) || null;
 }
 
 // ---------------------------------------------------------------- new game
 export function newGame(seed = 1) {
   const S = {
-    v: 1, seed, rngS: seed >>> 0,
+    v: 2, seed, rngS: seed >>> 0,
     time: CFG.START_HOUR, speed: 1,
     cash: CFG.START_CASH, rep: 0,
     trucks: [], drivers: [], hirePool: [],
     contracts: [], events: [], weather: {},
     alerts: [], reports: [],
-    stats: { delivered: 0, failed: 0, earned: 0, spent: 0, miles: 0 },
+    stats: { delivered: 0, failed: 0, earned: 0, spent: 0, miles: 0, statesVisited: [] },
     discoveredFreeways: [],
+    regions: [HOME_REGION],   // you start at home; reputation earns the rest of the map
     milestones: {}, nextId: 1,
     lastEventRoll: 0, lastBoardRoll: -9999, lastWageDay: 0,
   };
@@ -68,12 +77,20 @@ export function addTruck(S, typeId, at) {
   const truck = { id: S.nextId++, type: typeId, nick: t.name, fuel: t.tank, cond: typeId === "rusty" ? 72 : 100,
     upgrades: {}, at, trip: null, status: "Idle" };
   S.trucks.push(truck);
+  visitState(S, at);
   return truck;
 }
 function genDriver(S, forceSkill) {
   const skill = forceSkill || ri(S, 1, 5);
   return { id: S.nextId++, name: DRIVER_NAMES[ri(S, 0, DRIVER_NAMES.length - 1)] + (S.nextId % 7 === 0 ? " Jr." : ""),
     skill, wage: CFG.WAGE_BASE + skill * 35, fatigue: 0, hired: false, busy: false };
+}
+// "states you've rolled through" — a cheap, satisfying long-game counter for a national map
+function visitState(S, nodeId) {
+  const st = NODES[nodeId] && NODES[nodeId].st;
+  if (!st) return;
+  S.stats.statesVisited = S.stats.statesVisited || [];
+  if (!S.stats.statesVisited.includes(st)) S.stats.statesVisited.push(st);
 }
 function alert_(S, msg, kind = "info") {
   S.alerts.unshift({ at: S.time, msg, kind });
@@ -86,12 +103,56 @@ export const fmtClock = t => {
   return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${ap}`;
 };
 export const dayOf = t => Math.floor(t / 1440) + 1;
+// Cross-country runs are measured in days, not hours — "2d 6h" beats "54h".
+export function fmtDur(mins) {
+  const m = Math.max(0, Math.round(mins));
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${String(mm).padStart(2, "0")}m`;
+  return `${mm}m`;
+}
+// the local wall clock at a city (for the national map's four time zones)
+export const localClock = (t, nodeId) => fmtClock(localMins(t, tzOf(nodeId)));
+export const TZ_NAMES = ["PT", "MT", "CT", "ET"];
+export const tzName = nodeId => TZ_NAMES[tzOf(nodeId)] || "PT";
 
 // ---------------------------------------------------------------- conditions
-export const isRush = t => { const m = t % 1440; return m >= CFG.RUSH_START && m < CFG.RUSH_END; };
-const isNight = t => { const m = t % 1440; return m >= 22 * 60 || m < 5 * 60; };
+// The clock S.time is HOME (Pacific) time. `tz` shifts it to the local clock of the road
+// you're on, so 5 PM gridlock in Chicago happens at 3 PM on the dispatcher's wall clock.
+export const localMins = (t, tz = 0) => t + (tz || 0) * 60;
+export const tzOf = id => NODES[id].tz || 0;
+export const isRush = (t, tz = 0) => {
+  const m = ((localMins(t, tz) % 1440) + 1440) % 1440;
+  return m >= CFG.RUSH_START && m < CFG.RUSH_END;
+};
+const isNight = (t, tz = 0) => {
+  const m = ((localMins(t, tz) % 1440) + 1440) % 1440;
+  return m >= 22 * 60 || m < 5 * 60;
+};
+// An edge can straddle two zones; rush hour belongs to whichever end is the city.
+export function edgeTz(e) {
+  const a = NODES[e.a], b = NODES[e.b];
+  if (a.urban && !b.urban) return a.tz || 0;
+  if (b.urban && !a.urban) return b.tz || 0;
+  return Math.round(((a.tz || 0) + (b.tz || 0)) / 2);
+}
 export function zoneWeather(S, zone) { return WEATHER[S.weather[zone] ? S.weather[zone].type : "clear"]; }
 function edgeZone(e) { return NODES[e.a].zone; }
+
+// ---------------------------------------------------------------- fuel range (long-haul guard)
+// Out west a single leg can be longer than a tank. Anything past this is refused at planning
+// time rather than becoming an unavoidable $500 tow 300 miles from the nearest exit.
+export const truckRange = truck =>
+  tankOf(truck) * TRUCK_TYPES[truck.type].mpg * CFG.RANGE_SAFETY;
+export function longestLeg(path) {
+  let worst = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const e = (adj[path[i]] || []).find(x => other(x, path[i]) === path[i + 1]);
+    if (e) worst = Math.max(worst, e.mi);
+  }
+  return worst;
+}
+export const pathInRange = (truck, path) => longestLeg(path) <= truckRange(truck);
 
 export function eventsOn(S, e) {
   const k = edgeKey(e.a, e.b);
@@ -105,9 +166,10 @@ export function edgeClosed(S, e) {
 export function effSpeed(S, e, truck, driver, t) {
   const tt = TRUCK_TYPES[truck.type];
   let v = Math.min(e.mph, tt.top);
-  if (e.urban && isRush(t)) v *= CFG.RUSH_SPEED;
+  if (e.urban && isRush(t, edgeTz(e))) v *= CFG.RUSH_SPEED;
   const w = zoneWeather(S, edgeZone(e));
-  v *= w.speed;
+  // chains claw back half of what snow and ice take from you
+  v *= (w.chainable && truck.upgrades && truck.upgrades.chains) ? 1 - (1 - w.speed) * 0.5 : w.speed;
   for (const ev of eventsOn(S, e)) {
     const d = EVENT_DEFS[ev.type];
     if (d.speed) v *= d.speed;
@@ -122,9 +184,9 @@ export function effSpeed(S, e, truck, driver, t) {
 // per-mile incident risk multiplier
 function riskMult(S, e, driver, t) {
   let r = 1;
-  if (e.urban && isRush(t)) r *= CFG.RUSH_RISK;
+  if (e.urban && isRush(t, edgeTz(e))) r *= CFG.RUSH_RISK;
   r *= zoneWeather(S, edgeZone(e)).risk;
-  if (isNight(t)) { r *= CFG.NIGHT_RISK; if (!e.urban) r *= 1.8; } // wildlife country (GDD §9)
+  if (isNight(t, edgeTz(e))) { r *= CFG.NIGHT_RISK; if (!e.urban) r *= 1.8; } // wildlife country (GDD §9)
   if (driver) {
     if (driver.fatigue >= CFG.FATIGUE_CRIT) r *= 6;
     else if (driver.fatigue >= CFG.FATIGUE_VERY) r *= 3;
@@ -139,11 +201,26 @@ function mpgOf(S, truck, e, cargoType) {
   let mpg = tt.mpg;
   if (truck.upgrades.aero) mpg *= 1.12;
   if (e && e.mtn) mpg *= 0.82;
-  if (e && e.urban && isRush(S.time)) mpg *= 0.85;
+  if (e && e.urban && isRush(S.time, edgeTz(e))) mpg *= 0.85;
   if (cargoType && CARGO[cargoType].heavy) mpg *= 0.88;
   return mpg;
 }
 export const tankOf = truck => TRUCK_TYPES[truck.type].tank * (truck.upgrades.tank ? 1.4 : 1);
+
+// A driver redlines after roughly FATIGUE_VERY / FATIGUE_PER_HR hours at the wheel; every
+// one of those shifts costs a full sleep. This is the same cadence autoPlanStops books, so
+// planned rest stops and the quoted ETA agree instead of double-counting.
+const SHIFT_MIN = (CFG.FATIGUE_VERY / CFG.FATIGUE_PER_HR) * 60;
+// `fatigue` is how tired the driver ALREADY is. A half-spent driver redlines mid-run and
+// burns a full sleep the quote never showed — that mismatch is what made short regional
+// hauls mysteriously arrive 8 hours late. Contract deadlines pass fatigue 0 on purpose:
+// the shipper's terms don't depend on whose driver you put in the seat, but YOUR eta does.
+export function restAllowance(driveMins, fatigue = 0) {
+  if (!CFG.HOS_ENABLED) return 0;
+  const firstShift = Math.max(0, (CFG.FATIGUE_VERY - fatigue) / CFG.FATIGUE_PER_HR) * 60;
+  if (driveMins <= firstShift) return 0;
+  return (1 + Math.floor((driveMins - firstShift) / SHIFT_MIN)) * CFG.REST_MIN;
+}
 
 // ---------------------------------------------------------------- routing (GDD §7)
 // Time-expanded Dijkstra: edge duration is evaluated at the clock you'd ARRIVE with,
@@ -194,8 +271,13 @@ export function findRoute(S, from, to, truck, driver, kind, avoid = new Set(), d
     if (e.q <= 2) rough += e.mi;
     t += dm;
   }
-  return { kind, path, mi: Math.round(mi), mins: Math.round(mins), fuel$: Math.round(fuel$),
-    tolls, risk: Math.round(risk), rough, eta: t0 + mins };
+  // Hours-of-service: a driver can't run 2,000 miles without sleeping. Long routes carry a
+  // rest allowance so ETAs and deadlines are honest about the nights spent at a truck stop.
+  // (`mins` is total ELAPSED time — every consumer wants that; `driveMins` is wheels-turning.)
+  const restMins = restAllowance(mins, driver ? driver.fatigue : 0);
+  return { kind, path, mi: Math.round(mi), mins: Math.round(mins + restMins),
+    driveMins: Math.round(mins), restMins, nights: Math.round(restMins / CFG.REST_MIN),
+    fuel$: Math.round(fuel$), tolls, risk: Math.round(risk), rough, eta: t0 + mins + restMins };
 }
 
 export function routeOptions(S, from, to, truck, driver, avoid = new Set(), departAt = null) {
@@ -225,22 +307,65 @@ export function autoPlanStops(S, truck, driver, path) {
   return plan;
 }
 
+// ---------------------------------------------------------------- lane premiums
+// Expected speed loss per zone, DERIVED from the weather table so it can never drift out of
+// sync with it: snow country scores high, southern California scores low.
+const ZONE_SEVERITY = {};
+for (const [z, picks] of Object.entries(ZONE_WEATHER)) {
+  const tot = picks.reduce((s, p) => s + p[1], 0) || 1;
+  ZONE_SEVERITY[z] = picks.reduce((s, [t, w]) => s + w * (1 - (WEATHER[t] ? WEATHER[t].speed : 1)), 0) / tot;
+}
+export const zoneSeverity = z => ZONE_SEVERITY[z] || 0;
+// Grades, empty country, broken pavement and hard weather all cost real money in fuel,
+// repairs and missed deadlines. Freight that runs those lanes has to pay more, or the whole
+// country outside California would be strictly worse business than staying home — which
+// would make every unlock a punishment instead of a reward.
+export function lanePremium(path) {
+  let hazard = 0, sev = 0, legs = 0;
+  for (let i = 0; i < path.length - 1; i++) {
+    const e = (adj[path[i]] || []).find(x => other(x, path[i]) === path[i + 1]);
+    if (!e) continue;
+    hazard += (e.mtn ? 0.05 : 0) + (e.sparse ? 0.035 : 0) + (e.q <= 2 ? 0.025 : 0);
+    sev += zoneSeverity(NODES[e.a].zone);
+    legs++;
+  }
+  const avgSev = legs ? sev / legs : 0;
+  const weather = Math.max(0, avgSev - CFG.LANE_PREMIUM_BASE) * CFG.LANE_PREMIUM_WEATHER;
+  return 1 + Math.min(CFG.LANE_PREMIUM_MAX, hazard + weather);
+}
+
 // ---------------------------------------------------------------- contracts (GDD §11)
 const CITY_IDS = Object.keys(NODES);
+export const tierOf = mi => mi <= CFG.LOCAL_MI ? "LOCAL" : mi <= CFG.REGIONAL_MI ? "REGIONAL"
+  : mi <= CFG.LONGHAUL_MI ? "LONG-HAUL" : "TRANSCON";
 function genContract(S) {
+  // Only cities in regions you've unlocked put freight on the board.
+  const pool = unlockedCities(S);
   const originPool = [];
-  for (const tr of S.trucks) if (tr.at) originPool.push(tr.at);
+  for (const tr of S.trucks) if (tr.at && cityUnlocked(S, tr.at)) originPool.push(tr.at);
   const from = rand(S) < 0.55 && originPool.length ? originPool[ri(S, 0, originPool.length - 1)]
-    : CITY_IDS[ri(S, 0, CITY_IDS.length - 1)];
+    : pool[ri(S, 0, pool.length - 1)];
+  if (!from) return null;
   // distance tier gated by reputation (GDD §12: rep controls access)
   const maxMi = S.rep >= CFG.REP_LONGHAUL ? 9999 : S.rep >= CFG.REP_REGIONAL ? CFG.REGIONAL_MI : CFG.LOCAL_MI + 80;
-  const cands = CITY_IDS.filter(id => {
-    if (id === from) return false;
+  // the best-reaching rig you own decides which corridors can carry freight at all
+  const fleetRange = Math.max(...S.trucks.map(truckRange));
+  const cands = [];
+  for (const id of pool) {
+    if (id === from) continue;
     const probe = findRoute(S, from, id, S.trucks[0], null, "fastest");
-    return probe && probe.mi <= maxMi;
-  });
+    if (probe && probe.mi <= maxMi && longestLeg(probe.path) <= fleetRange)
+      cands.push({ id, tier: tierOf(probe.mi) });
+  }
   if (!cands.length) return null;
-  const to = cands[ri(S, 0, cands.length - 1)];
+  // Pick the KIND of run first, then a city inside it. On a nationwide map most cities are
+  // far away, so choosing a destination uniformly would bury the board in transcon hauls and
+  // leave the short work that actually pays the bills unrepresented.
+  const available = CFG.TIER_MIX.filter(([t]) => cands.some(c => c.tier === t));
+  const wantTier = available.length ? pickW(S, available) : null;
+  const inTier = cands.filter(c => c.tier === wantTier);
+  const from_ = (inTier.length ? inTier : cands);
+  const to = from_[ri(S, 0, from_.length - 1)].id;
   const cargoKeys = Object.keys(CARGO).filter(c => CARGO[c].repReq <= S.rep);
   const cargoType = cargoKeys[ri(S, 0, cargoKeys.length - 1)];
   const maxCap = Math.max(...S.trucks.map(t => TRUCK_TYPES[t.type].cap));
@@ -249,13 +374,35 @@ function genContract(S) {
   const probe = findRoute(S, from, to, S.trucks[0], null, "fastest");
   const cg = CARGO[cargoType];
   const urgent = rand(S) < 0.15;
-  const pay = Math.round((CFG.PAY_BASE + probe.mi * CFG.PAY_PER_MI * cg.mult * (1 + pallets / 22)) * (urgent ? 1.5 : 1));
-  const slack = (cg.tightDeadline || urgent) ? 1.25 : CFG.DEADLINE_SLACK;
-  return { id: S.nextId++, shipper: SHIPPERS[ri(S, 0, SHIPPERS.length - 1)], cargoType, pallets, from, to,
+  const premium = lanePremium(probe.path);
+  let pay = Math.round((CFG.PAY_BASE + probe.mi * CFG.PAY_PER_MI * cg.mult * (1 + pallets / 22))
+    * (urgent ? 1.5 : 1) * premium);
+  // Special deliveries: rare, loud, and worth it. The underlying cargoType still drives the
+  // physics (a shark tank spoils, dinosaur bones crack) — the special is the story on top.
+  // One at a time so it stays an event, and gated behind the tutorial trips.
+  let special = null;
+  if (S.stats.delivered >= 2 && !S.contracts.some(c => c.special) && rand(S) < CFG.SPECIAL_CHANCE) {
+    // pick from the loads whose base cargo the player is ALLOWED to haul — rolling first and
+    // rejecting after would make specials near-mythical at low rep (most bases are rep-gated)
+    const eligible = SPECIAL_LOADS.filter(sp => CARGO[sp.base].repReq <= S.rep);
+    if (eligible.length) {
+      special = eligible[ri(S, 0, eligible.length - 1)];
+      pay = Math.round(pay * CFG.SPECIAL_PAY_MULT);
+    }
+  }
+  let slack = (cg.tightDeadline || urgent) ? 1.25 : CFG.DEADLINE_SLACK;
+  // A quote is priced against the weather showing RIGHT NOW. A two-day run will meet
+  // weather and wrecks that forecast never saw — and the country now has snow and ice,
+  // which cost far more speed than anything in California did. So the buffer grows with
+  // the length of the haul instead of staying a flat multiplier on a 40-minute hop.
+  slack *= Math.min(CFG.LONGHAUL_BUFFER_MAX, 1 + (probe.driveMins / 60) * CFG.LONGHAUL_BUFFER_PER_HR);
+  return { id: S.nextId++, shipper: SHIPPERS[ri(S, 0, SHIPPERS.length - 1)],
+    cargoType: special ? special.base : cargoType, pallets, from, to,
     pay, mi: probe.mi, urgent,
+    special: special ? { name: special.name, icon: special.icon, blurb: special.blurb } : undefined,
     dlMins: Math.round(probe.mins * slack + 120), // clock starts when YOU accept (fair board)
-    expires: S.time + ri(S, 180, 420),
-    tier: probe.mi <= CFG.LOCAL_MI ? "LOCAL" : probe.mi <= CFG.REGIONAL_MI ? "REGIONAL" : "LONG-HAUL" };
+    expires: S.time + ri(S, 180, 420) * (special ? CFG.SPECIAL_EXPIRE_MULT : 1),
+    tier: tierOf(probe.mi) };
 }
 function refreshBoard(S, force) {
   S.contracts = S.contracts.filter(c => c.expires > S.time);
@@ -264,7 +411,12 @@ function refreshBoard(S, force) {
   let guard = 0;
   while (S.contracts.length < CFG.CONTRACT_BOARD && guard++ < 30) {
     const c = genContract(S);
-    if (c) S.contracts.push(c);
+    if (c) {
+      S.contracts.push(c);
+      // a special is an event — announce it, don't let it hide in the pile
+      if (c.special) alert_(S, `📣 SPECIAL DELIVERY on the board: ${c.special.icon} ` +
+        `${c.special.name} to ${NODES[c.to].name} — $${c.pay}!`, "milestone");
+    }
   }
 }
 
@@ -275,12 +427,18 @@ export function assign(S, contractId, truckId, driverId, route, stopPlan) {
   const driver = S.drivers.find(x => x.id === driverId);
   if (!c || !truck || !driver || truck.trip || driver.busy) return { ok: false, why: "Unavailable." };
   if (TRUCK_TYPES[truck.type].cap < c.pallets) return { ok: false, why: "Truck too small for this load." };
+  if (!pathInRange(truck, route.path))
+    return { ok: false, why: `${longestLeg(route.path)} mi between fuel stops — ${truck.nick} only has ` +
+      `${Math.round(truckRange(truck))} mi of range. Bigger tank or bigger truck.` };
   const legs = [];
   let deadPlan = {};
   let repositionCost = 0;
   if (truck.at !== c.from) {
     const dead = findRoute(S, truck.at, c.from, truck, driver, "fastest");
     if (!dead) return { ok: false, why: "No path to pickup." };
+    if (!pathInRange(truck, dead.path))
+      return { ok: false, why: `${truck.nick} can't reach the pickup — ${longestLeg(dead.path)} mi ` +
+        `between fuel stops on the way there.` };
     legs.push({ path: dead.path, loaded: false });
     deadPlan = autoPlanStops(S, truck, driver, dead.path);
     repositionCost = Math.round(dead.mi * CFG.DEADHEAD_OVERHEAD_PER_MI);
@@ -352,15 +510,23 @@ function rollEvents(S) {
   const roll = rand(S);
   if (roll < 0.30) {
     const e = EDGES[ri(S, 0, EDGES.length - 1)];
-    const w = zoneWeather(S, edgeZone(e));
+    const zone = edgeZone(e);
+    const wType = S.weather[zone] ? S.weather[zone].type : "clear";
+    const w = zoneWeather(S, zone);
     const stormy = w.risk >= 2;
+    const rush = isRush(S.time, edgeTz(e));
     const pool = [];
-    if (e.urban) pool.push(["accident_minor", isRush(S.time) ? 5 : 2], ["accident_major", isRush(S.time) ? 2 : 1]);
+    if (e.urban) pool.push(["accident_minor", rush ? 5 : 2], ["accident_major", rush ? 2 : 1]);
     else pool.push(["accident_minor", 2], ["closure", stormy ? 2 : 0.5]);
     pool.push(["construction", 1.2]);
-    if ((e.mtn || e.sparse || !e.urban) && (edgeZone(e) === "valley" || edgeZone(e) === "south") && zoneWeather(S, edgeZone(e)).breakdown)
+    // Regional hazards: the country's disasters should match the country you're driving in.
+    const dryFire = ["valley", "south", "coast", "desert", "cascadia", "rockies"].includes(zone);
+    if ((e.mtn || e.sparse || !e.urban) && dryFire && w.breakdown)
       pool.push(["wildfire", 1.5]); // heatwaves breed fires (GDD §15: events fit conditions)
-    else if (e.mtn) pool.push(["wildfire", 0.6]);
+    else if (e.mtn && dryFire) pool.push(["wildfire", 0.6]);
+    if (e.mtn && (wType === "snow" || wType === "ice")) pool.push(["blizzard", 3]);   // passes shut
+    if (["plains", "midwest", "greatlakes"].includes(zone) && wType === "storm") pool.push(["tornado", 2]);
+    if (["gulf", "dixie", "florida"].includes(zone) && wType === "storm") pool.push(["flood", 2]);
     forceEvent(S, pickW(S, pool), edgeKey(e.a, e.b));
   }
 }
@@ -372,6 +538,25 @@ function currentEdge(T) {
   if (!b) return null;
   return adj[a].find(e => other(e, a) === b);
 }
+// The road a truck is on RIGHT NOW — drives the "you are here" freeway badge on the map.
+export function truckEdge(truck) {
+  const T = truck && truck.trip;
+  if (!T) return null;
+  const leg = T.legs[T.legIdx];
+  const a = leg.path[T.edgeIdx], b = leg.path[T.edgeIdx + 1];
+  if (!b) return null;
+  return (adj[a] || []).find(e => other(e, a) === b) || null;
+}
+export function truckHighway(truck) {
+  const e = truckEdge(truck);
+  return e ? e.hwy : null;
+}
+// Shields for the current road, e.g. "I-605/I-5" → ["I-605", "I-5"]
+export function truckShields(truck) {
+  const e = truckEdge(truck);
+  return e ? parseHighways(e.hwy) : [];
+}
+
 export function truckPos(T) { // for rendering: [nodeA, nodeB, frac]
   const leg = T.legs[T.legIdx];
   const a = leg.path[T.edgeIdx], b = leg.path[T.edgeIdx + 1];
@@ -419,6 +604,12 @@ function finishTrip(S, truck, failedWhy = null) {
   if (failed) { repD = cg.medical ? -10 : -6; S.stats.failed++; }
   else if (late > CFG.LATE_GRACE_MIN) { repD = -2; S.stats.delivered++; }
   else { repD = 2 + ((cg.fragile && T.cargo.dmg < 10) || cg.medical ? 1 : 0); S.stats.delivered++; }
+  // a special delivery that lands makes the news — extra rep, and the town remembers
+  if (!failed && c.special) {
+    repD += CFG.SPECIAL_REP_BONUS;
+    S.stats.specials = (S.stats.specials || 0) + 1;
+    notes.push(`⭐ Special delivery! (+${CFG.SPECIAL_REP_BONUS} bonus rep)`);
+  }
   S.rep = Math.max(0, Math.min(100, S.rep + repD));
   S.stats.earned += revenue;
   const report = {
@@ -430,8 +621,10 @@ function finishTrip(S, truck, failedWhy = null) {
   };
   S.reports.unshift(report); S.reports.length = Math.min(S.reports.length, 12);
   alert_(S, failed ? `❌ ${failedWhy} — ${c.shipper} contract lost (rep ${repD})`
-    : `✅ Delivered ${CARGO[c.cargoType].name} to ${NODES[c.to].name} · profit $${profit} (rep +${repD})`,
-    failed ? "bad" : "good");
+    : c.special
+      ? `🎉 ${c.special.icon} ${c.special.name} delivered to ${NODES[c.to].name}! profit $${profit} (rep +${repD})`
+      : `✅ Delivered ${CARGO[c.cargoType].name} to ${NODES[c.to].name} · profit $${profit} (rep +${repD})`,
+    failed ? "bad" : c.special ? "milestone" : "good");
   truck.trip = null;
   truck.at = truckPosNode(T); // destination on success; nearest node ahead if aborted mid-route
   truck.status = "Idle";
@@ -495,6 +688,7 @@ function wakeFromRest(S, truck) {
     }
   }
   T.restingUnsafe = false; T.restDriver = null;
+  T._critWarned = false; T._veryWarned = false; // a multi-day run gets fresh warnings each shift
   return false;
 }
 
@@ -504,6 +698,17 @@ function stepTruck(S, truck) {
     return;
   }
   const driver = S.drivers.find(d => d.id === T.driverId);
+  // Track the road under the wheels FIRST, every tick, before any early return. This has to
+  // stay in lockstep with truckEdge()/truckHighway() — which read the current edge directly —
+  // or the map badge shows one road while "changed at" refers to another. It must run even
+  // while paused: edgeIdx advances on arrival at a city, and the truck can then sit there
+  // refuelling and sleeping for hours before the driving code runs again.
+  const onEdge = currentEdge(T);
+  if (onEdge && T.onHighway !== onEdge.hwy) {
+    T.prevHighway = T.onHighway || null;
+    T.onHighway = onEdge.hwy;
+    T.highwayChangedAt = S.time;
+  }
   // paused? (resting, refueling, loading, towed, rail, reroute delay)
   if (T.pauseUntil) {
     if (S.time < T.pauseUntil) return;
@@ -580,6 +785,20 @@ function stepTruck(S, truck) {
   }
   // fatigue
   if (driver) driver.fatigue = Math.min(100, driver.fatigue + CFG.FATIGUE_PER_HR / 60);
+  // Hours-of-service backstop: out west a single leg can be longer than a legal shift, and
+  // there may be no town to book a rest stop in. The driver shuts down where they are.
+  if (CFG.HOS_ENABLED && driver && driver.fatigue >= CFG.FATIGUE_CRIT) {
+    const sleeper = !!TRUCK_TYPES[truck.type].sleeper;
+    T.pauseUntil = S.time + CFG.ROADSIDE_REST_MIN;
+    T.pauseWhy = sleeper ? "😴 Mandatory rest — sleeper berth" : "😴 Mandatory rest — pulled over";
+    T.restDriver = driver.id;
+    T.restingUnsafe = !sleeper && CFG.ROADSIDE_REST_SAFETY < 3; // a van on the shoulder is a target
+    truck.status = `${T.pauseWhy} on ${e.hwy}`;
+    T._critWarned = true;
+    alert_(S, `😴 ${driver.name} hit the hours-of-service limit on ${e.hwy} and shut down for the night` +
+      `${sleeper ? " in the sleeper" : " on the shoulder — not a safe place to park"}.`, sleeper ? "warn" : "bad");
+    return;
+  }
   if (driver && driver.fatigue >= CFG.FATIGUE_CRIT && !T._critWarned) {
     T._critWarned = true;
     alert_(S, `😴 ${driver.name} is CRITICALLY fatigued — accident risk is severe. Schedule sleep NOW.`, "bad");
@@ -652,24 +871,63 @@ function stepTruck(S, truck) {
   if (T.posMi >= e.mi) {
     T.posMi = 0; T.edgeIdx++;
     const node = leg.path[T.edgeIdx];
+    visitState(S, node);
     if (e.toll > 0) { S.cash -= e.toll; T.spend.tolls += e.toll; S.stats.spent += e.toll; }
     if (leg.path[T.edgeIdx + 1] !== undefined || T.legIdx < T.legs.length - 1) applyNodeStops(S, truck, node);
   }
 }
 
 // ---------------------------------------------------------------- milestones (progression feedback)
+// Reputation opens the country up one region at a time, always outward from home.
+// Once a region is yours it stays yours — a bad week shouldn't close half the map.
+export function checkRegionUnlocks(S) {
+  S.regions = S.regions || [HOME_REGION];
+  const opened = [];
+  for (const r of REGION_ORDER) {
+    if (S.regions.includes(r) || S.rep < REGIONS[r].repReq) continue;
+    S.regions.push(r);
+    opened.push(r);
+    alert_(S, `🗺️ NEW TERRITORY: ${REGIONS[r].name} is open for business! ${REGIONS[r].blurb}`, "milestone");
+  }
+  if (opened.length) {
+    // Make room so the new territory shows up NOW. Without this the board stays full of the
+    // freight you already had and the unlock reads as a message with no map behind it.
+    S.contracts = S.contracts.slice(0, Math.floor(CFG.CONTRACT_BOARD / 2));
+    S.lastBoardRoll = -9999;
+    refreshBoard(S, true);
+  }
+  return opened;
+}
+
 function checkMilestones(S) {
   const ms = S.milestones;
   const owned = S.trucks.length;
   const fire = (key, msg) => { if (!ms[key]) { ms[key] = true; alert_(S, `🏆 ${msg}`, "milestone"); } };
+  checkRegionUnlocks(S);
   if (S.stats.delivered >= 1) fire("first", "First delivery complete! The company is real.");
+  if ((S.stats.specials || 0) >= 1) fire("special1", "First SPECIAL DELIVERY landed — the whole town came out to watch.");
+  if ((S.stats.specials || 0) >= 5) fire("special5", "Five special deliveries! You're the carrier the weird jobs call first.");
   if (owned >= 2) fire("two", "Two trucks! You're officially a fleet dispatcher.");
   if (owned >= 3) fire("three", "Three rigs rolling — contracts can run in parallel.");
   if (owned >= 6) fire("six", "Six-truck fleet! Regional powerhouse status.");
   if (S.rep >= CFG.REP_REGIONAL) fire("regional", "Reputation unlocked REGIONAL contracts.");
   if (S.rep >= CFG.REP_LONGHAUL) fire("longhaul", "Reputation unlocked LONG-HAUL contracts.");
   if (S.rep >= 50) fire("medical", "MissionCare Medical will now ship with you (high pay, strict deadlines).");
-  if (S.rep >= 80 && S.cash >= 150000) fire("national", "🎉 GOLDEN BEAR AWARD: California's #1 carrier! (Sandbox continues.)");
+  if (S.stats.delivered && (S.regions || []).length >= 4) fire("coast", "Four regions running — you're not a local carrier any more.");
+  if ((S.regions || []).length >= REGION_ORDER.length)
+    fire("allregions", "🇺🇸 COAST TO COAST: every region in the country is open to your trucks.");
+  // Completing the passport means having driven every road in the country — the longest
+  // grind in the game. It pays like it: a truck's worth of cash, not a congratulations.
+  if (S.discoveredFreeways.length >= PASSPORT_ROADS.length && !ms.passportdone) {
+    ms.passportdone = true;
+    S.cash += CFG.PASSPORT_COMPLETE_BONUS;
+    S.stats.earned += CFG.PASSPORT_COMPLETE_BONUS;
+    S.rep = Math.max(0, Math.min(100, S.rep + CFG.PASSPORT_COMPLETE_REP));
+    alert_(S, `🏆🛣️ PASSPORT COMPLETE — all ${PASSPORT_ROADS.length} shields! ` +
+      `The Grand Tour bonus pays $${CFG.PASSPORT_COMPLETE_BONUS.toLocaleString()} ` +
+      `and +${CFG.PASSPORT_COMPLETE_REP} reputation.`, "milestone");
+  }
+  if (S.rep >= 80 && S.cash >= 150000) fire("national", "🎉 FREIGHT NATION AWARD: the country's #1 carrier! (Sandbox continues.)");
 }
 
 // ---------------------------------------------------------------- shop / hiring
@@ -701,6 +959,31 @@ export function buyUpgrade(S, truckId, upId) {
   truck.upgrades[upId] = true;
   return { ok: true };
 }
+// ---------------------------------------------------------------- garage: name & paint
+// Trucks are characters. Renaming is free (it's YOUR truck); paint costs a little so the
+// choice feels like it matters. Color is stored as a PAINT_COLORS id, resolved at draw time.
+export function renameTruck(S, truckId, nick) {
+  const truck = S.trucks.find(t => t.id === truckId);
+  const clean = String(nick == null ? "" : nick).trim().slice(0, 24);
+  if (!truck || !clean) return { ok: false };
+  const old = truck.nick;
+  truck.nick = clean;
+  alert_(S, `✏️ "${old}" is now "${clean}". Long may she haul.`, "info");
+  return { ok: true };
+}
+export function paintTruck(S, truckId, colorId) {
+  const truck = S.trucks.find(t => t.id === truckId);
+  const color = PAINT_COLORS.find(c => c.id === colorId);
+  if (!truck || !color || truck.color === colorId) return { ok: false };
+  if (S.cash < CFG.PAINT_COST) return { ok: false, why: "Not enough cash for paint." };
+  S.cash -= CFG.PAINT_COST; S.stats.spent += CFG.PAINT_COST;
+  truck.color = colorId;
+  alert_(S, `🎨 ${truck.nick} rolled out of the paint shop in ${color.name}.`, "good");
+  return { ok: true };
+}
+export const truckPaint = truck =>
+  PAINT_COLORS.find(c => c.id === truck.color) || null;
+
 export function repairTruck(S, truckId) {
   const truck = S.trucks.find(t => t.id === truckId);
   if (!truck || truck.trip) return { ok: false };
@@ -747,7 +1030,11 @@ export function tick(S, mins) {
 export const serialize = S => JSON.stringify(S);
 export function deserialize(json) {
   const S = JSON.parse(json);
-  if (!S || S.v !== 1) return null;
+  // v1 was the California-only map: its node ids and rep curve no longer describe this
+  // country, so those saves are retired rather than half-loaded into a broken graph.
+  if (!S || S.v !== 2) return null;
   S.discoveredFreeways = S.discoveredFreeways || [];
+  S.regions = S.regions && S.regions.length ? S.regions : [HOME_REGION];
+  S.stats.statesVisited = S.stats.statesVisited || [];
   return S;
 }

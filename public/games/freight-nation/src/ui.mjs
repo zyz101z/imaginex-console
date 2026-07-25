@@ -1,14 +1,22 @@
 // FREIGHT NATION — browser UI layer (real map + offline atlas + panels). Game logic lives in sim.mjs.
-import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, CFG, WEATHER, EVENT_DEFS } from "./data.mjs";
+import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, CFG, WEATHER, EVENT_DEFS,
+  REGIONS, REGION_ORDER, PASSPORT_ROADS, SHIELD_REGIONS, parseHighways, PAINT_COLORS } from "./data.mjs";
 import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, autoPlanStops,
   serialize, deserialize, buyTruck, sellTruck, buyUpgrade, repairTruck, hireDriver,
-  fmtClock, dayOf, isRush, truckPos, eventsOn, edgeClosed, edgeOf, tankOf, zoneWeather } from "./sim.mjs";
+  renameTruck, paintTruck, truckPaint,
+  fmtClock, fmtDur, dayOf, isRush, truckPos, truckHighway, truckShields, eventsOn, edgeClosed,
+  edgeOf, tankOf, zoneWeather,
+  tzOf, tzName, localClock, edgeTz, cityUnlocked, unlockedRegions, nextRegion,
+  truckRange, longestLeg } from "./sim.mjs";
 import * as GEO from "./geometry.mjs"; // baked real OSM centerlines, full network, state boundary
+import * as ATLAS from "./states.mjs"; // baked lower-48 outlines — the offline map's landmass
 const GEOM = GEO.GEOM || {}, CA_SHAPE = GEO.CA_SHAPE, NETWORK = GEO.NETWORK || null;
+const STATES = ATLAS.STATES || {};
 
 const $ = s => document.querySelector(s);
 let S = null;
 let selTruckId = null, activeTab = "contracts";
+let paintOpenId = null;      // fleet card whose paint swatches are expanded
 let contractSort = "nearby";
 let planner = null;         // { contract, truckId, driverId, opts, choice, plan, avoid:Set }
 let pendingReports = [];    // reports queued for modal display
@@ -25,8 +33,8 @@ let lastRealMapUpdate = 0;
 const truckMarkers = new Map();
 const stopMarkers = new Map();
 let followTruckMode = false, inspectRoadMode = false;
-const PASSPORT_ROADS = ["I-5", "I-10", "I-15", "I-80", "I-205", "I-215", "I-405", "I-580",
-  "I-605", "I-710", "I-880", "US-101", "CA-22", "CA-57", "CA-60", "CA-91", "CA-99", "CA-152"];
+// PASSPORT_ROADS is derived from the road graph in data.mjs — never re-list it here, or the
+// panel and the sim's stamping rules drift apart the moment someone adds a corridor.
 
 // ---------------------------------------------------------------- boot / save
 function boot() {
@@ -43,9 +51,22 @@ function boot() {
 const save = () => { try { localStorage.setItem(CFG.SAVE_KEY, serialize(S)); } catch (e) {} };
 
 // ---------------------------------------------------------------- projection
-const LON0 = -124.6, LAT1 = 42.3, PXD = 78;
+// Flat lon/lat scaled to the LOWER 48 (was one state). PXD is degrees→pixels; 0.82 is a
+// rough cos(latitude) squash so the country isn't stretched sideways. MAP_W/MAP_H are the
+// full national extent in those pixels — the camera centres on them.
+const LON0 = -125.5, LAT1 = 49.8, PXD = 30;
 const px = lon => (lon - LON0) * PXD * 0.82;
 const py = lat => (LAT1 - lat) * PXD;
+const MAP_W = px(-66.5), MAP_H = py(24.2);   // ~1451 × 768
+const HOME_VIEW = { lon: -119.6, lat: 36.5, z: 3.6 }; // opens on California, where truck #1 lives
+// Keep the point at the centre of the screen inside the country, so panning can't sail off
+// into blank ocean. Mirrors `maxBounds` on the live map.
+function clampCam(fit) {
+  const k = fit * cam.z;
+  const limX = k * MAP_W / 2, limY = k * MAP_H / 2;
+  cam.x = Math.max(-limX, Math.min(limX, cam.x));
+  cam.y = Math.max(-limY, Math.min(limY, cam.y));
+}
 const nodeXY = id => [px(NODES[id].lon), py(NODES[id].lat)];
 // road geometry: baked real OSM centerlines when available; hand `via` waypoints as fallback.
 // Baked lines are stored in the edge's own a→b orientation (the bake iterates EDGES).
@@ -84,6 +105,9 @@ function roadParts(pts) {
   return { core: pts.slice(first, last + 1), connectors };
 }
 const GEOtoLonLat = p => [p[0] / (PXD * .82) + LON0, LAT1 - p[1] / PXD];
+// the landmass, projected once: rings of [x,y] per state
+const STATE_RINGS = Object.entries(STATES).map(([name, rings]) =>
+  ({ name, rings: rings.map(r => r.map(([lo, la]) => [px(lo), py(la)])) }));
 function alongPoly(pts, frac) {
   const segs = [];
   let L = 0;
@@ -101,13 +125,9 @@ function alongPoly(pts, frac) {
   }
   return pts[pts.length - 1];
 }
-const CA_OUTLINE = [[-124.4, 42.0], [-124.2, 41.0], [-124.35, 40.3], [-123.8, 39.6], [-123.7, 38.9],
-  [-123.0, 38.0], [-122.5, 37.8], [-122.4, 37.15], [-121.9, 36.6], [-121.3, 35.7], [-120.65, 34.6],
-  [-119.7, 34.4], [-118.8, 34.0], [-118.4, 33.74], [-117.8, 33.55], [-117.25, 32.85], [-117.12, 32.53],
-  [-114.72, 32.72], [-114.63, 33.43], [-114.14, 34.26], [-114.63, 35.05], [-120.0, 39.0], [-120.0, 42.0]];
-
 // ---------------------------------------------------------------- main loop
-let lastT = 0, acc = 0, lastHUD = 0, lastSideUI = 0, sideLockUntil = 0;
+let lastT = 0, acc = 0, lastHUD = 0, lastSideUI = 0, sideLockUntil = 0, lastSideScroll = 0;
+const sideScrolling = () => performance.now() - lastSideScroll < 1200;
 function frame(t) {
   const dt = Math.min(0.25, (t - lastT) / 1000 || 0);
   lastT = t;
@@ -126,8 +146,11 @@ function frame(t) {
   drawMap();
   if (t - lastHUD > 250) { lastHUD = t; renderHUD(); }
   const side = $("#side");
-  const playerUsingSide = side && activeTab !== "passport" &&
-    (side.matches(":hover") || performance.now() < sideLockUntil);
+  // Touch devices have no :hover, so sideLockUntil (set on pointer/touch) is the only signal
+  // that the player is reading the panel. The passport used to be excluded here, which is
+  // exactly why it fought back when you scrolled it on a phone.
+  const playerUsingSide = side &&
+    (side.matches(":hover") || performance.now() < sideLockUntil || sideScrolling());
   if (!playerUsingSide && t - lastSideUI > 900) { lastSideUI = t; renderSide(); }
   requestAnimationFrame(frame);
 }
@@ -150,12 +173,13 @@ function drawMap() {
   const ocean = ctx.createLinearGradient(0, 0, 0, h);
   ocean.addColorStop(0, "#8ed6f2"); ocean.addColorStop(1, "#4da9d2");
   ctx.fillStyle = ocean; ctx.fillRect(0, 0, w, h); // pacific
-  const fit = Math.min(w / 760, h / 820);
-  if (!cam.init) { // open on the LA/OC basin where your first truck lives (dblclick = full state)
-    cam.init = true; cam.z = 3;
-    cam.x = -(px(-117.95) - 380) * fit * cam.z;
-    cam.y = -(py(33.93) - 400) * fit * cam.z;
+  const fit = Math.min(w / MAP_W, h / MAP_H);
+  if (!cam.init) { // open on your home region (dblclick = zoom out to the whole country)
+    cam.init = true; cam.z = HOME_VIEW.z;
+    cam.x = -(px(HOME_VIEW.lon) - MAP_W / 2) * fit * cam.z;
+    cam.y = -(py(HOME_VIEW.lat) - MAP_H / 2) * fit * cam.z;
   }
+  clampCam(fit); // same fence as the live map: you can't wander off the country
   // k = world→screen scale. s converts a desired SCREEN size into world units, so roads,
   // labels and icons stay the same size on screen at every zoom — zooming spreads the
   // geography instead of fattening the ink (this is what makes the LA tangle readable).
@@ -166,25 +190,28 @@ function drawMap() {
   const ts = 20 * tg; // truck icon screen px
   ctx.translate(cam.x + w / 2, cam.y + h / 2);
   ctx.scale(k, k);
-  ctx.translate(-380, -400);
-  // california landmass (real Census boundary when baked; hand outline as fallback)
-  const shape = (CA_SHAPE && CA_SHAPE.length > 10) ? CA_SHAPE : CA_OUTLINE;
-  ctx.beginPath();
-  shape.forEach(([lo, la], i) => i ? ctx.lineTo(px(lo), py(la)) : ctx.moveTo(px(lo), py(la)));
-  ctx.closePath();
-  const land = ctx.createLinearGradient(0, 0, 0, 800);
+  ctx.translate(-MAP_W / 2, -MAP_H / 2);
+  // The landmass: real lower-48 state outlines (tools/bake_states.mjs). Drawing the states
+  // individually — rather than one national silhouette — means the borders you cross on a
+  // cross-country haul are actually on the map.
+  const land = ctx.createLinearGradient(0, 0, 0, MAP_H);
   land.addColorStop(0, "#8fcf79"); land.addColorStop(0.55, "#c2dc82"); land.addColorStop(1, "#e8ca78");
-  ctx.fillStyle = land; ctx.fill();
-  ctx.strokeStyle = "#efffcf"; ctx.lineWidth = 3 * s; ctx.stroke();
-  ctx.save(); ctx.clip();
-  // Broad illustrated regions make the state readable before individual roads do.
-  ctx.globalAlpha = 0.22; ctx.fillStyle = "#ffe39a";
-  ctx.fillRect(px(-120.3), py(38.2), 90, 340); // central valley
-  ctx.fillStyle = "#b68d5f"; ctx.beginPath();
-  ctx.ellipse(px(-118.1), py(36.6), 55, 240, -.12, 0, Math.PI * 2); ctx.fill(); // Sierra
-  ctx.fillStyle = "#f2b45d"; ctx.beginPath();
-  ctx.ellipse(px(-116.1), py(34.3), 90, 120, 0, 0, Math.PI * 2); ctx.fill(); // desert
-  ctx.globalAlpha = 1; ctx.restore();
+  const traceRings = st => {
+    for (const ring of st.rings) { ctx.moveTo(ring[0][0], ring[0][1]); tracePath(ctx, ring); ctx.closePath(); }
+  };
+  if (STATE_RINGS.length) {
+    ctx.beginPath();
+    for (const st of STATE_RINGS) traceRings(st);
+    ctx.fillStyle = land; ctx.fill("evenodd");
+    ctx.strokeStyle = "#ffffffcc"; ctx.lineWidth = 1.2 * s; ctx.stroke(); // state lines
+    ctx.beginPath();
+    for (const st of STATE_RINGS) traceRings(st);
+    ctx.strokeStyle = "#6f9c6a"; ctx.lineWidth = 0.5 * s; ctx.stroke();
+  } else if (CA_SHAPE && CA_SHAPE.length > 10) { // atlas missing: at least draw home
+    ctx.beginPath();
+    CA_SHAPE.forEach(([lo, la], i) => i ? ctx.lineTo(px(lo), py(la)) : ctx.moveTo(px(lo), py(la)));
+    ctx.closePath(); ctx.fillStyle = land; ctx.fill();
+  }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   const drawShield = (mx, my, short, col) => {
     ctx.font = `bold ${9 * s}px system-ui`;
@@ -214,7 +241,7 @@ function drawMap() {
     for (const e of EDGES) {
       const evs = eventsOn(S, e);
       const closed = edgeClosed(S, e);
-      const slowed = evs.length > 0 || (e.urban && isRush(S.time));
+      const slowed = evs.length > 0 || (e.urban && isRush(S.time, edgeTz(e)));
       const avoided = planner && planner.avoid.has(edgeKey(e.a, e.b));
       if (!closed && !slowed && !avoided) continue;
       ctx.beginPath(); tracePath(ctx, edgePts(e));
@@ -266,7 +293,7 @@ function drawMap() {
     for (const e of EDGES) {
       const pts = edgePts(e);
       const closed = edgeClosed(S, e);
-      const slowed = eventsOn(S, e).length > 0 || (e.urban && isRush(S.time));
+      const slowed = eventsOn(S, e).length > 0 || (e.urban && isRush(S.time, edgeTz(e)));
       const wMajor = e.hwy.startsWith("I-");
       ctx.beginPath(); tracePath(ctx, pts);
       ctx.lineWidth = (wMajor ? 7 : 5.5) * s * g;
@@ -335,6 +362,10 @@ function drawMap() {
     OAK: [9, -6], SF: [-86, -2], STK: [9, -2], SAC: [9, -4], RED: [9, 1], BAK: [9, 12], FRS: [9, 1] };
   for (const [id, n] of Object.entries(NODES)) {
     const [x, y] = nodeXY(id);
+    // Cities in regions you haven't earned yet are drawn as faint ghosts: you can see the
+    // country waiting for you, but it's clearly not open for business.
+    const locked = !cityUnlocked(S, id);
+    ctx.globalAlpha = locked ? 0.32 : 1;
     const mission = planner ? planner.contract : (adventureMode() ? featuredContract() : null);
     const isDestination = mission && id === mission.to;
     const isOrigin = mission && id === mission.from;
@@ -348,7 +379,7 @@ function drawMap() {
       ctx.beginPath(); ctx.arc(x, y, 10 * s, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(60,169,219,.25)"; ctx.fill();
     }
-    const rush = n.urban && isRush(S.time);
+    const rush = n.urban && isRush(S.time, tzOf(id)); // 5 PM where the CITY is, not where you are
     if (rush) {
       ctx.beginPath(); ctx.arc(x, y, (9 + Math.sin(lastT / 200) * 2) * s, 0, 7);
       ctx.strokeStyle = "rgba(255,150,40,.6)"; ctx.lineWidth = 2 * s; ctx.stroke();
@@ -356,8 +387,9 @@ function drawMap() {
     ctx.beginPath(); ctx.arc(x, y, (n.tier >= 3 ? 6 : n.tier === 2 ? 5 : 4) * s, 0, 7);
     ctx.fillStyle = n.yard ? "#ffd75e" : n.tier >= 2 ? "#fff" : "#eaf6ea"; ctx.fill();
     ctx.strokeStyle = "#315b62"; ctx.lineWidth = 1.5 * s; ctx.stroke();
-    // big cities label at state view; the dense basin labels bloom in as you zoom
-    const showLabel = cam.z >= 1.6 || n.tier >= 2 || n.yard;
+    // On a 66-city national map, labelling everything at once is a wall of text. Major hubs
+    // and your own yard read at country view; the rest bloom in as you zoom into a region.
+    const showLabel = n.yard || n.tier >= 3 || (n.tier >= 2 && cam.z >= 1.8) || cam.z >= 3;
     if (showLabel) {
       const [dx0, dy0] = LBL[id] || [9, 3];
       const dx = dx0 * s, dy = dy0 * s;
@@ -370,6 +402,7 @@ function drawMap() {
       const w = zoneWeather(S, n.zone);
       if (w.icon) { ctx.font = `${10 * s}px serif`; ctx.fillText(w.icon, x + dx + tw + 6 * s, y + dy); }
     }
+    ctx.globalAlpha = 1; // locked-city ghosting must not leak into the next city or the trucks
   }
   // trucks
   for (const tr of S.trucks) {
@@ -395,8 +428,30 @@ function drawMap() {
     // soft shadow puck so the rig pops off the road
     ctx.beginPath(); ctx.ellipse(x, y + ts * 0.22 * s, ts * 0.42 * s, ts * 0.16 * s, 0, 0, 7);
     ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fill();
+    const paint = truckPaint(tr);
+    if (paint) { // the paint job: a colored ring around the rig
+      ctx.beginPath(); ctx.arc(x, y - 2 * s, ts * 0.62 * s, 0, 7);
+      ctx.strokeStyle = paint.hex; ctx.lineWidth = 3.5 * s; ctx.stroke();
+    }
     ctx.font = `${ts * s}px serif`;
     ctx.fillText(TRUCK_TYPES[tr.type].icon, x - ts * 0.5 * s, y + ts * 0.25 * s);
+    // the road it's on, pinned under the rig — same information the live map shows
+    const hwy = truckHighway(tr);
+    if (hwy) {
+      const changed = justChangedHighway(tr.trip);
+      const col = shieldClass(hwy) === "shield-i" ? "#2b5cab"
+        : shieldClass(hwy) === "shield-us" ? "#4a5560" : "#2f8b4d";
+      ctx.font = `bold ${9 * s}px system-ui`;
+      const tw = ctx.measureText(hwy).width + 9 * s;
+      const by = y + ts * 0.5 * s;
+      ctx.fillStyle = changed ? "#f7a900" : col;
+      ctx.beginPath(); ctx.roundRect(x - tw / 2, by, tw, 13 * s, 4 * s); ctx.fill();
+      ctx.strokeStyle = changed ? "#7a4a00" : "#ffffff88";
+      ctx.lineWidth = (changed ? 2 : 1) * s; ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+      ctx.fillText(hwy, x, by + 9.5 * s);
+      ctx.textAlign = "left";
+    }
     tr._px = x; tr._py = y; // for click hit-testing
   }
   ctx.restore();
@@ -426,8 +481,16 @@ function initRealMap() {
     realMap = new window.maplibregl.Map({
     container: "map",
     style: "https://tiles.openfreemap.org/styles/liberty",
+    // Open on the home region rather than the whole country: a first-time player needs to
+    // see their own truck, not a continent. The map zooms out as their runs get longer.
     center: [-118.02, 33.91],
-    zoom: 8.4,
+    zoom: 7.2,
+    maxZoom: 15,
+    // Fence the map to the country the game is set in. Without this you can drag off to the
+    // Atlantic or Siberia, which is just distraction — there's no freight out there.
+    // A little slack past the borders so coastal cities aren't jammed against the edge.
+    maxBounds: [[-127.5, 22.0], [-64.5, 51.5]],
+    minZoom: 3,
     attributionControl: true
   });
   realMap.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
@@ -614,6 +677,15 @@ function buildSimPathGeometry(path) {
   }
   return { type: "LineString", coordinates };
 }
+// Colour the badge the way the real signs are: blue interstate, white US route, green state.
+function shieldClass(hwy) {
+  const first = (hwy ? parseHighways(hwy)[0] : "") || "";
+  return first.startsWith("I-") ? "shield-i" : first.startsWith("US-") ? "shield-us" : "shield-st";
+}
+// "changed" stays true for a few game-minutes after the road name actually changes.
+const justChangedHighway = T =>
+  T.highwayChangedAt != null && S.time - T.highwayChangedAt <= CFG.HWY_FLASH_MIN;
+
 function updateTruckMarkers() {
   const live = new Set();
   for (const tr of S.trucks) {
@@ -621,14 +693,34 @@ function updateTruckMarkers() {
     let marker = truckMarkers.get(tr.id);
     if (!marker) {
       const el = document.createElement("div");
-      el.className = "truck-marker"; el.textContent = TRUCK_TYPES[tr.type].icon;
+      el.className = "truck-marker";
+      const rig = document.createElement("span");
+      rig.className = "truck-rig"; rig.textContent = TRUCK_TYPES[tr.type].icon;
+      const shield = document.createElement("span");
+      shield.className = "truck-shield";
+      el.appendChild(rig); el.appendChild(shield);
       el.title = tr.nick;
       el.onclick = () => { selTruckId = tr.id; activeTab = "fleet"; renderSide(); };
       marker = new window.maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(truckLngLat(tr)).addTo(realMap);
       truckMarkers.set(tr.id, marker);
     }
     marker.setLngLat(truckLngLat(tr));
-    marker.getElement().classList.toggle("selected", tr.id === selTruckId);
+    const el = marker.getElement();
+    el.classList.toggle("selected", tr.id === selTruckId);
+    // the paint job rides on the marker ring (selection still wins with its orange)
+    const paint = truckPaint(tr);
+    if (tr.id !== selTruckId) el.style.borderColor = paint ? paint.hex : "";
+    // The road under the wheels, right on the truck — and a flash when it changes, so
+    // switching from the 605 to the 5 is something you SEE rather than have to notice.
+    const shieldEl = el.querySelector(".truck-shield");
+    const hwy = truckHighway(tr);
+    if (shieldEl) {
+      const label = hwy || "";
+      if (shieldEl.textContent !== label) shieldEl.textContent = label;
+      shieldEl.classList.toggle("hidden", !label);
+      shieldEl.classList.toggle("changed", !!tr.trip && justChangedHighway(tr.trip));
+      shieldEl.className = shieldEl.className.replace(/ ?shield-(i|us|st)\b/g, "") + " " + shieldClass(hwy);
+    }
   }
   for (const [id, marker] of truckMarkers) if (!live.has(id)) { marker.remove(); truckMarkers.delete(id); }
 }
@@ -704,9 +796,9 @@ function alongCoordinates(coords, frac) {
 function canvasToWorld(ev) {
   const cv = canvas(), r = cv.getBoundingClientRect();
   const w = cv.clientWidth, h = cv.clientHeight;
-  const fit = Math.min(w / 760, h / 820);
-  const x = (ev.clientX - r.left - cam.x - w / 2) / (fit * cam.z) + 380;
-  const y = (ev.clientY - r.top - cam.y - h / 2) / (fit * cam.z) + 400;
+  const fit = Math.min(w / MAP_W, h / MAP_H);
+  const x = (ev.clientX - r.left - cam.x - w / 2) / (fit * cam.z) + MAP_W / 2;
+  const y = (ev.clientY - r.top - cam.y - h / 2) / (fit * cam.z) + MAP_H / 2;
   return [x, y];
 }
 function wireCanvas() {
@@ -736,23 +828,23 @@ function wireCanvas() {
     e.preventDefault();
     const r = cv.getBoundingClientRect();
     const w = cv.clientWidth, h = cv.clientHeight;
-    const fit = Math.min(w / 760, h / 820);
+    const fit = Math.min(w / MAP_W, h / MAP_H);
     const cx = e.clientX - r.left, cy = e.clientY - r.top;
     // world point under the cursor stays put while zooming (map-app feel)
-    const wx = (cx - cam.x - w / 2) / (fit * cam.z) + 380;
-    const wy = (cy - cam.y - h / 2) / (fit * cam.z) + 400;
-    cam.z = Math.max(0.7, Math.min(12, cam.z * (e.deltaY < 0 ? 1.16 : 0.86)));
-    cam.x = cx - w / 2 - (wx - 380) * fit * cam.z;
-    cam.y = cy - h / 2 - (wy - 400) * fit * cam.z;
+    const wx = (cx - cam.x - w / 2) / (fit * cam.z) + MAP_W / 2;
+    const wy = (cy - cam.y - h / 2) / (fit * cam.z) + MAP_H / 2;
+    cam.z = Math.max(0.7, Math.min(40, cam.z * (e.deltaY < 0 ? 1.16 : 0.86)));
+    cam.x = cx - w / 2 - (wx - MAP_W / 2) * fit * cam.z;
+    cam.y = cy - h / 2 - (wy - MAP_H / 2) * fit * cam.z;
   }, { passive: false });
-  cv.addEventListener("dblclick", () => { // toggle SoCal basin ↔ full state
+  cv.addEventListener("dblclick", () => { // toggle your region ↔ the whole country
     if (cam.z > 1.2) { cam.z = 1; cam.x = 0; cam.y = 0; }
-    else cam.init = false; // recompute basin focus next frame
+    else cam.init = false; // recompute home-region focus next frame
   });
 }
 function nearPlannedRoute(wx, wy, screenPx) {
   if (!planner || !planner.opts[planner.choice]) return false;
-  const cv = canvas(), tol = screenPx / (Math.min(cv.clientWidth / 760, cv.clientHeight / 820) * cam.z);
+  const cv = canvas(), tol = screenPx / (Math.min(cv.clientWidth / MAP_W, cv.clientHeight / MAP_H) * cam.z);
   const path = planner.opts[planner.choice].path;
   for (let p = 0; p < path.length - 1; p++) {
     const e = findEdgeAB(path[p], path[p + 1]); if (!e) continue;
@@ -768,7 +860,7 @@ function nearPlannedRoute(wx, wy, screenPx) {
 function finishRouteDrag(ev) {
   if (!planner) return;
   const [wx, wy] = canvasToWorld(ev);
-  const cv = canvas(), tol = 38 / (Math.min(cv.clientWidth / 760, cv.clientHeight / 820) * cam.z);
+  const cv = canvas(), tol = 38 / (Math.min(cv.clientWidth / MAP_W, cv.clientHeight / MAP_H) * cam.z);
   let best = null, dist = Infinity;
   for (const [id] of Object.entries(NODES)) {
     if (id === planner.contract.from || id === planner.contract.to) continue;
@@ -788,7 +880,7 @@ function finishRouteDrag(ev) {
 function handleClick(ev) {
   const [wx, wy] = canvasToWorld(ev);
   const cv = canvas();
-  const tol = 1 / (Math.min(cv.clientWidth / 760, cv.clientHeight / 820) * cam.z); // world units per screen px
+  const tol = 1 / (Math.min(cv.clientWidth / MAP_W, cv.clientHeight / MAP_H) * cam.z); // world units per screen px
   // truck? (hit radius tracks the grown icon size)
   const tgc = Math.min(2.3, Math.pow(Math.max(1, cam.z), 0.55));
   for (const tr of S.trucks) {
@@ -816,7 +908,7 @@ function handleClick(ev) {
         const evs = eventsOn(S, e);
         const info = evs.length
           ? evs.map(ev2 => `${EVENT_DEFS[ev2.type].icon} ${EVENT_DEFS[ev2.type].name} — clears ~${fmtClock(ev2.endsAt)} (${Math.max(0, Math.round((ev2.endsAt - S.time) / 60 * 10) / 10)}h)`).join("<br>")
-          : "No incidents. " + (e.urban && isRush(S.time) ? "🚗 Rush-hour congestion right now." : "Flowing normally.");
+          : "No incidents. " + (e.urban && isRush(S.time, edgeTz(e)) ? "🚗 Rush-hour congestion right now." : "Flowing normally.");
         toast(`<b>${e.hwy}</b> · ${NODES[e.a].name} ↔ ${NODES[e.b].name} · ${e.mi} mi · ${e.mph} mph${e.toll ? ` · toll $${e.toll}` : ""}${e.q <= 2 ? " · ⚠️ rough pavement" : ""}<br>${info}`);
       }
       return;
@@ -824,16 +916,32 @@ function handleClick(ev) {
   }
 }
 
+// A clock time alone is a lie on a multi-day haul — "4:15 PM" three days out reads as today.
+const fmtWhen = t => dayOf(t) === dayOf(S.time) ? fmtClock(t) : `Day ${dayOf(t)} ${fmtClock(t)}`;
+
 // ---------------------------------------------------------------- HUD
 function renderHUD() {
   $("#cash").textContent = `$${Math.round(S.cash).toLocaleString()}`;
   $("#cash").className = S.cash < 0 ? "bad" : "";
   $("#rep").textContent = `⭐ ${S.rep}`;
-  const next = S.rep < CFG.REP_REGIONAL ? `${CFG.REP_REGIONAL} unlocks REGIONAL` :
-    S.rep < CFG.REP_LONGHAUL ? `${CFG.REP_LONGHAUL} unlocks LONG-HAUL` :
-    S.rep < 50 ? "50 unlocks MEDICAL" : "elite carrier";
+  // On a national map the most motivating "next" is almost always the next slice of country.
+  const nextRg = nextRegion(S);
+  const next = nextRg ? `${REGIONS[nextRg].repReq} opens ${REGIONS[nextRg].name}`
+    : S.rep < 50 ? "50 unlocks MEDICAL" : "elite carrier";
   $("#rep").title = `Reputation. Next: ${next}`;
-  $("#clock").innerHTML = `Day ${dayOf(S.time)} · <b>${fmtClock(S.time)}</b>${isRush(S.time) ? ' <span class="rush">RUSH HOUR</span>' : ""}`;
+  const terr = $("#territory");
+  if (terr) {
+    const open = unlockedRegions(S).length;
+    terr.innerHTML = nextRg
+      ? `🗺️ ${open}/${REGION_ORDER.length} regions · <b>⭐${REGIONS[nextRg].repReq}</b> opens ${REGIONS[nextRg].name}`
+      : `🗺️ Coast to coast — all ${REGION_ORDER.length} regions open`;
+    terr.title = nextRg ? REGIONS[nextRg].blurb : "The whole country is yours to run.";
+  }
+  // The dispatch office keeps home time; the country runs on four clocks, so say which one.
+  $("#clock").innerHTML = `Day ${dayOf(S.time)} · <b>${fmtClock(S.time)}</b> <span class="dim">PT</span>` +
+    `${isRush(S.time) ? ' <span class="rush">RUSH HOUR</span>' : ""}`;
+  $("#clock").title = ["PT", "MT", "CT", "ET"]
+    .map((z, i) => `${z} ${fmtClock(S.time + i * 60)}`).join("  ·  ");
   document.querySelectorAll("#speedCtl button").forEach(b => {
     b.classList.toggle("on", +b.dataset.s === S.speed);
     b.disabled = !!planner;
@@ -861,7 +969,17 @@ function renderSide() {
   else if (activeTab === "passport") body = passportHtml();
   else if (activeTab === "shop") body = shopHtml();
   else body = logHtml();
-  el.innerHTML = `<div class="tabs">${tabs}</div><div class="tabbody">${body}</div>`;
+  // This panel re-renders on a timer, and replacing innerHTML resets the scroll box to the
+  // top. On a long list (the 51-shield passport, a big fleet) that reads as the page yanking
+  // itself back up every second — and on touch, where there's no :hover to pause it, it makes
+  // the bottom of the list unreachable. Carry the scroll position across the rebuild.
+  const prevBody = el.querySelector(".tabbody");
+  const keepTab = prevBody && prevBody.dataset.tab === activeTab ? prevBody.scrollTop || 0 : 0;
+  el.innerHTML = `<div class="tabs">${tabs}</div><div class="tabbody" data-tab="${activeTab}">${body}</div>`;
+  if (keepTab) {
+    const bodyEl = el.querySelector(".tabbody");
+    if (bodyEl) bodyEl.scrollTop = keepTab;
+  }
   el.querySelectorAll(".tab").forEach(b => b.onclick = () => { activeTab = b.dataset.tab; renderSide(); });
   wireSide(el);
 }
@@ -878,19 +996,43 @@ function passportHtml() {
     const roads = edge ? fallbackFreeways([here, next]) : [];
     return `${TRUCK_TYPES[t.type].icon} ${t.nick}: ${roads.length ? roads.join(", ") : edge?.hwy || "local roads"}`;
   });
+  // 51 shields is too many for one flat wall — group them by the region they're earned in,
+  // so the passport doubles as a map of where you've been and what country is still ahead.
+  const open = unlockedRegions(S);
+  const byRegion = REGION_ORDER.map(rg => ({
+    rg,
+    roads: PASSPORT_ROADS.filter(r => (SHIELD_REGIONS[r] || [])[0] === rg),
+  })).filter(g => g.roads.length);
+  const shieldHtml = r => {
+    const cls = r.startsWith("US-") ? "us" : r.startsWith("I-") ? "interstate" : "ca";
+    return `<div class="road-shield ${cls} ${found.has(r) ? "found" : ""}">${found.has(r) ? "✓ " : "?"} ${r}</div>`;
+  };
   return `<div class="card mission-card">
-    <div class="mission-title">🛣️ ${CFG.REGION} Freeway Passport</div>
+    <div class="mission-title">🛣️ National Freeway Passport</div>
     <div>Ride on freeways to stamp them into your collection.</div>
     ${bar("Discovered", pct, "#2674bd")}
-    <div class="dim small">${found.size} of ${PASSPORT_ROADS.length} freeway shields found · each new one earns a $25 Explorer bonus.</div>
+    <div class="dim small">${found.size} of ${PASSPORT_ROADS.length} freeway shields found · each new one earns a $${CFG.PASSPORT_BONUS} Explorer bonus.</div>
+    <div class="grandtour ${found.size >= PASSPORT_ROADS.length ? "won" : ""}">
+      ${found.size >= PASSPORT_ROADS.length
+        ? `🏆 GRAND TOUR COMPLETE — you've driven every road in the country.`
+        : `🏆 <b>Grand Tour</b>: collect all ${PASSPORT_ROADS.length} for
+           <b>$${CFG.PASSPORT_COMPLETE_BONUS.toLocaleString()}</b> + ${CFG.PASSPORT_COMPLETE_REP} reputation
+           <span class="dim">· ${PASSPORT_ROADS.length - found.size} to go</span>`}
+    </div>
   </div>
   ${active.length ? `<div class="card"><b>🚚 Traveling now</b>${active.map(x => `<div class="good small">${x}</div>`).join("")}
     <div class="dim small">A freeway stamps as soon as the truck enters its game corridor.</div></div>` :
     `<div class="card"><b>🚚 No truck is traveling</b><div class="dim small">Dispatch a contract to begin collecting freeway stamps.</div></div>`}
-  <div class="passport-grid">${PASSPORT_ROADS.map(r => {
-    const cls = r.startsWith("US-") ? "us" : r.startsWith("CA-") ? "ca" : "interstate";
-    return `<div class="road-shield ${cls} ${found.has(r) ? "found" : ""}">${found.has(r) ? "✓ " : "?"} ${r}</div>`;
-  }).join("")}</div>
+  ${byRegion.map(g => {
+    const got = g.roads.filter(r => found.has(r)).length;
+    const locked = !open.includes(g.rg);
+    return `<div class="card${locked ? " locked-region" : ""}" style="margin-top:8px">
+      <b>${locked ? "🔒 " : ""}${REGIONS[g.rg].name}</b>
+      <span class="dim small"> ${got}/${g.roads.length}</span>
+      ${locked ? `<div class="dim small">Reach ⭐${REGIONS[g.rg].repReq} reputation to run these roads.</div>` : ""}
+      <div class="passport-grid">${g.roads.map(shieldHtml).join("")}</div>
+    </div>`;
+  }).join("")}
   <div class="card" style="margin-top:10px"><b>🔎 Road Explorer</b>
     <div class="dim">Press the 🛣️ map button, then click roads to learn their names.</div></div>`;
 }
@@ -956,6 +1098,12 @@ function rankedContracts() {
 }
 const poorFit = (c, q) => q && q.pickupMi > Math.max(100, c.mi * .75);
 
+// What the player sees on a load: the special's story when there is one, plain cargo when
+// not. The cargoType underneath still runs the physics either way.
+const cargoDisplay = c => c.special
+  ? { icon: c.special.icon, name: c.special.name }
+  : { icon: CARGO[c.cargoType].icon, name: CARGO[c.cargoType].name };
+
 function contractsHtml() {
   if (planner) return plannerHtml();
   if (!S.contracts.length) return `<p class="dim">Board is empty — new freight posts every few hours.</p>`;
@@ -965,7 +1113,7 @@ function contractsHtml() {
     const step = S.stats.delivered + 1;
     return `<div class="card mission-card">
       <div class="mission-title">${step === 1 ? "Your first mission!" : "One more practice trip!"}</div>
-      <div class="dim">${step === 1 ? `A ${CFG.REGION} town is waiting for a delivery.` : "Choose another destination and learn a new route."}</div>
+      <div class="dim">${step === 1 ? `A ${CFG.HOME_REGION_NAME} town is waiting for a delivery.` : "Choose another destination and learn a new route."}</div>
       <div class="mission-route">📍 ${NODES[c.from].name}<br>⭐ <b>${NODES[c.to].name}</b></div>
       <div>${cg.icon} Bring ${cg.name.toLowerCase()} safely to the destination.</div>
       ${q ? `<div class="good small">🚚 Best nearby job: ${q.truck.nick} is ${q.pickupMi ? q.pickupMi + " mi" : "already"} from pickup.</div>` : ""}
@@ -981,14 +1129,16 @@ function contractsHtml() {
       <button class="btn s ${contractSort === "pay" ? "go" : ""}" data-contract-sort="pay">📦 Highest pay</button>
     </div></div>`;
   return sortBar + rankedContracts().map(({ contract: c, quote: q }) => {
-    const cg = CARGO[c.cargoType];
-    const hrsLeft = Math.round(c.dlMins / 6) / 10;
+    const cg = cargoDisplay(c);
+    const timeLeft = fmtDur(c.dlMins); // cross-country freight is measured in days, not hours
     const canHaul = !!q;
     const badFit = poorFit(c, q);
-    return `<div class="card ${canHaul ? "" : "locked"} ${badFit ? "failbg" : ""}">
+    return `<div class="card ${canHaul ? "" : "locked"} ${badFit ? "failbg" : ""} ${c.special ? "special" : ""}">
+      ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
       <div class="cardtop"><b>${cg.icon} ${cg.name}</b> <span class="chip ${c.tier}">${c.tier}</span>${c.urgent ? ' <span class="chip URGENT">⚡ URGENT</span>' : ""}</div>
+      ${c.special ? `<div class="special-blurb">${c.special.blurb}</div>` : ""}
       <div>${NODES[c.from].name} → <b>${NODES[c.to].name}</b> · ${c.mi} mi · ${c.pallets} pallets</div>
-      <div class="dim">${c.shipper} · deliver within <b>${hrsLeft}h</b></div>
+      <div class="dim">${c.shipper} · deliver within <b>${timeLeft}</b></div>
       ${q ? `<div class="${badFit ? "bad" : q.pickupMi <= 25 ? "good" : "warn"} small">
         🚚 ${q.truck.nick}: ${q.pickupMi ? `${q.pickupMi} empty mi · about $${q.deadCost} to reach pickup` : "already at pickup"}
         ${badFit ? " · POOR FIT" : ""}</div>
@@ -1034,7 +1184,8 @@ function plannerHtml() {
         <div><b>🛣️ ${roadLine(card.roads)}</b></div>
         ${fresh.length ? `<div class="good small">✨ New passport stamps: ${fresh.join(", ")}</div>` :
           `<div class="dim small">Already traveled freeway territory</div>`}
-        <div class="choice-note">${f[2]} · ${Math.round(card.mi)} mi · about ${mins < 60 ? mins + " min" : (Math.round(mins / 6) / 10) + " hr"}</div>
+        <div class="choice-note">${f[2]} · ${Math.round(card.mi)} mi · about ${fmtDur(mins)}${
+          card.opt.nights ? ` · 🛏️ ${card.opt.nights} night${card.opt.nights > 1 ? "s" : ""} on the road` : ""}</div>
         ${card.tolls ? `<div class="small warn">Includes a $${card.tolls} toll</div>` : ""}
       </div>`;
     });
@@ -1042,7 +1193,10 @@ function plannerHtml() {
       <button class="btn" id="cancelPlan">Back</button></div>`;
     return simple;
   }
-  let html = `<div class="card"><div class="cardtop"><b>${cg.icon} ${cg.name}</b> → ${NODES[c.to].name} · <span class="chip">⏸ TIME PAUSED</span> · <b class="pay">$${c.pay}</b></div>
+  const disp = cargoDisplay(c);
+  let html = `<div class="card ${c.special ? "special" : ""}">
+    ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
+    <div class="cardtop"><b>${disp.icon} ${disp.name}</b> → ${NODES[c.to].name} · <span class="chip">⏸ TIME PAUSED</span> · <b class="pay">$${c.pay}</b></div>
     <div class="dim">deliver within ${Math.round(c.dlMins / 6) / 10}h · ${c.pallets} pallets${cg.fragile ? " · 🏺 handle with care" : ""}${cg.perishable ? " · 🥬 keep it cold" : ""}${cg.theft ? " · 🥷 theft target" : ""}</div>
     <label>Truck: <select id="pTruck">${trucks.map(t => `<option value="${t.id}" ${t.id === planner.truckId ? "selected" : ""}>${TRUCK_TYPES[t.type].icon} ${t.nick} (${t.at ? NODES[t.at].name : "en route"} · fuel ${Math.round(t.fuel)}g)</option>`).join("")}</select></label>
     <label>Driver: <select id="pDriver">${drivers.map(d => `<option value="${d.id}" ${d.id === planner.driverId ? "selected" : ""}>${d.name} ${"★".repeat(d.skill)} (fatigue ${Math.round(d.fatigue)})</option>`).join("")}</select></label>
@@ -1055,9 +1209,9 @@ function plannerHtml() {
     const etaLate = o.eta > dl;
     html += `<div class="card route ${planner.choice === card.i ? "sel" : ""}" data-route="${card.i}">
       <div class="cardtop"><b>${o.kind.toUpperCase()}</b>${(o.also || []).map(k => ` <span class="dim">= ${k}</span>`).join("")}
-        <span class="${etaLate ? "bad" : "good"}">ETA ${fmtClock(o.eta)}${etaLate ? " ⚠ LATE" : ""}</span></div>
+        <span class="${etaLate ? "bad" : "good"}">ETA ${fmtWhen(o.eta)}${etaLate ? " ⚠ LATE" : ""}</span></div>
       <div><b>🛣️ ${roadLine(card.roads)}</b></div>
-      <div>${o.mi} mi · ${Math.round(o.mins / 6) / 10}h · fuel ~$${o.fuel$} · tolls $${o.tolls} · risk ${o.risk}${o.rough ? ` · <span class="warn">rough ${o.rough}mi</span>` : ""}</div>
+      <div>${o.mi} mi · ${fmtDur(o.mins)}${o.nights ? ` <span class="dim">(incl. ${o.nights} sleep)</span>` : ""} · fuel ~$${o.fuel$} · tolls $${o.tolls} · risk ${o.risk}${o.rough ? ` · <span class="warn">rough ${o.rough}mi</span>` : ""}</div>
     </div>`;
   });
   const o = planner.opts[planner.choice];
@@ -1103,6 +1257,15 @@ function routeWorkshopHtml() {
   </div>`;
 }
 
+// A rolling truck has no `at`, but on a four-timezone map "where is it, and what time is it
+// THERE" is exactly what the dispatcher needs to reason about rush hour and driver hours.
+function whereTruckIs(tr) {
+  if (!tr.trip) return "";
+  const p = truckPos(tr.trip);
+  const here = p.b || p.a;
+  return `near ${NODES[here].name}, ${NODES[here].st} · ${localClock(S.time, here)} ${tzName(here)}`;
+}
+
 function fleetHtml() {
   return S.trucks.map(tr => {
     const tt = TRUCK_TYPES[tr.type];
@@ -1113,8 +1276,14 @@ function fleetHtml() {
     if (T) {
       const c = T.contract;
       const leg = T.legs[T.legIdx];
-      const hrsLeft = Math.round((c.deadline - S.time) / 6) / 10;
-      tripHtml = `<div class="dim">${CARGO[c.cargoType].icon} ${NODES[c.from].name} → ${NODES[c.to].name} · $${c.pay} · ${hrsLeft}h left</div>
+      const timeLeft = fmtDur(c.deadline - S.time);
+      const hwy = truckHighway(tr);
+      const nextNode = leg.path[T.edgeIdx + 1];
+      tripHtml = `${hwy ? `<div class="nowon ${shieldClass(hwy)} ${justChangedHighway(T) ? "changed" : ""}">
+          <span class="nowon-label">NOW ON</span> <b>${hwy}</b>
+          ${nextNode ? `<span class="nowon-to">→ ${NODES[nextNode].name}</span>` : ""}
+        </div>` : ""}
+        <div class="dim">${cargoDisplay(c).icon} ${c.special ? `<b>${c.special.name}</b> · ` : ""}${NODES[c.from].name} → ${NODES[c.to].name} · $${c.pay} · ${timeLeft} left</div>
         <div class="dim small">${leg.path.slice(T.edgeIdx).map(n => NODES[n].name).join(" → ")}</div>
         ${CARGO[c.cargoType].fragile ? bar("Cargo", 100 - T.cargo.dmg, "#c586ff") : ""}
         ${CARGO[c.cargoType].perishable ? bar("Fresh", T.cargo.fresh, "#7ee08a") : ""}
@@ -1133,8 +1302,18 @@ function fleetHtml() {
         ${S.trucks.length > 1 ? `<button class="btn s danger" data-sell="${tr.id}">Sell</button>` : ""}
       </div>`;
     }
+    const paint = truckPaint(tr);
     return `<div class="card ${tr.id === selTruckId ? "sel" : ""}" data-truck="${tr.id}">
-      <div class="cardtop"><b>${tt.icon} ${tr.nick}</b> <span class="dim">${tr.at ? NODES[tr.at].name : ""}</span></div>
+      <div class="cardtop"><b>${tt.icon} ${paint ? `<span class="paint-dot" style="background:${paint.hex}"></span>` : ""}${tr.nick}</b> <span class="dim">${
+        tr.at ? `${NODES[tr.at].name}, ${NODES[tr.at].st} · ${localClock(S.time, tr.at)} ${tzName(tr.at)}`
+              : whereTruckIs(tr)}</span></div>
+      <div class="row garage-row">
+        <button class="btn s" data-rename="${tr.id}">✏️ Name</button>
+        <button class="btn s" data-paint-open="${tr.id}">🎨 Paint ($${CFG.PAINT_COST})</button>
+      </div>
+      ${paintOpenId === tr.id ? `<div class="swatches">${PAINT_COLORS.map(pc =>
+        `<button class="swatch ${tr.color === pc.id ? "on" : ""}" style="background:${pc.hex}"
+           title="${pc.name}" data-paint="${tr.id}:${pc.id}"></button>`).join("")}</div>` : ""}
       <div class="${T && (T.blocked || (T.pauseWhy || "").includes("OUT OF FUEL")) ? "bad" : "dim"}">${tr.status}</div>
       ${bar("Fuel", fuelPct, fuelPct < 20 ? "#e0392b" : "#5ec4ff")}
       ${bar("Cond", tr.cond, tr.cond < 40 ? "#e0392b" : "#8fd18f")}
@@ -1197,6 +1376,21 @@ function logHtml() {
 // ---------------------------------------------------------------- side panel wiring
 function wireSide(el) {
   el.querySelectorAll("[data-accept]").forEach(b => b.onclick = () => openPlanner(+b.dataset.accept));
+  el.querySelectorAll("[data-rename]").forEach(b => b.onclick = () => {
+    const tr = S.trucks.find(t => t.id === +b.dataset.rename);
+    if (!tr || typeof window.prompt !== "function") return;
+    const name = window.prompt(`New name for ${tr.nick}?`, tr.nick);
+    if (name != null && renameTruck(S, tr.id, name).ok) { save(); renderSide(); }
+  });
+  el.querySelectorAll("[data-paint-open]").forEach(b => b.onclick = () => {
+    const id = +b.dataset.paintOpen;
+    paintOpenId = paintOpenId === id ? null : id;
+    renderSide();
+  });
+  el.querySelectorAll("[data-paint]").forEach(b => b.onclick = () => {
+    const [tid, colorId] = b.dataset.paint.split(":");
+    if (paintTruck(S, +tid, colorId).ok) { save(); renderSide(); }
+  });
   el.querySelectorAll("[data-contract-sort]").forEach(b => b.onclick = () => {
     contractSort = b.dataset.contractSort; renderSide();
   });
@@ -1488,11 +1682,13 @@ function doDispatch() {
 
 // ---------------------------------------------------------------- modals & toasts
 function showReport(r) {
-  const c = r.contract, cg = CARGO[c.cargoType];
+  const c = r.contract, cg = cargoDisplay(c);
   const ex = r.expenses;
+  const specialWin = !r.failed && !!c.special;
   $("#modalBody").innerHTML = `
-    <h2>${r.failed ? "🧭 LET'S TRY ANOTHER ROUTE" : "🎉 DELIVERY COMPLETE!"}</h2>
+    <h2>${r.failed ? "🧭 LET'S TRY ANOTHER ROUTE" : specialWin ? `${c.special.icon} SPECIAL DELIVERY COMPLETE!` : "🎉 DELIVERY COMPLETE!"}</h2>
     ${r.failed ? `<p class="bad"><b>${r.failedWhy}</b></p>` : ""}
+    ${specialWin ? `<p class="special-blurb">${c.special.blurb}</p>` : ""}
     <p>${cg.icon} ${cg.name} · ${NODES[c.from].name} → ${NODES[c.to].name} · ${r.truck} · ${r.driver}</p>
     <table>
       <tr><td>Contract payment</td><td class="r">$${r.failed ? 0 : c.pay}</td></tr>
@@ -1513,6 +1709,27 @@ function showReport(r) {
     ${!r.failed && S.stats.delivered <= 2 ? `<p><b>⭐ Map Explorer sticker earned!</b></p>` : ""}
     <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">${S.stats.delivered < 2 ? "NEXT ADVENTURE" : "CONTINUE"}</button>`;
   $("#modal").classList.add("open");
+  if (specialWin) confetti();
+}
+
+// ---------------------------------------------------------------- confetti
+// Pure-DOM celebration — ~60 emoji petals that fall and fade, then clean themselves up.
+// Cheap enough for an iPad, and guarded so the headless harness can call it safely.
+function confetti(count = 60) {
+  try {
+    const PIECES = ["🎉", "⭐", "🎊", "✨", "🏆", "💛"];
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement("span");
+      p.className = "confetti-piece";
+      p.textContent = PIECES[(Math.random() * PIECES.length) | 0];
+      p.style.left = (Math.random() * 100) + "vw";
+      p.style.animationDelay = (Math.random() * 0.9) + "s";
+      p.style.animationDuration = (2.2 + Math.random() * 1.6) + "s";
+      p.style.fontSize = (14 + Math.random() * 18) + "px";
+      document.body.appendChild(p);
+      setTimeout(() => { try { p.remove(); } catch (e) {} }, 5000);
+    }
+  } catch (e) { /* headless or ancient browser — the celebration is optional */ }
 }
 let toastTimer = null;
 function toast(html) {
@@ -1538,7 +1755,7 @@ function wireTop() {
   };
   $("#helpBtn").onclick = () => {
     $("#modalBody").innerHTML = adventureMode() ? `<h2>🗺️ Welcome, Map Explorer!</h2>
-      <p><b>Rusty the van needs your help.</b> Pick a destination, choose a route, and watch Rusty travel across ${CFG.REGION}.</p>
+      <p><b>Rusty the van needs your help.</b> Pick a destination, choose a route, and watch Rusty travel across ${CFG.HOME_REGION_NAME} — then earn your way across ${CFG.REGION}.</p>
       <p>Look for the <b>gold star ⭐</b> on the map. It shows where your delivery needs to go.</p>
       <p class="dim">For your first two trips, we’ll show you one simple step at a time. More company tools unlock afterward.</p>
       <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">START MY FIRST MISSION →</button>` :
@@ -1555,7 +1772,7 @@ function wireTop() {
       if (!planner) S.speed = S.speed === 0 ? 1 : 0;
     }
   });
-  $("#zoomIn").onclick = () => realMap ? realMap.zoomIn() : (cam.z = Math.min(12, cam.z * 1.25));
+  $("#zoomIn").onclick = () => realMap ? realMap.zoomIn() : (cam.z = Math.min(40, cam.z * 1.25));
   $("#zoomOut").onclick = () => realMap ? realMap.zoomOut() : (cam.z = Math.max(.7, cam.z / 1.25));
   $("#findTruck").onclick = focusTruck;
   $("#followTruck").onclick = () => {
@@ -1608,8 +1825,8 @@ function focusTruck() {
     if (e) [x, y] = alongPoly(e.a === p.a ? edgePts(e) : [...edgePts(e)].reverse(), p.frac);
     else [x, y] = nodeXY(p.a);
   } else [x, y] = nodeXY(tr.at);
-  const cv = canvas(), fit = Math.min(cv.clientWidth / 760, cv.clientHeight / 820);
-  cam.z = Math.max(cam.z, 3);
+  const cv = canvas(), fit = Math.min(cv.clientWidth / MAP_W, cv.clientHeight / MAP_H);
+  cam.z = Math.max(cam.z, 9); // a truck is a dot on a national map — get close
   cam.x = -(x - 380) * fit * cam.z;
   cam.y = -(y - 400) * fit * cam.z;
   selTruckId = tr.id;
@@ -1620,6 +1837,7 @@ function focusTruck() {
 if (typeof window !== "undefined") window.__rd = {
   get S() { return S; },
   setTab: t => { activeTab = t; renderSide(); },
+  renderSide: () => renderSide(),
   plan: id => openPlanner(id),
   dispatch: () => doDispatch(),
   report: r => showReport(r),
@@ -1650,6 +1868,11 @@ wireTop();
 const sideEl = $("#side");
 sideEl.addEventListener("pointerdown", () => { sideLockUntil = performance.now() + 1500; });
 sideEl.addEventListener("pointerup", () => { sideLockUntil = performance.now() + 500; });
+// Momentum scrolling keeps moving after your finger lifts, so hold the panel still for a
+// beat after the LAST scroll event, not just while touching it.
+sideEl.addEventListener("scroll", () => { lastSideScroll = performance.now(); }, true);
+sideEl.addEventListener("touchstart", () => { sideLockUntil = performance.now() + 2000; }, { passive: true });
+sideEl.addEventListener("touchend", () => { sideLockUntil = performance.now() + 1200; }, { passive: true });
 renderSide();
 if (!localStorage.getItem(CFG.SAVE_KEY + "_seen")) {
   localStorage.setItem(CFG.SAVE_KEY + "_seen", "1");

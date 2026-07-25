@@ -48,6 +48,31 @@
   #mapKey { position: absolute; left: 14px; bottom: 14px; background: #fffdf3eF; border: 2px solid #d8c586; border-radius: 12px; padding: 7px 10px; color: #466073; font-size: 11px; box-shadow: 0 3px 12px #27485b22; }
   .truck-marker { width: 42px; height: 42px; display: grid; place-items: center; font-size: 25px; background: #fff8d8; border: 3px solid #176f9f; border-radius: 50%; box-shadow: 0 3px 10px #17384c66; cursor: pointer; }
   .truck-marker.selected { border-color: #ff9c19; transform: scale(1.12); }
+  /* the rig sits in the circle; the freeway shield hangs below it and never blocks a click */
+  .truck-marker { position: relative; overflow: visible; }
+  .truck-shield { position: absolute; top: 38px; left: 50%; transform: translateX(-50%);
+    padding: 2px 7px; border-radius: 6px; font: bold 11px/1.35 system-ui, sans-serif;
+    color: #fff; white-space: nowrap; pointer-events: none; letter-spacing: .2px;
+    border: 1px solid #ffffff88; box-shadow: 0 2px 6px #17384c55; }
+  .truck-shield.hidden { display: none; }
+  .truck-shield.shield-i  { background: #2b5cab; }
+  .truck-shield.shield-us { background: #4a5560; }
+  .truck-shield.shield-st { background: #2f8b4d; }
+  /* changing freeways is the moment worth noticing — pulse the badge gold for a beat */
+  .truck-shield.changed { background: #f7a900; color: #3d2600; border-color: #7a4a00;
+    animation: shieldPop 1.1s ease-in-out infinite; }
+  @keyframes shieldPop { 0%,100% { transform: translateX(-50%) scale(1); }
+                          50%     { transform: translateX(-50%) scale(1.16); } }
+  /* "NOW ON I-10 → Phoenix" strip at the top of a rolling truck's fleet card */
+  .nowon { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 6px 0 4px;
+    padding: 7px 10px; border-radius: 9px; color: #fff; font-size: 15px; }
+  .nowon.shield-i  { background: #2b5cab; }
+  .nowon.shield-us { background: #4a5560; }
+  .nowon.shield-st { background: #2f8b4d; }
+  .nowon.changed { background: #f7a900; color: #3d2600; }
+  .nowon-label { font-size: 10px; letter-spacing: 1.2px; opacity: .85; }
+  .nowon-to { font-size: 12px; opacity: .9; }
+  @media (prefers-reduced-motion: reduce) { .truck-shield.changed { animation: none; } }
   .stop-marker { width: 34px; height: 34px; display: grid; place-items: center; background: #fff;
     border: 3px solid #8057b5; border-radius: 50% 50% 50% 8px; transform: rotate(-45deg);
     box-shadow: 0 3px 10px #17384c66; cursor: grab; font: 900 13px system-ui; color: #17384c; }
@@ -64,6 +89,35 @@
   .road-shield.found { background: #2674bd; color: #fff; border-color: #173e7a; box-shadow: 0 3px 8px #17384c33; }
   .road-shield.us.found { background: #fff; color: #263d5a; }
   .road-shield.ca.found { background: #2f8b4d; border-color: #17602f; }
+  /* a region you haven't earned yet: visible, clearly not yours */
+  /* ⭐ special deliveries: the board's jackpot card glows gold */
+  .card.special { background: #fff7dd; border: 2px solid #e8b715; box-shadow: 0 4px 14px #e8b71544; }
+  .special-banner { display: inline-block; background: #e8b715; color: #4a3400; font-weight: bold;
+    font-size: 11px; letter-spacing: 1.4px; padding: 3px 10px; border-radius: 999px; margin-bottom: 6px;
+    animation: specialGlow 1.6s ease-in-out infinite; }
+  @keyframes specialGlow { 0%,100% { box-shadow: 0 0 0 0 #e8b71566; } 50% { box-shadow: 0 0 0 7px #e8b71500; } }
+  .special-blurb { font-style: italic; color: #7a5c10; font-size: 13px; margin: 2px 0 6px; }
+  /* confetti */
+  .confetti-piece { position: fixed; top: -30px; z-index: 300; pointer-events: none;
+    animation: confettiFall linear forwards; }
+  @keyframes confettiFall {
+    0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(105vh) rotate(540deg); opacity: .15; } }
+  /* 🎨 garage: paint dot on the truck name + swatch strip */
+  .paint-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid #ffffffcc; box-shadow: 0 0 0 1px #00000033; margin-right: 5px; vertical-align: -1px; }
+  .garage-row { margin-top: 4px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 7px; margin: 6px 0 4px; }
+  .swatch { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #ffffffdd;
+    box-shadow: 0 0 0 1px #00000033; cursor: pointer; }
+  .swatch.on { border-color: #16324a; transform: scale(1.15); }
+  @media (prefers-reduced-motion: reduce) { .special-banner, .confetti-piece { animation: none; } }
+  .grandtour { margin-top: 8px; padding: 8px 10px; border-radius: 9px; font-size: 13px;
+    background: #fff3d0; border: 2px dashed #e0a92b; color: #6b4a05; }
+  .grandtour.won { background: #2f8b4d; border-style: solid; border-color: #17602f; color: #fff; }
+  .card.locked-region { opacity: .62; background: #eef2f4; }
+  .card.locked-region .passport-grid { filter: grayscale(.5); }
+  #territory { font-size: 12px; opacity: .85; }
   .maplibregl-ctrl-attrib { font-size: 10px; }
   .tabs { display: flex; }
   .tab { flex: 1; padding: 11px 2px; background: #eaf4e4; border: none; border-bottom: 3px solid #bad1ad; color: #58758a; cursor: pointer; font: 12px system-ui; font-weight: 800; }
@@ -120,9 +174,18 @@
 
   @media (max-width: 760px) {
     #main { flex-direction: column; }
-    #side { width: 100%; height: 46%; border-left: none; border-top: 3px solid #9fc58a; }
+    /* 46% left long lists (the 51-shield passport) barely readable. min-height keeps the
+       panel usable on short phones without squeezing the map off small tablets. */
+    #side { width: 100%; height: 56%; min-height: 300px; border-left: none; border-top: 3px solid #9fc58a; }
+    #mapWrap { min-height: 180px; }
+    .tabbody { padding-bottom: 28px; }              /* the last card clears the phone chrome */
+    .passport-grid { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .road-shield { padding: 8px 2px; font-size: 12px; }
     #mapKey { display: none; }
   }
+  /* Touch scrolling: momentum on iOS, and don't hand the scroll to the page behind when
+     the list hits its end (that bounce is what made the passport feel like it snapped back). */
+  .tabbody { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 </style>
 </head>
 <body>
@@ -131,6 +194,7 @@
     <span id="cash">$0</span>
     <span id="rep" class="tt">⭐ 0</span>
     <span id="clock"></span>
+    <span id="territory" class="tt"></span>
     <span class="grow"></span>
     <span id="speedCtl">
       <button data-s="0">⏸</button><button data-s="1">▶</button><button data-s="4">▶▶</button><button data-s="16">▶▶▶</button>
