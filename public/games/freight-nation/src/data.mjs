@@ -31,6 +31,35 @@ export const REGION_ORDER = ["west", "southwest", "northwest", "mountain", "texa
   "midwest", "southeast", "northeast"];
 export const HOME_REGION = "west";
 
+// Every lower-48 state belongs to one region so the MAP can show the territory ladder —
+// tinted when unlocked, grayed with a 🔒 when not. Corridor states without a game city are
+// assigned to the region whose freight actually crosses them.
+export const STATE_REGIONS = {
+  west: ["California"],
+  southwest: ["Nevada", "Arizona", "New Mexico"],
+  northwest: ["Washington", "Oregon", "Idaho"],
+  mountain: ["Montana", "Wyoming", "Colorado", "Utah"],
+  texas: ["Texas", "Oklahoma", "Louisiana", "Arkansas"],
+  midwest: ["North Dakota", "South Dakota", "Nebraska", "Kansas", "Minnesota", "Iowa",
+    "Missouri", "Illinois", "Indiana", "Ohio", "Michigan", "Wisconsin"],
+  southeast: ["Tennessee", "Kentucky", "Mississippi", "Alabama", "Georgia", "Florida",
+    "North Carolina", "South Carolina"],
+  northeast: ["Pennsylvania", "New York", "New Jersey", "Connecticut", "Rhode Island",
+    "Massachusetts", "Vermont", "New Hampshire", "Maine", "Delaware", "Maryland",
+    "District of Columbia", "West Virginia", "Virginia"],
+};
+// one tint per region (used on both maps; keep them pastel — they sit under the roads)
+export const REGION_COLORS = {
+  west: "#3f9b57", southwest: "#e08f2f", northwest: "#2e9e8f", mountain: "#8a63c9",
+  texas: "#c95555", midwest: "#d4b12e", southeast: "#e0699a", northeast: "#3f7ac9",
+};
+// where each region's name sits on the map [lon, lat]
+export const REGION_LABELS = {
+  west: [-119.8, 37.6], southwest: [-110.8, 34.3], northwest: [-120.8, 44.6],
+  mountain: [-108.5, 42.2], texas: [-98.5, 31.8], midwest: [-93.5, 42.6],
+  southeast: [-84.3, 33.0], northeast: [-76.2, 42.4],
+};
+
 // ---------------------------------------------------------------- cities & junctions
 // region: unlock group · zone: weather region · safety: overnight parking 1-5
 // fuel: $/gal diesel base (state tax & haul distance make this a real strategy layer)
@@ -520,6 +549,9 @@ export const CFG = {
   EVENT_CHECK_MIN: 30,          // spawn roll cadence
   WEATHER_SHIFT_MIN: 200,       // regional weather persistence
   SAVE_KEY: "route_dispatcher_adventure_save_v2",
+  // stars (reputation) earned per ON-TIME delivery, by distance tier. Bigger jobs, bigger
+  // stars — a 12-mile hop can't build a national reputation the way a transcon run does.
+  REP_TIER: { "LOCAL": 1, "REGIONAL": 2, "LONG-HAUL": 3, "TRANSCON": 4 },
   // rep gates for contract distance tiers
   REP_REGIONAL: 12, REP_LONGHAUL: 25,
   LOCAL_MI: 80, REGIONAL_MI: 260, LONGHAUL_MI: 1500,  // above LONGHAUL_MI it's a TRANSCON run

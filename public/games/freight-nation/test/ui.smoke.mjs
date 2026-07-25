@@ -241,6 +241,47 @@ ok("passport: no unknown roads leaked into the collection",
   rd.setTab("contracts");
 }
 
+// --- stars on cards + region unlock celebration + territory overview -----------
+{
+  const { REGIONS, REGION_ORDER } = await import("../src/data.mjs");
+  const { checkRegionUnlocks } = await import("../src/sim.mjs");
+  rd.setTab("contracts");
+  const board2 = dom.byId.get("side").innerHTML;
+  ok("stars: every contract card advertises its ⭐ value", board2.includes("star-chip"),
+    board2.includes("JOBS") ? "no star-chip in board html" : "board missing");
+
+  // unlocking a region must pop the celebration modal that lists the new cities
+  const modal = dom.byId.get("modal");
+  modal.classList.remove("open");
+  const before2 = S.regions.length;
+  const nextRg = REGION_ORDER[before2];
+  if (nextRg) {
+    S.rep = Math.max(S.rep, REGIONS[nextRg].repReq);
+    checkRegionUnlocks(S);
+    rd.frame(20000);
+    const body2 = dom.byId.get("modalBody").innerHTML;
+    ok("unlock: celebration modal opens", modal.classList.contains("open"), "modal not open");
+    ok("unlock: modal names the region", body2.includes(REGIONS[nextRg].name), body2.slice(0, 100));
+    ok("unlock: modal lists new cities", body2.includes("new cities"), body2.slice(0, 100));
+    modal.classList.remove("open");
+  }
+
+  // the 🗺️ chip opens the territory overview with every region's price
+  const terr = dom.byId.get("territory");
+  if (terr.onclick) terr.onclick();
+  const body3 = dom.byId.get("modalBody").innerHTML;
+  ok("territory: overview opens on click", modal.classList.contains("open"));
+  ok("territory: overview lists every region",
+    REGION_ORDER.every(rg => body3.includes(REGIONS[rg].name)),
+    REGION_ORDER.filter(rg => !body3.includes(REGIONS[rg].name)).join(","));
+  ok("territory: locked regions show their star price", body3.includes("unlocks at ⭐") || !body3.includes("🔒"));
+  modal.classList.remove("open");
+
+  // the region overlay must not break a frame in either map mode
+  try { rd.frame(21000); rd.frame(21016); ok("regions: overlay renders without throwing", true); }
+  catch (e) { ok("regions: overlay renders without throwing", false, e.message); }
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();

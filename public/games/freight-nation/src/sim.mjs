@@ -338,6 +338,9 @@ export function lanePremium(path) {
 const CITY_IDS = Object.keys(NODES);
 export const tierOf = mi => mi <= CFG.LOCAL_MI ? "LOCAL" : mi <= CFG.REGIONAL_MI ? "REGIONAL"
   : mi <= CFG.LONGHAUL_MI ? "LONG-HAUL" : "TRANSCON";
+// gold stars an on-time delivery of this tier earns — the UI advertises this on every card,
+// so keep finishTrip() and the cards reading the SAME number from here
+export const repForTier = tier => CFG.REP_TIER[tier] ?? 2;
 function genContract(S) {
   // Only cities in regions you've unlocked put freight on the board.
   const pool = unlockedCities(S);
@@ -608,7 +611,7 @@ function finishTrip(S, truck, failedWhy = null) {
   let repD;
   if (failed) { repD = cg.medical ? -10 : -6; S.stats.failed++; }
   else if (late > CFG.LATE_GRACE_MIN) { repD = -2; S.stats.delivered++; }
-  else { repD = 2 + ((cg.fragile && T.cargo.dmg < 10) || cg.medical ? 1 : 0); S.stats.delivered++; }
+  else { repD = repForTier(c.tier) + ((cg.fragile && T.cargo.dmg < 10) || cg.medical ? 1 : 0); S.stats.delivered++; }
   // a special delivery that lands makes the news — extra rep, and the town remembers
   if (!failed && c.special) {
     repD += CFG.SPECIAL_REP_BONUS;

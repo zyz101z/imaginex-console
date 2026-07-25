@@ -29,7 +29,7 @@ changing road network, and grow one rusty van into a fleet.
 
 ## Test
 ```
-node test/sim.test.mjs              # 4,751-check headless sim battery
+node test/sim.test.mjs              # 4,759-check headless sim battery
 node test/ui.smoke.mjs              # UI layer, live-map path (MapLibre + OSRM stubbed)
 node test/ui.smoke.mjs --offline    # UI layer, offline-atlas fallback path
 node test/ui.smoke.mjs --seed=7     # replay a specific game; default seed is fixed
@@ -132,6 +132,23 @@ game never runs.
 (local → regional at 12 → long-haul at 25) and cargo (fragile 10 / perishable 25 / electronics 35 /
 medical 50). Buy multiple trucks + hire drivers to run contracts in parallel. Milestones fire at
 2/3/6 trucks; "Freight Nation Award" at rep 80 + $150k.
+
+**⭐ Gold stars (reputation)** are earned per ON-TIME delivery, scaled by tier
+(`CFG.REP_TIER`: LOCAL +1 · REGIONAL +2 · LONG-HAUL +3 · TRANSCON +4; specials +2 extra;
+late −2, failed −6). Every contract card carries a `star-chip` advertising exactly what the
+job is worth — `repForTier()` is the single source both the cards and `finishTrip()` read,
+so the promise and the payout can't drift. The report modal calls out the stars earned and
+why; the HUD ⭐ tooltip explains the whole ladder.
+
+**Territory is VISIBLE on both maps**: every lower-48 state is tinted by its region
+(`STATE_REGIONS`/`REGION_COLORS`/`REGION_LABELS` in data.mjs — corridor states without a
+game city are hand-assigned). Locked regions sit under gray with a "🔒 name · ⭐price" label;
+unlocked regions wear their color with the name at country zoom. Live map: `regions` +
+`region-labels` GeoJSON sources refreshed by `refreshRegionLayer()` on unlock. Canvas: tint
+pass after the landmass, labels before the cities. A region unlock now pops a celebration
+modal (new cities + shields + confetti), and clicking the 🗺️ territory chip opens a full
+regions overview with every price. City-tint mismatches are battery-checked against a
+known-overlaps list (Reno, El Paso, Cleveland).
 
 **Territory** is the other ladder, and it's the one the map shows: ⭐0 California → ⭐12 Southwest
 → ⭐18 Northwest → ⭐25 Rockies → ⭐30 Texas & the Gulf → ⭐42 Midwest → ⭐55 Southeast →

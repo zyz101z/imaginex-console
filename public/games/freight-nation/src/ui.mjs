@@ -1,13 +1,14 @@
 // FREIGHT NATION — browser UI layer (real map + offline atlas + panels). Game logic lives in sim.mjs.
 import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, CFG, WEATHER, EVENT_DEFS,
-  REGIONS, REGION_ORDER, PASSPORT_ROADS, SHIELD_REGIONS, parseHighways, PAINT_COLORS } from "./data.mjs";
+  REGIONS, REGION_ORDER, PASSPORT_ROADS, SHIELD_REGIONS, parseHighways, PAINT_COLORS,
+  STATE_REGIONS, REGION_COLORS, REGION_LABELS } from "./data.mjs";
 import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, autoPlanStops,
   serialize, deserialize, buyTruck, sellTruck, buyUpgrade, repairTruck, hireDriver,
   renameTruck, paintTruck, truckPaint,
   fmtClock, fmtDur, dayOf, isRush, truckPos, truckHighway, truckShields, eventsOn, edgeClosed,
   edgeOf, tankOf, zoneWeather,
   tzOf, tzName, localClock, edgeTz, cityUnlocked, unlockedRegions, nextRegion,
-  truckRange, longestLeg, pathInRange } from "./sim.mjs";
+  truckRange, longestLeg, pathInRange, repForTier } from "./sim.mjs";
 import * as GEO from "./geometry.mjs"; // baked real OSM centerlines, full network, state boundary
 import * as ATLAS from "./states.mjs"; // baked lower-48 outlines — the offline map's landmass
 const GEOM = GEO.GEOM || {}, CA_SHAPE = GEO.CA_SHAPE, NETWORK = GEO.NETWORK || null;
@@ -108,6 +109,8 @@ const GEOtoLonLat = p => [p[0] / (PXD * .82) + LON0, LAT1 - p[1] / PXD];
 // the landmass, projected once: rings of [x,y] per state
 const STATE_RINGS = Object.entries(STATES).map(([name, rings]) =>
   ({ name, rings: rings.map(r => r.map(([lo, la]) => [px(lo), py(la)])) }));
+const STATE_TO_REGION = {};
+for (const [rg, names] of Object.entries(STATE_REGIONS)) for (const nm of names) STATE_TO_REGION[nm] = rg;
 function alongPoly(pts, frac) {
   const segs = [];
   let L = 0;
@@ -135,6 +138,13 @@ function frame(t) {
     acc += dt * RATE[S.speed];
     const whole = Math.floor(acc);
     if (whole > 0) { acc -= whole; tick(S, whole); }
+  }
+  // celebrate territory: a region unlock is a big deal — show what it actually opened
+  if (knownRegionCount == null) knownRegionCount = (S.regions || []).length;
+  if ((S.regions || []).length > knownRegionCount && !$("#modal").classList.contains("open")) {
+    const fresh = (S.regions || []).slice(knownRegionCount);
+    knownRegionCount = S.regions.length;
+    showRegionUnlock(fresh);
   }
   // surface new trip reports as modals
   if (S.reports.length !== shownReports && !$("#modal").classList.contains("open")) {
@@ -211,6 +221,21 @@ function drawMap() {
     ctx.beginPath();
     CA_SHAPE.forEach(([lo, la], i) => i ? ctx.lineTo(px(lo), py(la)) : ctx.moveTo(px(lo), py(la)));
     ctx.closePath(); ctx.fillStyle = land; ctx.fill();
+  }
+  // REGION LAYER: the territory ladder, visible. Unlocked regions wear their color at a
+  // whisper; locked regions sit under gray — the map itself says "not yours yet".
+  if (STATE_RINGS.length) {
+    const open = new Set(unlockedRegions(S));
+    for (const st of STATE_RINGS) {
+      const rg = STATE_TO_REGION[st.name];
+      if (!rg) continue;
+      const owned = open.has(rg);
+      ctx.beginPath(); traceRings(st);
+      ctx.fillStyle = owned ? REGION_COLORS[rg] : "#5c6a72";
+      ctx.globalAlpha = owned ? 0.13 : 0.24;
+      ctx.fill("evenodd");
+      ctx.globalAlpha = 1;
+    }
   }
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   const drawShield = (mx, my, short, col) => {
@@ -356,6 +381,26 @@ function drawMap() {
     ctx.strokeStyle = "#e38b18"; ctx.lineWidth = 3 * s; ctx.stroke();
     ctx.font = `${15 * s}px serif`; ctx.fillText("📍", x - 8 * s, y + 5 * s);
   }
+  // region labels: locked regions ALWAYS show name + the stars they cost (that's the
+  // actionable info); unlocked names only at country zoom so they don't crowd the cities
+  {
+    const open = new Set(unlockedRegions(S));
+    for (const rg of REGION_ORDER) {
+      const owned = open.has(rg);
+      if (owned && cam.z > 2.4) continue;
+      const [lo, la] = REGION_LABELS[rg];
+      const x = px(lo), y = py(la);
+      const txt = owned ? REGIONS[rg].name.toUpperCase() : `🔒 ${REGIONS[rg].name} · ⭐${REGIONS[rg].repReq}`;
+      ctx.font = `bold ${11 * s}px system-ui`;
+      const tw = ctx.measureText(txt).width;
+      ctx.fillStyle = owned ? "rgba(255,255,255,.82)" : "rgba(58,68,75,.88)";
+      ctx.beginPath(); ctx.roundRect(x - tw / 2 - 6 * s, y - 9 * s, tw + 12 * s, 17 * s, 7 * s); ctx.fill();
+      ctx.fillStyle = owned ? REGION_COLORS[rg] : "#ffe9a8";
+      ctx.textAlign = "center";
+      ctx.fillText(txt, x, y + 3.5 * s);
+      ctx.textAlign = "left";
+    }
+  }
   // cities (label offsets keep the LA/OC tangle readable; small towns label-up on zoom)
   const LBL = { LA: [9, -7], LKW: [-62, 3], LGB: [-67, 15], ANA: [9, -2], SNA: [9, 14], RIV: [9, -4],
     SBD: [9, -11], SD: [9, 5], SB: [-84, -4], SLO: [-96, 0], SAL: [-48, -7], SJ: [9, 10],
@@ -496,6 +541,21 @@ function initRealMap() {
   realMap.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
   realMap.on("load", () => {
     realMapReady = true;
+    // territory layer FIRST so routes, missions and trucks all stack above it
+    try {
+      realMap.addSource("regions", { type: "geojson", data: regionsGeo() });
+      realMap.addLayer({ id: "region-fill", type: "fill", source: "regions",
+        paint: { "fill-color": ["case", ["==", ["get", "locked"], 1], "#5c6a72", ["get", "color"]],
+                 "fill-opacity": ["case", ["==", ["get", "locked"], 1], 0.20, 0.09] } });
+      realMap.addLayer({ id: "region-line", type: "line", source: "regions",
+        paint: { "line-color": ["get", "color"], "line-opacity": 0.35, "line-width": 1.4 } });
+      realMap.addSource("region-labels", { type: "geojson", data: regionLabelsGeo() });
+      realMap.addLayer({ id: "region-label", type: "symbol", source: "region-labels",
+        layout: { "text-field": ["get", "label"], "text-size": 13,
+                  "text-font": ["Noto Sans Bold", "Noto Sans Regular"], "text-allow-overlap": false },
+        paint: { "text-color": ["case", ["==", ["get", "locked"], 1], "#3a444b", ["get", "color"]],
+                 "text-halo-color": "#ffffff", "text-halo-width": 1.6 } });
+    } catch (e) { console.warn("region layer skipped:", e); }
     realMap.addSource("game-route", { type: "geojson", data: emptyGeo() });
     realMap.addSource("pickup-route", { type: "geojson", data: emptyGeo() });
     realMap.addLayer({ id: "pickup-route-glow", type: "line", source: "pickup-route",
@@ -612,6 +672,7 @@ function addPlannerPoint(type, coord) {
 const lastPushed = { route: undefined, pickup: undefined, mission: undefined };
 function updateRealMap() {
   if (!realMapReady) return;
+  refreshRegionLayer(); // lifts the gray off newly unlocked territory
   const geometry = currentRealGeometry();
   if (geometry !== lastPushed.route) {
     lastPushed.route = geometry;
@@ -685,6 +746,41 @@ function shieldClass(hwy) {
 // "changed" stays true for a few game-minutes after the road name actually changes.
 const justChangedHighway = T =>
   T.highwayChangedAt != null && S.time - T.highwayChangedAt <= CFG.HWY_FLASH_MIN;
+
+// territory overlay data for the live map. Rebuilt whenever a region unlocks so the gray
+// lifts off the new country the moment it's earned.
+const closeRing = r => (r.length && (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]))
+  ? [...r, r[0]] : r;
+function regionsGeo() {
+  const open = new Set(unlockedRegions(S));
+  return { type: "FeatureCollection", features: Object.entries(STATES).flatMap(([name, rings]) => {
+    const rg = STATE_TO_REGION[name];
+    if (!rg) return [];
+    return [{ type: "Feature",
+      properties: { region: rg, color: REGION_COLORS[rg], locked: open.has(rg) ? 0 : 1 },
+      geometry: { type: "MultiPolygon", coordinates: rings.map(r => [closeRing(r)]) } }];
+  }) };
+}
+function regionLabelsGeo() {
+  const open = new Set(unlockedRegions(S));
+  return { type: "FeatureCollection", features: REGION_ORDER.map(rg => ({
+    type: "Feature",
+    properties: { locked: open.has(rg) ? 0 : 1, color: REGION_COLORS[rg],
+      label: open.has(rg) ? REGIONS[rg].name.toUpperCase()
+        : `LOCKED — ${REGIONS[rg].name} — ${REGIONS[rg].repReq} STARS` },
+    geometry: { type: "Point", coordinates: REGION_LABELS[rg] } })) };
+}
+let lastRegionsKey = "";
+function refreshRegionLayer() {
+  if (!realMap || !realMapReady) return;
+  const key = (S.regions || []).join(",");
+  if (key === lastRegionsKey) return;
+  lastRegionsKey = key;
+  try {
+    realMap.getSource("regions")?.setData(regionsGeo());
+    realMap.getSource("region-labels")?.setData(regionLabelsGeo());
+  } catch (e) {}
+}
 
 function updateTruckMarkers() {
   const live = new Set();
@@ -928,7 +1024,9 @@ function renderHUD() {
   const nextRg = nextRegion(S);
   const next = nextRg ? `${REGIONS[nextRg].repReq} opens ${REGIONS[nextRg].name}`
     : S.rep < 50 ? "50 unlocks MEDICAL" : "elite carrier";
-  $("#rep").title = `Reputation. Next: ${next}`;
+  $("#rep").title = `Gold stars (reputation). Earn them by delivering ON TIME — ` +
+    `LOCAL +1, REGIONAL +2, LONG-HAUL +3, TRANSCON +4, specials +${CFG.SPECIAL_REP_BONUS} extra. ` +
+    `Late costs 2, a failed delivery costs 6. Next: ${next}`;
   const terr = $("#territory");
   if (terr) {
     const open = unlockedRegions(S).length;
@@ -1138,7 +1236,8 @@ function contractsHtml() {
     const badFit = poorFit(c, q);
     return `<div class="card ${canHaul ? "" : "locked"} ${badFit ? "failbg" : ""} ${c.special ? "special" : ""}">
       ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
-      <div class="cardtop"><b>${cg.icon} ${cg.name}</b> <span class="chip ${c.tier}">${c.tier}</span>${c.urgent ? ' <span class="chip URGENT">⚡ URGENT</span>' : ""}</div>
+      <div class="cardtop"><b>${cg.icon} ${cg.name}</b> <span class="chip ${c.tier}">${c.tier}</span>${c.urgent ? ' <span class="chip URGENT">⚡ URGENT</span>' : ""}
+        <span class="star-chip" title="Gold stars earned if you deliver ON TIME. Bigger jobs earn more. Late = −2, failed = −6.">⭐ +${repForTier(c.tier)}${c.special ? ` <span class="star-extra">+${CFG.SPECIAL_REP_BONUS}</span>` : ""}</span></div>
       ${c.special ? `<div class="special-blurb">${c.special.blurb}</div>` : ""}
       <div>${NODES[c.from].name} → <b>${NODES[c.to].name}</b> · ${c.mi} mi · ${c.pallets} pallets</div>
       <div class="dim">${c.shipper} · deliver within <b>${timeLeft}</b></div>
@@ -1201,7 +1300,8 @@ function plannerHtml() {
   const disp = cargoDisplay(c);
   let html = `<div class="card ${c.special ? "special" : ""}">
     ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
-    <div class="cardtop"><b>${disp.icon} ${disp.name}</b> → ${NODES[c.to].name} · <span class="chip">⏸ TIME PAUSED</span> · <b class="pay">$${c.pay}</b></div>
+    <div class="cardtop"><b>${disp.icon} ${disp.name}</b> → ${NODES[c.to].name} · <span class="chip">⏸ TIME PAUSED</span> · <b class="pay">$${c.pay}</b>
+      <span class="star-chip">⭐ +${repForTier(c.tier)} on time</span></div>
     <div class="dim">deliver within ${Math.round(c.dlMins / 6) / 10}h · ${c.pallets} pallets${cg.fragile ? " · 🏺 handle with care" : ""}${cg.perishable ? " · 🥬 keep it cold" : ""}${cg.theft ? " · 🥷 theft target" : ""}</div>
     <label>Truck: <select id="pTruck">${trucks.map(t => `<option value="${t.id}" ${t.id === planner.truckId ? "selected" : ""}>${TRUCK_TYPES[t.type].icon} ${t.nick} (${t.at ? NODES[t.at].name : "en route"} · fuel ${Math.round(t.fuel)}g)</option>`).join("")}</select></label>
     <label>Driver: <select id="pDriver">${drivers.map(d => `<option value="${d.id}" ${d.id === planner.driverId ? "selected" : ""}>${d.name} ${"★".repeat(d.skill)} (fatigue ${Math.round(d.fatigue)})</option>`).join("")}</select></label>
@@ -1714,11 +1814,58 @@ function showReport(r) {
     ${r.notes.length ? `<p class="dim">${r.notes.join(" · ")}</p>` : ""}
     ${r.newFreeways?.length ? `<div class="card mission-card"><b>🛣️ NEW FREEWAY STAMP!</b>
       <div>${r.newFreeways.join(" · ")}</div><div class="good">+$${r.newFreeways.length * 25} Explorer bonus</div></div>` : ""}
-    <p class="dim small">Trip time ${Math.round(r.minutes / 6) / 10}h · incidents ${r.incidents} · driver fatigue ${r.fatigue} · rep ${r.repD > 0 ? "+" : ""}${r.repD}</p>
+    <div class="star-earn ${r.repD >= 0 ? "good-bg" : "bad-bg"}">${r.repD > 0
+      ? `⭐ +${r.repD} gold star${r.repD > 1 ? "s" : ""}! <span class="dim small">(${c.tier} on time${r.repD > repForTier(c.tier) ? " + bonus" : ""})</span>`
+      : r.repD === 0 ? `⭐ no stars this time`
+      : `⭐ ${r.repD} stars <span class="dim small">(${r.failed ? "failed delivery" : "late delivery"})</span>`}</div>
+    <p class="dim small">Trip time ${Math.round(r.minutes / 6) / 10}h · incidents ${r.incidents} · driver fatigue ${r.fatigue}</p>
     ${!r.failed && S.stats.delivered <= 2 ? `<p><b>⭐ Map Explorer sticker earned!</b></p>` : ""}
     <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">${S.stats.delivered < 2 ? "NEXT ADVENTURE" : "CONTINUE"}</button>`;
   $("#modal").classList.add("open");
   if (specialWin) confetti();
+}
+
+// ---------------------------------------------------------------- region moments
+// A region unlock used to be one line in the ticker — easy to miss, and it never said what
+// you actually GOT. Now it's a full celebration that lists the new cities and shields.
+let knownRegionCount = null; // set at boot; frame() watches for growth
+const regionCities = rg => Object.entries(NODES).filter(([, n]) => n.region === rg);
+const regionShields = rg => PASSPORT_ROADS.filter(r => (SHIELD_REGIONS[r] || [])[0] === rg);
+function showRegionUnlock(rgIds) {
+  const cards = rgIds.map(rg => {
+    const cities = regionCities(rg);
+    const shields = regionShields(rg);
+    return `<div class="card" style="border-color:${REGION_COLORS[rg]}">
+      <div class="mission-title" style="color:${REGION_COLORS[rg]}">${REGIONS[rg].name}</div>
+      <div class="special-blurb">${REGIONS[rg].blurb}</div>
+      <div><b>🏙️ ${cities.length} new cities:</b> ${cities.map(([, n]) => `${n.name}, ${n.st}`).join(" · ")}</div>
+      ${shields.length ? `<div><b>🛣️ ${shields.length} new shields to collect:</b> ${shields.join(" · ")}</div>` : ""}
+      <div class="good">📋 Fresh freight from the new territory is already on the board.</div>
+    </div>`;
+  }).join("");
+  $("#modalBody").innerHTML = `<h2>🗺️ NEW TERRITORY UNLOCKED!</h2>${cards}
+    <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">LET'S GO SEE IT →</button>`;
+  $("#modal").classList.add("open");
+  confetti(40);
+}
+// the 🗺️ counter in the top bar opens this: every region, what it holds, what it costs
+function showRegionsOverview() {
+  const open = unlockedRegions(S);
+  $("#modalBody").innerHTML = `<h2>🗺️ Your America</h2>
+    <p class="dim small">Earn ⭐ gold stars by delivering on time — each milestone opens a new
+    region: more cities, more freight, more freeway shields.</p>
+    ${REGION_ORDER.map(rg => {
+      const owned = open.includes(rg);
+      const cities = regionCities(rg);
+      const shields = regionShields(rg);
+      return `<div class="card ${owned ? "" : "locked-region"}" style="border-left:6px solid ${REGION_COLORS[rg]}">
+        <b>${owned ? "✅" : "🔒"} ${REGIONS[rg].name}</b>
+        <span class="dim small">${owned ? "yours" : `unlocks at ⭐${REGIONS[rg].repReq} (you have ⭐${S.rep})`}</span>
+        <div class="dim small">${cities.length} cities · ${shields.length} shields${owned ? "" : ` · ${REGIONS[rg].blurb}`}</div>
+      </div>`;
+    }).join("")}
+    <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">BACK TO WORK</button>`;
+  $("#modal").classList.add("open");
 }
 
 // ---------------------------------------------------------------- confetti
@@ -1770,6 +1917,12 @@ function wireTop() {
       <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">START MY FIRST MISSION →</button>` :
       `<h2>🚚 Company Mode Unlocked!</h2>
       <p>You’ve learned the basics. Now you can choose contracts, manage drivers, buy trucks, plan stops, and react to changing roads.</p>
+      <p><b>⭐ Gold stars</b> are your reputation. Deliver <b>on time</b> to earn them — bigger
+      jobs earn more (LOCAL +1 · REGIONAL +2 · LONG-HAUL +3 · TRANSCON +4). Arriving late
+      costs 2 and a failed delivery costs 6, so protect the cargo and watch the clock.</p>
+      <p><b>🗺️ Stars unlock America.</b> Each new region opens more cities to deliver to,
+      new freight on the board, and new freeway shields for your passport. The gray areas on
+      the map show where you can't work — yet. Click the 🗺️ counter up top to see them all.</p>
       <p class="dim">Drag to pan, scroll or use +/− to zoom, and click roads for current conditions.</p>
       <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">LET'S ROLL</button>`;
     $("#modal").classList.add("open");
@@ -1783,6 +1936,7 @@ function wireTop() {
   });
   $("#zoomIn").onclick = () => realMap ? realMap.zoomIn() : (cam.z = Math.min(40, cam.z * 1.25));
   $("#zoomOut").onclick = () => realMap ? realMap.zoomOut() : (cam.z = Math.max(.7, cam.z / 1.25));
+  const terrBtn = $("#territory"); if (terrBtn) terrBtn.onclick = showRegionsOverview;
   $("#findTruck").onclick = focusTruck;
   $("#followTruck").onclick = () => {
     followTruckMode = !followTruckMode;

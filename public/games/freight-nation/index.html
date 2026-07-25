@@ -117,7 +117,16 @@
   .grandtour.won { background: #2f8b4d; border-style: solid; border-color: #17602f; color: #fff; }
   .card.locked-region { opacity: .62; background: #eef2f4; }
   .card.locked-region .passport-grid { filter: grayscale(.5); }
-  #territory { font-size: 12px; opacity: .85; }
+  #territory { font-size: 12px; opacity: .85; cursor: pointer; border-radius: 8px; padding: 2px 7px; }
+  #territory:hover { background: #ffffff22; opacity: 1; }
+  /* ⭐ what a job is worth in stars, right on the card */
+  .star-chip { margin-left: auto; background: #fff3c9; border: 1.5px solid #e0a92b; color: #6b4a05;
+    font-weight: bold; font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .star-chip .star-extra { color: #b06a00; }
+  .cardtop { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .star-earn { margin: 10px 0 4px; padding: 9px 12px; border-radius: 10px; font-size: 16px; font-weight: bold; }
+  .star-earn.good-bg { background: #fff3c9; border: 2px solid #e0a92b; color: #6b4a05; }
+  .star-earn.bad-bg { background: #fde3e0; border: 2px solid #d23c2e; color: #7a1d14; }
   .maplibregl-ctrl-attrib { font-size: 10px; }
   .tabs { display: flex; }
   .tab { flex: 1; padding: 11px 2px; background: #eaf4e4; border: none; border-bottom: 3px solid #bad1ad; color: #58758a; cursor: pointer; font: 12px system-ui; font-weight: 800; }

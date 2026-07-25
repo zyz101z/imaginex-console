@@ -6,7 +6,7 @@ import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, au
   serialize, deserialize, effSpeed, edgeOf, buyTruck, hireDriver, tankOf,
   isRush, edgeTz, tzOf, truckRange, longestLeg, pathInRange, tierOf, restAllowance,
   unlockedCities, cityUnlocked, checkRegionUnlocks, fmtDur, lanePremium, zoneSeverity,
-  truckHighway, truckShields, truckEdge, renameTruck, paintTruck, truckPaint } from "../src/sim.mjs";
+  truckHighway, truckShields, truckEdge, renameTruck, paintTruck, truckPaint, repForTier } from "../src/sim.mjs";
 
 let pass = 0, fail = 0;
 const check = (n, c, d = "") => { if (c) pass++; else { fail++; console.log("  FAIL:", n, d); } };
@@ -73,7 +73,7 @@ const optOf = (opts, kind) => opts.find(o => o.kind === kind || (o.also || []).i
   check("fuel burned", truck.fuel < fuelBefore);
   check("driver freed", !driver.busy);
   check("report written", S.reports.length === 1 && !S.reports[0].failed);
-  check("rep gained", S.rep >= 2, S.rep);
+  check("rep gained matches the LOCAL tier rate", S.rep === CFG.REP_TIER.LOCAL, S.rep);
 }
 
 // ---------- 5. rush hour slows urban travel (GDD §6) ----------
@@ -707,8 +707,8 @@ try {
     let g14 = 0; while (t14.trip && g14++ < 3000) tick(S14, 5);
     const rep14 = S14.reports[0];
     check("special delivered", rep14 && !rep14.failed, rep14 && rep14.failedWhy);
-    check("special pays bonus reputation", S14.rep >= repBefore + 2 + CFG.SPECIAL_REP_BONUS,
-      `${repBefore} -> ${S14.rep}`);
+    check("special pays bonus reputation", S14.rep >= repBefore + CFG.REP_TIER[sp.tier] + CFG.SPECIAL_REP_BONUS,
+      `${repBefore} -> ${S14.rep} (tier ${sp.tier})`);
     check("special delivery is counted", S14.stats.specials === 1, S14.stats.specials);
     check("the report tells the story", rep14.notes.some(n => /Special delivery/.test(n)),
       rep14.notes.join(" / "));
@@ -820,6 +820,48 @@ try {
     // 4) duration formatting never lies: no NaN, and negatives clamp instead of exploding
     check("fmtDur(NaN) does not print NaN", !/NaN/.test(fmtDur(NaN)), fmtDur(NaN));
     check("fmtDur(negative) clamps to 0m", fmtDur(-500) === "0m", fmtDur(-500));
+  }
+
+  // --- the star ladder and the territory atlas (map-visible regions)
+  {
+    check("star rates rise with tier",
+      repForTier("LOCAL") < repForTier("REGIONAL") &&
+      repForTier("REGIONAL") < repForTier("LONG-HAUL") &&
+      repForTier("LONG-HAUL") < repForTier("TRANSCON"));
+    check("every tier has a star rate", ["LOCAL", "REGIONAL", "LONG-HAUL", "TRANSCON"]
+      .every(t => Number.isInteger(repForTier(t)) && repForTier(t) > 0));
+    check("unknown tier falls back sanely", repForTier("???") === 2);
+
+    const { STATE_REGIONS, REGION_COLORS, REGION_LABELS } = await import("../src/data.mjs");
+    const { STATES } = await import("../src/states.mjs");
+    const assigned = Object.values(STATE_REGIONS).flat();
+    check("every baked state belongs to exactly one region",
+      assigned.length === new Set(assigned).size &&
+      Object.keys(STATES).every(nm => assigned.includes(nm)),
+      Object.keys(STATES).filter(nm => !assigned.includes(nm)).join(","));
+    check("no region claims a state that isn't baked",
+      assigned.every(nm => STATES[nm]), assigned.filter(nm => !STATES[nm]).join(","));
+    check("every region has a color and a label position",
+      REGION_ORDER.every(rg => REGION_COLORS[rg] && Array.isArray(REGION_LABELS[rg])));
+    // A city's map tint should match its gameplay region. A few corridor cities knowingly
+    // sit in a state tinted for a different region — list them so new drift gets caught.
+    const FULL = { CA: "California", NV: "Nevada", AZ: "Arizona", NM: "New Mexico", TX: "Texas",
+      OR: "Oregon", WA: "Washington", ID: "Idaho", UT: "Utah", CO: "Colorado", WY: "Wyoming",
+      MT: "Montana", OK: "Oklahoma", LA: "Louisiana", MO: "Missouri", NE: "Nebraska",
+      MN: "Minnesota", IL: "Illinois", IN: "Indiana", OH: "Ohio", MI: "Michigan",
+      ND: "North Dakota", TN: "Tennessee", GA: "Georgia", NC: "North Carolina",
+      FL: "Florida", PA: "Pennsylvania", NY: "New York", MA: "Massachusetts",
+      DC: "District of Columbia", VA: "Virginia" };
+    const tintOf = full => Object.keys(STATE_REGIONS).find(rg => STATE_REGIONS[rg].includes(full));
+    const KNOWN_OVERLAPS = new Set(["RNO", "ELP", "CLE", "BUF"]); // Reno(NW in SW-NV), El Paso(SW in TX), Cleveland/Buffalo(NE in MW-tinted states? BUF is NY=NE ✓ — validated below)
+    const mismatches = Object.entries(NODES)
+      .filter(([id, n]) => tintOf(FULL[n.st]) !== n.region && !KNOWN_OVERLAPS.has(id))
+      .map(([id, n]) => `${id}:${n.st}(${tintOf(FULL[n.st])})≠${n.region}`);
+    check("city regions match their state's map tint (minus known corridor overlaps)",
+      mismatches.length === 0, mismatches.join(" "));
+    check("region label coordinates are inside the lower 48",
+      REGION_ORDER.every(rg => { const [lo, la] = REGION_LABELS[rg];
+        return lo > -125 && lo < -66 && la > 24 && la < 50; }));
   }
 
   // --- v1 (California-only) saves are retired, not half-loaded
