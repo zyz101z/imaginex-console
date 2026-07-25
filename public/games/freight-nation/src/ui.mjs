@@ -452,6 +452,27 @@ function drawMap() {
     }
     ctx.globalAlpha = 1; // locked-city ghosting must not leak into the next city or the trucks
   }
+  // every rolling truck's remaining route, in its paint color (selected = bold) — the
+  // canvas twin of the live map's fleet-routes layer
+  for (const tr of S.trucks) {
+    if (!tr.trip) continue;
+    const legPath = tr.trip.legs[tr.trip.legIdx].path;
+    const sel2 = tr.id === selTruckId;
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i < legPath.length - 1; i++) {
+      const e2 = findEdgeAB(legPath[i], legPath[i + 1]);
+      if (!e2) continue;
+      let pts2 = edgePts(e2);
+      if (e2.a !== legPath[i]) pts2 = [...pts2].reverse();
+      pts2.forEach((pt, j) => (i === 0 && j === 0) ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]));
+    }
+    ctx.strokeStyle = (truckPaint(tr) || {}).hex || "#087fc2";
+    ctx.lineWidth = (sel2 ? 5.5 : 3) * s * g;
+    ctx.globalAlpha = sel2 ? 0.95 : 0.55;
+    ctx.stroke();
+    ctx.restore();
+  }
   // trucks
   for (const tr of S.trucks) {
     let x, y;
@@ -565,6 +586,16 @@ function initRealMap() {
       paint: { "line-color": "#fff", "line-width": 9, "line-opacity": .75 } });
     realMap.addLayer({ id: "pickup-route-line", type: "line", source: "pickup-route",
       paint: { "line-color": "#e58a19", "line-width": 5, "line-opacity": .9, "line-dasharray": [2, 2] } });
+    // every rolling truck's route, in its paint color — the selected one pops
+    realMap.addSource("fleet-routes", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    realMap.addLayer({ id: "fleet-routes-glow", type: "line", source: "fleet-routes",
+      paint: { "line-color": "#ffffff",
+        "line-width": ["case", ["==", ["get", "sel"], 1], 11, 6],
+        "line-opacity": ["case", ["==", ["get", "sel"], 1], 0.8, 0.35] } });
+    realMap.addLayer({ id: "fleet-routes-line", type: "line", source: "fleet-routes",
+      paint: { "line-color": ["get", "color"],
+        "line-width": ["case", ["==", ["get", "sel"], 1], 6.5, 3.5],
+        "line-opacity": ["case", ["==", ["get", "sel"], 1], 0.95, 0.6] } });
     realMap.addLayer({ id: "game-route-glow", type: "line", source: "game-route",
       paint: { "line-color": "#fff", "line-width": 12, "line-opacity": .8 } });
     realMap.addLayer({ id: "game-route-line", type: "line", source: "game-route",
@@ -678,6 +709,22 @@ function updateRealMap() {
   refreshRegionLayer(); // lifts the gray off newly unlocked territory
   refreshDepotMarkers();
   refreshWeatherMarkers();
+  // one line per rolling truck, colored like its paint job; selected = bold.
+  // Keyed so the multi-feature upload only happens when a trip/selection actually changes.
+  const fleetKey = S.trucks.filter(t => t.trip).map(t =>
+    `${t.id}:${t.trip.legIdx}:${t.trip.legs[t.trip.legIdx].path.join(".")}:${t.id === selTruckId ? 1 : 0}:${t.color || ""}`).join("|");
+  if (fleetKey !== lastPushed.fleet) {
+    lastPushed.fleet = fleetKey;
+    const feats = S.trucks.filter(t => t.trip).map(t => {
+      const T = t.trip;
+      const geo = T.mapLegGeometries?.[T.legIdx] || (T.legs[T.legIdx].loaded ? T.mapGeometry : null)
+        || simPathGeometry(T.legs[T.legIdx].path);
+      return { type: "Feature",
+        properties: { sel: t.id === selTruckId ? 1 : 0, color: (truckPaint(t) || {}).hex || "#087fc2" },
+        geometry: geo };
+    }).filter(f => f.geometry);
+    try { realMap.getSource("fleet-routes")?.setData({ type: "FeatureCollection", features: feats }); } catch (e) {}
+  }
   const geometry = currentRealGeometry();
   if (geometry !== lastPushed.route) {
     lastPushed.route = geometry;
@@ -716,9 +763,8 @@ function currentRealGeometry() {
     if (!card) return null;
     return card.real ? card.real.geometry : simPathGeometry(card.opt.path);
   }
-  const tr = S.trucks.find(t => t.id === selTruckId) || S.trucks.find(t => t.trip);
-  if (tr && tr.trip) return tr.trip.mapLegGeometries?.[tr.trip.legIdx] ||
-    tr.trip.mapGeometry || simPathGeometry(tr.trip.legs[tr.trip.legIdx].path);
+  // Active trips now draw on the fleet-routes layer (one line per truck, paint-colored),
+  // so outside the planner this stays empty instead of duplicating the selected trip.
   return null;
 }
 function currentPickupGeometry() {
@@ -1102,6 +1148,45 @@ function handleClick(ev) {
   }
 }
 
+// The truck switcher: one chip per rig, floating over the map. Tap = select it, jump the
+// camera to it, and open its fleet card with the reroute/stop controls. This is how a kid
+// runs two trucks at once without hunting through the panel.
+let lastTruckBar = "";
+function truckStatusGlyph(tr) {
+  if (!tr.trip) return "🅿️";
+  const T = tr.trip;
+  if (T.blocked) return "⛔";
+  if (T.contract && T.contract.deadline != null && S.time > T.contract.deadline) return "⏰";
+  if (T.restDriver != null && T.pauseUntil) return "😴";
+  if (T.pauseUntil && S.time < T.pauseUntil) return "⏸️";
+  return "🚛";
+}
+function renderTruckBar() {
+  const bar = $("#truckBar");
+  if (!bar) return;
+  if (!S || S.trucks.length < 2 || planner) {   // one truck needs no switcher; planner needs the space
+    if (lastTruckBar !== "") { lastTruckBar = ""; bar.innerHTML = ""; }
+    return;
+  }
+  const html = S.trucks.map(tr => `<button class="tchip ${tr.id === selTruckId ? "sel" : ""}" data-tsel="${tr.id}">
+      <span class="tdot" style="background:${(truckPaint(tr) || { hex: "#087fc2" }).hex}"></span>
+      ${TRUCK_TYPES[tr.type].icon} ${tr.nick.length > 14 ? tr.nick.slice(0, 13) + "…" : tr.nick}
+      <span class="tstat">${truckStatusGlyph(tr)}</span>
+    </button>`).join("");
+  if (html === lastTruckBar) return;
+  lastTruckBar = html;
+  bar.innerHTML = html;
+  bar.querySelectorAll("[data-tsel]").forEach(b => b.onclick = () => {
+    selTruckId = +b.dataset.tsel;
+    activeTab = "fleet";
+    focusTruck();
+    renderSide();
+    // bring that truck's card into view so its controls are right there
+    try { document.querySelector(`#side [data-truck="${selTruckId}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }); } catch (e) {}
+    renderTruckBar();
+  });
+}
+
 // A clock time alone is a lie on a multi-day haul — "4:15 PM" three days out reads as today.
 const fmtWhen = t => dayOf(t) === dayOf(S.time) ? fmtClock(t) : `Day ${dayOf(t)} ${fmtClock(t)}`;
 
@@ -1117,6 +1202,7 @@ function renderHUD() {
   $("#rep").title = `Gold stars (reputation). Earn them by delivering ON TIME — ` +
     `LOCAL +1, REGIONAL +2, LONG-HAUL +3, TRANSCON +4, specials +${CFG.SPECIAL_REP_BONUS} extra. ` +
     `Late costs 2, a failed delivery costs 6. Next: ${next}`;
+  renderTruckBar();
   const terr = $("#territory");
   if (terr) {
     const open = unlockedRegions(S).length;
@@ -1345,6 +1431,30 @@ function contractsHtml() {
   }).join("");
 }
 
+// "Who's driving?" card: everything that matters about the chosen crew for THIS run,
+// in plain words — kids were picking drivers off a cramped one-line dropdown.
+function crewCardHtml(truck, driver, c) {
+  if (!driver) return `<div class="crew-card warn">⚠️ No driver available — hire one in the SHOP.</div>`;
+  const notes = [];
+  if (driver.fatigue >= CFG.FATIGUE_VERY)
+    notes.push(`<span class="bad">😴 Exhausted (${Math.round(driver.fatigue)}) — they'll need sleep almost immediately</span>`);
+  else if (driver.fatigue >= CFG.FATIGUE_TIRED)
+    notes.push(`<span class="warn">🥱 Tired (${Math.round(driver.fatigue)}) — expect an extra sleep stop on this run</span>`);
+  else notes.push(`<span class="good">☀️ Rested and ready (fatigue ${Math.round(driver.fatigue)})</span>`);
+  // trait ↔ route fit, so traits feel like real decisions
+  const path = (planner.opts && planner.opts[planner.choice] || {}).path || [c.from, c.to];
+  const wxBad = path.some(id => zoneWeather(S, NODES[id].zone).speed < 1);
+  for (const t of driver.traits || []) {
+    const T2 = DRIVER_TRAITS[t];
+    if (t === "stormrider" && wxBad) notes.push(`<span class="good">${T2.icon} ${T2.name} — great pick, there's weather on this route</span>`);
+    else notes.push(`<span class="dim">${T2.icon} ${T2.name} — ${T2.blurb.toLowerCase()}</span>`);
+  }
+  return `<div class="crew-card">
+    <div><b>🚚 ${truck ? truck.nick : "?"}</b> driven by <b>${driver.name}</b>
+      <span class="lvl-chip">LV ${driver.level || 1}</span> ${"★".repeat(driver.skill)}${"☆".repeat(5 - driver.skill)}</div>
+    ${notes.map(n => `<div class="small">${n}</div>`).join("")}
+  </div>`;
+}
 function plannerHtml() {
   const c = planner.contract, cg = CARGO[c.cargoType];
   const trucks = S.trucks.filter(t => !t.trip && TRUCK_TYPES[t.type].cap >= c.pallets);
@@ -1400,8 +1510,11 @@ function plannerHtml() {
     <div class="deadline-line">⏰ ON TIME = delivered within <b>${fmtDur(c.dlMins)}</b> of pickup — for this plan that means by <b>${fmtWhen(dl)}</b>. Up to 20 min late is forgiven; after that pay shrinks, and 10h+ late loses the load.</div>
     <div class="dim">deliver within ${Math.round(c.dlMins / 6) / 10}h · ${c.pallets} pallets${cg.fragile ? " · 🏺 handle with care" : ""}${cg.perishable ? " · 🥬 keep it cold" : ""}${cg.theft ? " · 🥷 theft target" : ""}</div>
     <label>Truck: <select id="pTruck">${trucks.map(t => `<option value="${t.id}" ${t.id === planner.truckId ? "selected" : ""}>${TRUCK_TYPES[t.type].icon} ${t.nick} (${t.at ? NODES[t.at].name : "en route"} · fuel ${Math.round(t.fuel)}g)</option>`).join("")}</select></label>
-    <label>Driver: <select id="pDriver">${drivers.map(d => `<option value="${d.id}" ${d.id === planner.driverId ? "selected" : ""}>${d.name} ${"★".repeat(d.skill)} (fatigue ${Math.round(d.fatigue)})</option>`).join("")}</select></label>
-  </div>`;
+    <label>Driver: <select id="pDriver">${drivers.map(d => `<option value="${d.id}" ${d.id === planner.driverId ? "selected" : ""}>${
+      d.fatigue >= CFG.FATIGUE_TIRED ? "😴 " : ""}${d.name} · LV${d.level || 1} ${"★".repeat(d.skill)}${
+      (d.traits || []).map(t => " " + DRIVER_TRAITS[t].icon).join("")}</option>`).join("")}</select></label>
+  </div>
+  ${crewCardHtml(truck, driver, c)}`;
   if (truck && truck.at !== c.from) html += `<p class="dim">↪ ${truck.nick} will first deadhead ${NODES[truck.at].name} → ${NODES[c.from].name} to load.</p>`;
   html += routeWorkshopHtml();
   html += `<p class="dim small">Tip: click a road on the map to avoid/unavoid it (${planner.avoid.size} avoided).</p>`;
@@ -2183,6 +2296,7 @@ if (typeof window !== "undefined") window.__rd = {
   settled: () => realRoutesInFlight || Promise.resolve(),
   passportRoads: () => PASSPORT_ROADS,
   simGeo: path => buildSimPathGeometry(path),
+  selTruck: () => selTruckId,
   saveKey: () => CFG.SAVE_KEY,
   save: () => save(),
   load: raw => deserialize(raw),

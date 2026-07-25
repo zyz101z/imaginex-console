@@ -134,6 +134,21 @@
   .wx-route-note { display: inline-block; background: #e8f2fb; border: 1.5px solid #7fb3d8;
     color: #23557a; font-size: 12px; font-weight: bold; padding: 2px 9px; border-radius: 999px; margin: 3px 0; }
   .wx-route-note.rough { background: #fdeeec; border-color: #d23c2e; color: #8a2019; }
+  /* 🚚 truck switcher: one tap to jump between rigs, see their line, take control */
+  #truckBar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 5; max-width: 92%; overflow-x: auto; padding: 4px; }
+  #truckBar:empty { display: none; }
+  .tchip { display: flex; align-items: center; gap: 7px; background: #fffdf3; border: 2.5px solid #a9c9da;
+    border-radius: 999px; padding: 6px 13px; cursor: pointer; font: inherit; font-weight: 800;
+    color: #244c67; white-space: nowrap; box-shadow: 0 3px 10px #27485b33; }
+  .tchip.sel { border-color: #df8b19; background: #fff0a8; transform: scale(1.05); }
+  .tchip .tdot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #ffffffcc;
+    box-shadow: 0 0 0 1px #00000033; }
+  .tchip .tstat { font-size: 13px; }
+  @media (max-width: 760px) { .tchip { padding: 5px 10px; font-size: 13px; } #truckBar { bottom: 8px; } }
+  .crew-card { background: #eef6ff; border: 2px solid #7fb3d8; border-radius: 10px;
+    padding: 8px 11px; margin: 8px 0; }
+  .crew-card.warn { background: #fdeeec; border-color: #d23c2e; }
   .depot-marker { font-size: 22px; filter: drop-shadow(0 2px 3px rgba(23,56,76,.5)); cursor: default; }
   .depot-marker.home { font-size: 26px; filter: drop-shadow(0 0 6px #ffd75e) drop-shadow(0 2px 3px rgba(23,56,76,.5)); }
   @media (prefers-reduced-motion: reduce) { .emergency-banner { animation: none; } }
@@ -249,7 +264,8 @@
         using the built-in road atlas. Everything still works — check your connection and
         reload to get satellite-accurate roads back.</div>
       <div id="mapControls"><button id="zoomIn" title="Zoom in">+</button><button id="zoomOut" title="Zoom out">−</button><button id="findTruck" title="Find my truck">🚚</button><button id="followTruck" title="Follow my truck">🎥</button><button id="inspectRoad" title="Identify roads">🛣️</button></div>
-      <div id="mapKey">🔵 Your route &nbsp; ⭐ Destination &nbsp; Drag the blue road to reshape it</div>
+      <div id="truckBar"></div>
+  <div id="mapKey">🔵 Your route &nbsp; ⭐ Destination &nbsp; Drag the blue road to reshape it</div>
     </div>
     <div id="side"></div>
   </div>

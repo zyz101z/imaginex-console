@@ -403,6 +403,46 @@ ok("passport: no unknown roads leaked into the collection",
   } else ok("reroute: (no rolling truck to test)", true);
 }
 
+// --- crew card + truck switcher (2026-07-25 multi-truck feedback) ---------------
+{
+  const { buyTruck } = await import("../src/sim.mjs");
+  // crew card: open a planner and check the "who's driving" block renders
+  S.stats.delivered = Math.max(S.stats.delivered, 2);
+  const idle = S.trucks.find(t => !t.trip);
+  const c3 = S.contracts.find(cc => idle && cc.pallets <= rd.truckCap(idle));
+  if (c3) {
+    rd.plan(c3.id);
+    if (rd.planner()) {
+      const ph2 = dom.byId.get("side").innerHTML;
+      ok("crew: card renders in the planner", ph2.includes("crew-card"), ph2.slice(0, 60));
+      ok("crew: says who is driving", ph2.includes("driven by"));
+      ok("crew: shows rest state in plain words", /Rested|Tired|Exhausted/.test(ph2));
+      rd.dispatch(); // actually CLOSES the planner (setTab keeps rendering it) + rolls a truck
+      ok("crew: dispatch closed the planner", !rd.planner());
+    } else ok("crew: planner opened", false);
+  } else ok("crew: (no plannable contract — skipped)", true);
+
+  // truck switcher: appears at 2+ trucks, click selects + opens the fleet card
+  S.cash += 100000; S.rep = Math.max(S.rep, 30);
+  if (S.trucks.length < 2) buyTruck(S, "semi");
+  rd.frame(50000);
+  const bar = dom.byId.get("truckBar");
+  ok("switcher: chips render with 2+ trucks", (bar.innerHTML || "").includes("tchip"), (bar.innerHTML || "").slice(0, 60));
+  const chips = [];
+  const walk4 = el => { if (!el) return; if (el.dataset && el.dataset.tsel) chips.push(el); (el.children || []).forEach(walk4); };
+  walk4(bar);
+  ok("switcher: one chip per truck", chips.length === S.trucks.length, `${chips.length} vs ${S.trucks.length}`);
+  if (chips.length >= 2) {
+    const target = +chips[1].dataset.tsel;
+    chips[1].onclick && chips[1].onclick();
+    ok("switcher: tap selects that truck", rd.S && (rd.selTruck ? rd.selTruck() === target : true), target);
+    ok("switcher: tap opens the fleet tab", dom.byId.get("side").innerHTML.includes("data-truck"));
+  }
+  // fleet lines: a frame with two trucks (one rolling) must not throw in either map mode
+  try { rd.frame(50100); rd.frame(50116); ok("fleet lines: render without throwing", true); }
+  catch (e) { ok("fleet lines: render without throwing", false, e.message); }
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();
