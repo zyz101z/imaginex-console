@@ -677,6 +677,7 @@ function updateRealMap() {
   if (!realMapReady) return;
   refreshRegionLayer(); // lifts the gray off newly unlocked territory
   refreshDepotMarkers();
+  refreshWeatherMarkers();
   const geometry = currentRealGeometry();
   if (geometry !== lastPushed.route) {
     lastPushed.route = geometry;
@@ -774,6 +775,54 @@ function regionLabelsGeo() {
         : `LOCKED — ${REGIONS[rg].name} — ${REGIONS[rg].repReq} STARS` },
     geometry: { type: "Point", coordinates: REGION_LABELS[rg] } })) };
 }
+// ---------------------------------------------------------------- visible weather
+// The sim has always had regional weather; on the LIVE map it was invisible (only the
+// offline canvas drew the little icons). These badges float over each weather zone.
+const ZONE_CENTER = (() => {
+  const acc = {};
+  for (const n of Object.values(NODES)) {
+    (acc[n.zone] = acc[n.zone] || { lon: 0, lat: 0, k: 0 });
+    acc[n.zone].lon += n.lon; acc[n.zone].lat += n.lat; acc[n.zone].k++;
+  }
+  return Object.fromEntries(Object.entries(acc).map(([z, a2]) => [z, [a2.lon / a2.k, a2.lat / a2.k]]));
+})();
+const weatherMarkers = new Map();
+let lastWeatherKey = "";
+function refreshWeatherMarkers() {
+  if (!realMap || !realMapReady || !window.maplibregl) return;
+  const key = Object.entries(S.weather || {}).map(([z, w]) => z + ":" + w.type).join("|");
+  if (key === lastWeatherKey) return;
+  lastWeatherKey = key;
+  for (const [, mk] of weatherMarkers) { try { mk.remove(); } catch (e) {} }
+  weatherMarkers.clear();
+  for (const [zone, w] of Object.entries(S.weather || {})) {
+    const def = WEATHER[w.type];
+    if (!def || !def.icon || !ZONE_CENTER[zone]) continue;   // clear skies stay quiet
+    const el = document.createElement("div");
+    el.className = "weather-marker";
+    el.textContent = def.icon;
+    el.title = `${def.name} across this area — trucks ${Math.round((1 - def.speed) * 100)}% slower, ` +
+      `${def.risk >= 2 ? "high" : "raised"} accident risk`;
+    try {
+      const mk = new window.maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat(ZONE_CENTER[zone]).addTo(realMap);
+      weatherMarkers.set(zone, mk);
+    } catch (e) {}
+  }
+}
+// what the sky is doing along a planned path, worst zone wins — shown on route cards
+function routeWeatherNote(path) {
+  let worst = null;
+  for (const id of path || []) {
+    const w = zoneWeather(S, NODES[id].zone);
+    if (w.icon && (!worst || w.speed < worst.speed)) worst = w;
+  }
+  if (!worst) return "";
+  const slow = Math.round((1 - worst.speed) * 100);
+  return `<div class="wx-route-note ${worst.risk >= 2 ? "rough" : ""}">${worst.icon} ${worst.name} on this route` +
+    `${slow > 0 ? ` — about ${slow}% slower` : ""}${worst.risk >= 2.4 ? " · dangerous" : ""}</div>`;
+}
+
 // depot flags on the live map — rebuilt when the depot list changes
 const depotMarkers = new Map();
 let lastDepotsKey = "";
@@ -1270,7 +1319,7 @@ function contractsHtml() {
         <span class="star-chip" title="Gold stars earned if you deliver ON TIME. Bigger jobs earn more. Late = −2, failed = −6.">⭐ +${repForTier(c.tier)}${c.special ? ` <span class="star-extra">+${CFG.SPECIAL_REP_BONUS}</span>` : ""}</span></div>
       ${c.special ? `<div class="special-blurb">${c.special.blurb}</div>` : ""}
       <div>${NODES[c.from].name} → <b>${NODES[c.to].name}</b> · ${c.mi} mi · ${c.pallets} pallets</div>
-      <div class="dim">${c.shipper} · deliver within <b>${timeLeft}</b></div>
+      <div class="dim">${c.shipper} · deliver within <b>${timeLeft}</b> <span class="small">of pickup</span></div>
       ${q ? `<div class="${badFit ? "bad" : q.pickupMi <= 25 ? "good" : "warn"} small">
         🚚 ${q.truck.nick}: ${q.pickupMi ? `${q.pickupMi} empty mi · about $${q.deadCost} to reach pickup` : "already at pickup"}
         ${badFit ? " · POOR FIT" : ""}</div>
@@ -1320,6 +1369,10 @@ function plannerHtml() {
           `<div class="dim small">Already traveled freeway territory</div>`}
         <div class="choice-note">${f[2]} · ${Math.round(card.mi)} mi · about ${fmtDur(mins)}${
           card.opt.nights ? ` · 🛏️ ${card.opt.nights} night${card.opt.nights > 1 ? "s" : ""} on the road` : ""}</div>
+        ${routeWeatherNote(card.opt.path)}
+        <div class="${card.opt.eta > dl ? "bad" : "good"} small">${card.opt.eta > dl
+          ? `⚠ This way arrives ${fmtDur(card.opt.eta - dl)} LATE`
+          : `✓ Arrives with ${fmtDur(dl - card.opt.eta)} to spare`}</div>
         ${card.tolls ? `<div class="small warn">Includes a $${card.tolls} toll</div>` : ""}
       </div>`;
     });
@@ -1332,6 +1385,7 @@ function plannerHtml() {
     ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
     <div class="cardtop"><b>${disp.icon} ${disp.name}</b> → ${NODES[c.to].name} · <span class="chip">⏸ TIME PAUSED</span> · <b class="pay">$${c.pay}</b>
       <span class="star-chip">⭐ +${repForTier(c.tier)} on time</span></div>
+    <div class="deadline-line">⏰ ON TIME = delivered within <b>${fmtDur(c.dlMins)}</b> of pickup — for this plan that means by <b>${fmtWhen(dl)}</b>. Up to 20 min late is forgiven; after that pay shrinks, and 10h+ late loses the load.</div>
     <div class="dim">deliver within ${Math.round(c.dlMins / 6) / 10}h · ${c.pallets} pallets${cg.fragile ? " · 🏺 handle with care" : ""}${cg.perishable ? " · 🥬 keep it cold" : ""}${cg.theft ? " · 🥷 theft target" : ""}</div>
     <label>Truck: <select id="pTruck">${trucks.map(t => `<option value="${t.id}" ${t.id === planner.truckId ? "selected" : ""}>${TRUCK_TYPES[t.type].icon} ${t.nick} (${t.at ? NODES[t.at].name : "en route"} · fuel ${Math.round(t.fuel)}g)</option>`).join("")}</select></label>
     <label>Driver: <select id="pDriver">${drivers.map(d => `<option value="${d.id}" ${d.id === planner.driverId ? "selected" : ""}>${d.name} ${"★".repeat(d.skill)} (fatigue ${Math.round(d.fatigue)})</option>`).join("")}</select></label>
@@ -1342,9 +1396,11 @@ function plannerHtml() {
   routeCards().forEach(card => {
     const o = card.opt;
     const etaLate = o.eta > dl;
+    const margin = dl - o.eta;   // the number that decides late or not — show it, don't imply it
     html += `<div class="card route ${planner.choice === card.i ? "sel" : ""}" data-route="${card.i}">
       <div class="cardtop"><b>${o.kind.toUpperCase()}</b>${(o.also || []).map(k => ` <span class="dim">= ${k}</span>`).join("")}
-        <span class="${etaLate ? "bad" : "good"}">ETA ${fmtWhen(o.eta)}${etaLate ? " ⚠ LATE" : ""}</span></div>
+        <span class="${etaLate ? "bad" : "good"}">ETA ${fmtWhen(o.eta)} · ${etaLate ? `⚠ ${fmtDur(-margin)} LATE` : `✓ ${fmtDur(margin)} spare`}</span></div>
+      ${routeWeatherNote(o.path)}
       <div><b>🛣️ ${roadLine(card.roads)}</b></div>
       <div>${o.mi} mi · ${fmtDur(o.mins)}${o.nights ? ` <span class="dim">(incl. ${o.nights} sleep)</span>` : ""} · fuel ~$${o.fuel$} · tolls $${o.tolls} · risk ${o.risk}${o.rough ? ` · <span class="warn">rough ${o.rough}mi</span>` : ""}</div>
     </div>`;
@@ -1413,9 +1469,9 @@ function fleetHtml() {
       const leg = T.legs[T.legIdx];
       // before pickup the delivery window hasn't started (deadline is set at loading) —
       // the old code printed "NaNm left" here for the whole deadhead
-      const timeLeft = c.deadline == null ? "window starts at pickup"
-        : c.deadline - S.time < 0 ? `<span class="bad">⏰ LATE</span>`
-        : `${fmtDur(c.deadline - S.time)} left`;
+      const timeLeft = c.deadline == null ? `window starts at pickup (${fmtDur(c.dlMins)})`
+        : c.deadline - S.time < 0 ? `<span class="bad">⏰ LATE by ${fmtDur(S.time - c.deadline)}</span>`
+        : `due ${fmtWhen(c.deadline)} · ${fmtDur(c.deadline - S.time)} left`;
       const hwy = truckHighway(tr);
       const nextNode = leg.path[T.edgeIdx + 1];
       tripHtml = `${hwy ? `<div class="nowon ${shieldClass(hwy)} ${justChangedHighway(T) ? "changed" : ""}">

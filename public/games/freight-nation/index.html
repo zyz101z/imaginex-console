@@ -125,6 +125,15 @@
   .trait-chip { background: #efe4fb; border: 1.5px solid #b57ae0; color: #5b2d85;
     font-size: 12px; font-weight: bold; padding: 2px 8px; border-radius: 999px; }
   /* 🏠 depots on the live map */
+  .weather-marker { font-size: 26px; filter: drop-shadow(0 2px 4px rgba(23,56,76,.45));
+    cursor: default; animation: wxBob 2.6s ease-in-out infinite; }
+  @keyframes wxBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  @media (prefers-reduced-motion: reduce) { .weather-marker { animation: none; } }
+  .deadline-line { background: #fff4d6; border: 1.5px dashed #e0a63c; color: #7a4a10;
+    border-radius: 9px; padding: 6px 10px; font-size: 12.5px; margin: 6px 0; }
+  .wx-route-note { display: inline-block; background: #e8f2fb; border: 1.5px solid #7fb3d8;
+    color: #23557a; font-size: 12px; font-weight: bold; padding: 2px 9px; border-radius: 999px; margin: 3px 0; }
+  .wx-route-note.rough { background: #fdeeec; border-color: #d23c2e; color: #8a2019; }
   .depot-marker { font-size: 22px; filter: drop-shadow(0 2px 3px rgba(23,56,76,.5)); cursor: default; }
   .depot-marker.home { font-size: 26px; filter: drop-shadow(0 0 6px #ffd75e) drop-shadow(0 2px 3px rgba(23,56,76,.5)); }
   @media (prefers-reduced-motion: reduce) { .emergency-banner { animation: none; } }
@@ -190,7 +199,12 @@
   #modalBody td.r { text-align: right; }
   #modalBody tr.total td { border-bottom: none; padding-top: 8px; font-size: 17px; }
 
-  #toast { position: fixed; left: 50%; bottom: 60px; transform: translate(-50%, 20px); background: #16283b; border: 1px solid #5ec4ff; border-radius: 10px; padding: 10px 16px; max-width: 460px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 15; font-size: 13px; }
+  /* light-theme toast: the old navy box inherited the page's navy TEXT — unreadable */
+  #toast { position: fixed; left: 50%; bottom: 60px; transform: translate(-50%, 20px);
+    background: #fffdf3; color: #16324a; border: 2px solid #e5b85b; border-radius: 12px;
+    padding: 10px 16px; max-width: 460px; opacity: 0; pointer-events: none;
+    transition: all .25s; z-index: 15; font-size: 13px; box-shadow: 0 6px 18px #17384c33; }
+  #toast b { color: #9d5a0b; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
   #dev { display: none; position: fixed; top: 54px; left: 12px; background: #241033; border: 1px solid #6a3b8a; border-radius: 9px; padding: 8px; z-index: 18; }

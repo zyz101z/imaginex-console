@@ -324,6 +324,38 @@ ok("passport: no unknown roads leaked into the collection",
   rd.setTab("contracts");
 }
 
+// --- readability & clarity fixes (2026-07-25 user feedback) --------------------
+{
+  // toast must never inherit the page's navy text onto a navy box again
+  const fs2 = await import("fs");
+  const html2 = fs2.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const toastCss = (html2.match(/#toast \{[^}]*\}/) || [""])[0];
+  ok("toast: sets its own text color", /color:\s*#/.test(toastCss), toastCss.slice(0, 90));
+  ok("toast: light background", /background:\s*#f/i.test(toastCss));
+
+  // deadline clarity: the planner must SAY the cutoff
+  S.stats.delivered = Math.max(S.stats.delivered, 2);
+  const c2 = S.contracts.find(cc => cc.pallets <= Math.max(...S.trucks.map(t => rd.truckCap(t))) && S.trucks.some(t => !t.trip));
+  if (c2 && S.trucks.some(t => !t.trip)) {
+    rd.plan(c2.id);
+    if (rd.planner()) {
+      rd.setTab("contracts");
+      const ph = dom.byId.get("side").innerHTML;
+      ok("deadline: planner states the cutoff", ph.includes("deadline-line") && ph.includes("of pickup"), ph.slice(0, 80));
+      ok("deadline: route cards show spare-or-late", /spare|LATE/.test(ph));
+      // weather note: force a storm across the whole route, re-render
+      for (const z of Object.keys(S.weather)) S.weather[z] = { type: "storm", until: S.time + 9999 };
+      rd.setTab("contracts");
+      ok("weather: route cards call out storms", dom.byId.get("side").innerHTML.includes("wx-route-note"));
+      for (const z of Object.keys(S.weather)) S.weather[z] = { type: "clear", until: S.time + 9999 };
+      const cp = dom.byId.get("side"); // close planner cleanly for the tests below
+      rd.planner() && rd.setTab("contracts");
+    } else ok("deadline: planner opened for clarity checks", false, "planner null");
+  } else ok("deadline: (no plannable contract — skipped)", true);
+  try { rd.frame(40000); ok("weather: map badges render without throwing", true); }
+  catch (e) { ok("weather: map badges render without throwing", false, e.message); }
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();
