@@ -104,6 +104,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "gridiron-gm",
+    title: "Gridiron GM",
+    description:
+      "Run a pro football franchise: sim games drive by drive, call the gameplan, work the draft, swing trades, sign extensions, hire coaches, and chase the Gridiron Bowl through weather, injuries and a living league of news, awards and rivals.",
+    genre: "Sports / Management",
+    cover: "/games/gridiron-gm/cover.jpg",
+    url: "/games/gridiron-gm/index.html",
+    color: "#8bc34a",
+    cartridgeColor: "#14320f",
+    cartridgeLabelColor: "#ffd54f",
+    status: "available",
+  },
+  {
     id: "x-bros",
     title: "X-Bros",
     description:

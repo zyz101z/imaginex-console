@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gridiron GM</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: radial-gradient(1200px 600px at 70% -10%, #1a2030 0%, #101318 55%) fixed #101318;
+    color: #e8eaf0; font: 15px/1.45 system-ui, sans-serif; }
+  #topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    background: #171b22; border-bottom: 2px solid #262c38; position: sticky; top: 0; }
+  .grow { flex: 1; }
+  .advance { background: #2e7d32; color: #fff; border: 0; border-radius: 8px;
+    padding: 8px 18px; font-weight: 700; font-size: 15px; cursor: pointer; }
+  .advance:hover { background: #388e3c; }
+  main { display: flex; min-height: calc(100vh - 54px); }
+  nav { display: flex; flex-direction: column; gap: 4px; padding: 12px 8px;
+    background: #14171d; border-right: 1px solid #262c38; min-width: 130px; }
+  nav button { background: none; border: 0; color: #aab2c0; text-align: left;
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  nav button.active, nav button:hover { background: #232a36; color: #fff; }
+  #resetBtn { margin-top: auto; color: #7d8593; font-size: 12px; }
+  #content { flex: 1; padding: 16px 20px; max-width: 1100px; }
+  table { border-collapse: collapse; margin: 8px 0 16px; width: 100%; max-width: 680px;
+    background: #14171dcc; border-radius: 8px; overflow: hidden; }
+  td, th { padding: 5px 10px; border-bottom: 1px solid #232a36; text-align: left; }
+  tbody tr:nth-child(even) td, table tr:nth-child(even) td { background: #171b2266; }
+  th { color: #ffc62f; }
+  tr.hdr td { color: #7d8593; font-size: 12px; text-transform: uppercase; }
+  tr.me td { background: #1d2430; }
+  tr.genp td { color: #8a93a3; }
+  .chip { display: inline-flex; align-items: center; gap: 3px; min-width: 38px;
+    justify-content: center; padding: 1px 6px; border-radius: 5px; border: 1px solid;
+    color: #fff; font-size: 12px; font-weight: 700; }
+  .chip img { display: inline-block; }
+  .dim { color: #8a93a3; } .small { font-size: 12px; }
+  .win { color: #7ee787; } .loss { color: #ff7b72; } .inj { color: #ff7b72; font-weight: 600; }
+  .divgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 24px; }
+  .conf h3 { margin: 14px 0 4px; color: #ffc62f; }
+  .champ { margin: 16px 0; color: #ffc62f; }
+  .units { margin-bottom: 8px; }
+  .pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px; margin-top: 12px; }
+  .pick { background: #171b22; border: 2px solid; border-radius: 8px; color: #e8eaf0;
+    padding: 10px; cursor: pointer; text-align: left; font-size: 14px; }
+  .pick:hover { background: #232a36; }
+  #ticker { position: fixed; inset: 0; background: rgba(10, 12, 16, .93);
+    display: flex; flex-direction: column; align-items: center; padding-top: 8vh; z-index: 10; }
+  #ticker.hidden { display: none; }
+  #tickerScore { font-size: 38px; margin-bottom: 18px; display: flex; align-items: center; gap: 14px;
+    background: #14171d; padding: 12px 26px; border-radius: 14px; border: 1px solid #262c38; }
+  .qpill { font-size: 15px; background: #232a36; color: #ffc62f; padding: 4px 12px;
+    border-radius: 999px; font-weight: 700; }
+  .mute { background: none; font-size: 17px; }
+  .intro { border-left: 4px solid #ffc62f; }
+  .offer { border-left: 4px solid #7ee787; }
+  .champbox { border: 2px solid #ffc62f; background: linear-gradient(135deg, #2a2410, #171b22); }
+  #tickerLog { width: min(640px, 92vw); height: 50vh; overflow-y: auto; }
+  .tline { padding: 7px 12px; border-left: 3px solid #3a4356; margin-bottom: 6px;
+    background: #171b22; border-radius: 0 6px 6px 0; animation: slidein .25s; }
+  .tline.td { border-color: #7ee787; } .tline.to { border-color: #ff7b72; }
+  @keyframes slidein { from { transform: translateY(-8px); opacity: 0; } }
+  .tickerBtns { display: flex; gap: 10px; margin-top: 14px; }
+  #tickerSkip, #tickerBox { background: #232a36; color: #fff; border: 0;
+    border-radius: 8px; padding: 9px 22px; font-weight: 700; cursor: pointer; }
+  #tickerBox { background: #2e7d32; }
+  #tickerBox.hidden { display: none; }
+  .logo { vertical-align: middle; }
+  .mini { background: #2e7d32; color: #fff; border: 0; border-radius: 5px;
+    padding: 2px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .mini.danger { background: #8b2e2e; }
+  .mini.up { background: #3a4356; padding: 2px 7px; }
+  .mini.off { background: #232a36; color: #8a93a3; }
+  .mini.warn { background: #7a5c12; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: 0.65; } }
+  .scrollbox { max-height: 360px; overflow-y: auto; border: 1px solid #232a36; border-radius: 8px; }
+  .clickattr { cursor: pointer; } .clickattr:hover { background: #232a36; }
+  td.focus { color: #ffc62f; font-weight: 700; }
+  label { margin-right: 14px; }
+  .newsline { padding: 4px 10px; border-left: 3px solid #3a4356; margin-bottom: 4px;
+    background: #171b22; border-radius: 0 5px 5px 0; max-width: 640px; }
+  .tt { border-bottom: 1px dotted #7d8593; cursor: help; }
+  .tipPop { position: fixed; z-index: 50; max-width: 300px; background: #232a36;
+    border: 1px solid #3a4356; border-radius: 8px; padding: 8px 12px; font-size: 13px;
+    color: #e8eaf0; box-shadow: 0 6px 18px #000a; animation: slidein .15s; }
+  .coachcard { background: #171b22; border: 1px solid #262c38; border-radius: 8px;
+    padding: 10px 14px; margin: 8px 0; max-width: 560px; }
+  select { background: #232a36; color: #fff; border: 0; border-radius: 6px; padding: 4px 8px; }
+  .pick .logo { margin-right: 4px; }
+</style>
+</head>
+<body>
+  <div id="topbar"></div>
+  <main>
+    <nav>
+      <button data-view="schedule">Schedule</button>
+      <button data-view="roster">My Roster</button>
+      <button data-view="standings">Standings</button>
+      <button data-view="leaders">League Leaders</button>
+      <button data-view="boxscore">Box Score</button>
+      <button data-view="news">News</button>
+      <button data-view="finances">Finances</button>
+      <button data-view="coach">Coach</button>
+      <button data-view="trades">Trades</button>
+      <button data-view="freeagency">Free Agency</button>
+      <button data-view="draft">Draft / Scout</button>
+      <button data-view="playoffs">History & Awards</button>
+      <button id="resetBtn">Reset franchise</button>
+    </nav>
+    <div id="content"></div>
+  </main>
+  <div id="ticker" class="hidden">
+    <div id="tickerScore"></div>
+    <div id="tickerLog"></div>
+    <div class="tickerBtns">
+      <button id="tickerSkip">SKIP ▶</button>
+      <button id="tickerBox" class="hidden">BOX SCORE ▶</button>
+    </div>
+  </div>
+  <script type="module" src="./src/app.mjs"></script>
+</body>
+</html>
