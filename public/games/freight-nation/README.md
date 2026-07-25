@@ -29,7 +29,7 @@ changing road network, and grow one rusty van into a fleet.
 
 ## Test
 ```
-node test/sim.test.mjs              # 4,742-check headless sim battery
+node test/sim.test.mjs              # 4,751-check headless sim battery
 node test/ui.smoke.mjs              # UI layer, live-map path (MapLibre + OSRM stubbed)
 node test/ui.smoke.mjs --offline    # UI layer, offline-atlas fallback path
 node test/ui.smoke.mjs --seed=7     # replay a specific game; default seed is fixed
@@ -133,9 +133,11 @@ game never runs.
 medical 50). Buy multiple trucks + hire drivers to run contracts in parallel. Milestones fire at
 2/3/6 trucks; "Freight Nation Award" at rep 80 + $150k.
 
-**Territory** is the other ladder, and it's the one the map shows: ⭐0 California → ⭐6 Southwest
-→ ⭐12 Northwest → ⭐20 Rockies → ⭐30 Texas & the Gulf → ⭐42 Midwest → ⭐55 Southeast →
-⭐68 Northeast. A region stays unlocked once earned. Unlocking one clears half the contract
+**Territory** is the other ladder, and it's the one the map shows: ⭐0 California → ⭐12 Southwest
+→ ⭐18 Northwest → ⭐25 Rockies → ⭐30 Texas & the Gulf → ⭐42 Midwest → ⭐55 Southeast →
+⭐68 Northeast. Region gates are tuned against the contract-distance gates: a region must not
+open before its shortest inbound corridor can legally carry freight (the Southwest's is
+195 mi — REGIONAL — so it opens with REGIONAL contracts at 12, not before). A region stays unlocked once earned. Unlocking one clears half the contract
 board so the new country actually shows up instead of waiting for old freight to expire.
 
 There is a **second, emergent gate**: fuel range. A leg longer than `tank × mpg × RANGE_SAFETY`
@@ -156,6 +158,12 @@ continent, not just reputation.
   sync with it. Without this, every region outside California would be strictly worse business
   than home and each unlock would read as a punishment.
 - **Deadline buffer grows with the haul** — a two-day run meets weather no quote could forecast.
+- **Theft only takes what's on the truck.** Rough sleeps on the empty deadhead leg risk a
+  parking ticket, never the contract — an empty truck cannot have its freight "stolen."
+- **Range is enforced everywhere a path is chosen**: `assign()`, `reroute()` (an out-of-range
+  detour is refused — stay blocked and wait out the closure), and `contractQuote()` in the UI
+  (no quote → the card locks with "no truck has the range for this run yet" instead of
+  offering a PLAN ROUTE button that dead-ends).
 
 ## Map bounds
 Both maps are fenced to the country: the live map via `maxBounds` + `minZoom`, the offline

@@ -742,6 +742,86 @@ try {
       new Set(PAINT_COLORS.map(c => c.hex)).size === PAINT_COLORS.length);
   }
 
+  // --- bug-squash regressions (2026-07-25 thorough-test pass)
+  {
+    // 1) thieves cannot steal cargo that was never picked up: across many seeds, force
+    //    unsafe roadside rests on the EMPTY deadhead leg — no trip may fail "Cargo stolen"
+    let deadheadTheft = 0, restsOnDeadhead = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const S16 = newGame(seed);
+      const t16 = S16.trucks[0], d16 = S16.drivers[0];
+      t16.at = "SD"; d16.fatigue = 94; // no sleeper, nearly spent → HOS shutdown while empty
+      S16.contracts = [{ id: 1, shipper: "X", cargoType: "electronics", pallets: 3, from: "SAC", to: "RED",
+        pay: 900, mi: 160, urgent: false, dlMins: 9000, expires: S16.time + 9000, tier: "REGIONAL" }];
+      const r16 = routeOptions(S16, "SAC", "RED", t16, d16)[0];
+      if (!assign(S16, 1, t16.id, d16.id, r16, {}).ok) continue;
+      t16.trip.stopPlan = {};
+      let reachedPickup = false;
+      for (let i = 0; i < 400 && t16.trip; i++) {
+        tick(S16, 10);
+        if (t16.trip) {
+          if (t16.trip.legIdx > 0) reachedPickup = true; // loading happened
+          if (t16.trip.restDriver != null && !t16.trip.legs[t16.trip.legIdx].loaded) restsOnDeadhead++;
+        }
+      }
+      // theft after pickup is legitimate; a "Cargo stolen" failure on a trip that NEVER
+      // reached the pickup means an empty truck was robbed of freight it didn't have
+      if (!reachedPickup && S16.reports.some(r => r.failedWhy === "Cargo stolen")) deadheadTheft++;
+    }
+    check("empty trucks slept rough during the probe (scenario is live)", restsOnDeadhead > 0, restsOnDeadhead);
+    check("no cargo was ever stolen from an empty truck", deadheadTheft === 0, deadheadTheft);
+
+    // ...and directly: an unsafe wake on an unloaded leg never ends the trip
+    const S17 = newGame(1717);
+    const t17 = S17.trucks[0], d17 = S17.drivers[0];
+    t17.at = "SD";
+    S17.contracts = [{ id: 2, shipper: "X", cargoType: "electronics", pallets: 3, from: "SAC", to: "RED",
+      pay: 900, mi: 160, urgent: false, dlMins: 9000, expires: S17.time + 9000, tier: "REGIONAL" }];
+    assign(S17, 2, t17.id, d17.id, routeOptions(S17, "SAC", "RED", t17, d17)[0], {});
+    // simulate 200 unsafe wakes on the deadhead leg — none may kill the contract
+    let survived = true;
+    for (let i = 0; i < 200; i++) {
+      t17.trip.restingUnsafe = true; t17.trip.restDriver = d17.id;
+      t17.trip.pauseUntil = S17.time + 1; t17.trip.pauseWhy = "test rest";
+      tick(S17, 3);
+      if (!t17.trip) { survived = false; break; }
+    }
+    check("200 rough sleeps on the empty leg never lose the load", survived);
+
+    // 2) reroute refuses an out-of-range detour instead of scheduling a desert tow
+    const S18 = newGame(1818);
+    S18.rep = 100; checkRegionUnlocks(S18);
+    const t18 = S18.trucks[0], d18 = S18.drivers[0]; // rusty van, ~255 mi range
+    t18.at = "SBD";
+    S18.contracts = [{ id: 3, shipper: "X", cargoType: "general", pallets: 3, from: "SBD", to: "LV",
+      pay: 900, mi: 195, urgent: false, dlMins: 9000, expires: S18.time + 9000, tier: "REGIONAL" }];
+    assign(S18, 3, t18.id, d18.id, routeOptions(S18, "SBD", "LV", t18, d18)[0], {});
+    forceEvent(S18, "closure", edgeKey("SBD", "LV"));
+    const rr18 = reroute(S18, t18.id, "fastest");
+    check("reroute refuses a detour the tank can't cross", !rr18.ok, rr18.ok && rr18.route.path.join(">"));
+    check("...and says why", /range|fuel stops/i.test(rr18.why || ""), rr18.why);
+
+    // 3) region gates line up with the freight that can actually exist there
+    check("no region unlocks before its shortest inbound corridor can carry contracts",
+      REGIONS.southwest.repReq >= CFG.REP_REGIONAL, REGIONS.southwest.repReq);
+    {
+      const S19 = newGame(1919);
+      S19.rep = REGIONS.southwest.repReq;
+      checkRegionUnlocks(S19);
+      let touchesSW = 0;
+      for (let i = 0; i < 25; i++) {
+        S19.contracts = []; S19.lastBoardRoll = -9999; tick(S19, 2);
+        for (const c of S19.contracts)
+          if (NODES[c.from].region === "southwest" || NODES[c.to].region === "southwest") touchesSW++;
+      }
+      check("the Southwest has freight the moment it opens", touchesSW > 0, touchesSW);
+    }
+
+    // 4) duration formatting never lies: no NaN, and negatives clamp instead of exploding
+    check("fmtDur(NaN) does not print NaN", !/NaN/.test(fmtDur(NaN)), fmtDur(NaN));
+    check("fmtDur(negative) clamps to 0m", fmtDur(-500) === "0m", fmtDur(-500));
+  }
+
   // --- v1 (California-only) saves are retired, not half-loaded
   {
     const S9 = newGame(189);

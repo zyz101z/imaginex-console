@@ -9,11 +9,14 @@
 export const REGIONS = {
   west:      { name: "California",        short: "CA",  repReq: 0,
                blurb: "Home turf. Ports, produce and the busiest freeway web in the country." },
-  southwest: { name: "The Southwest",     short: "SW",  repReq: 6,
+  // repReq is tuned against the contract-distance gates: the shortest road INTO the
+  // Southwest is 195 mi (SBD→LV), which only generates freight once REGIONAL contracts
+  // exist at rep 12 — unlocking it earlier read as "new territory!" with an empty board.
+  southwest: { name: "The Southwest",     short: "SW",  repReq: 12,
                blurb: "Desert running — long empty miles, cheap fuel, brutal summer heat." },
-  northwest: { name: "The Northwest",     short: "NW",  repReq: 12,
+  northwest: { name: "The Northwest",     short: "NW",  repReq: 18,
                blurb: "Rain, timber and mountain passes from Reno up to Seattle." },
-  mountain:  { name: "The Rockies",       short: "MTN", repReq: 20,
+  mountain:  { name: "The Rockies",       short: "MTN", repReq: 25,
                blurb: "Thin air and hard grades. Snow closes passes without asking." },
   texas:     { name: "Texas & the Gulf",  short: "TX",  repReq: 30,
                blurb: "Cheapest diesel in the nation and freight moving in every direction." },

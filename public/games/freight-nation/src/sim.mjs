@@ -105,7 +105,7 @@ export const fmtClock = t => {
 export const dayOf = t => Math.floor(t / 1440) + 1;
 // Cross-country runs are measured in days, not hours — "2d 6h" beats "54h".
 export function fmtDur(mins) {
-  const m = Math.max(0, Math.round(mins));
+  const m = Number.isFinite(mins) ? Math.max(0, Math.round(mins)) : 0; // never print "NaNm"
   const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
   if (d) return `${d}d ${h}h`;
   if (h) return `${h}h ${String(mm).padStart(2, "0")}m`;
@@ -476,6 +476,11 @@ export function reroute(S, truckId, kind, avoid = new Set()) {
   const driver = S.drivers.find(d => d.id === T.driverId);
   const r = findRoute(S, fromNode, dest, truck, driver, kind, avoid);
   if (!r) return { ok: false, why: "No alternate route exists right now." };
+  // Same guard as assign(): a detour with a leg longer than the tank is a guaranteed tow in
+  // the middle of nowhere, not a route. Better to stay blocked and wait the closure out.
+  if (!pathInRange(truck, r.path))
+    return { ok: false, why: `The detour has ${longestLeg(r.path)} mi between fuel stops — ` +
+      `${truck.nick} only has ${Math.round(truckRange(truck))} mi of range.` };
   leg.path = leg.path.slice(0, T.edgeIdx + (atNode ? 1 : 2)).concat(r.path.slice(1));
   T.pauseUntil = Math.max(T.pauseUntil || 0, S.time + CFG.REROUTE_DELAY_MIN);
   T.pauseWhy = T.pauseWhy || "Re-planning route";
@@ -672,13 +677,16 @@ function wakeFromRest(S, truck) {
   const driver = S.drivers.find(d => d.id === T.restDriver);
   if (driver) driver.fatigue = 4;
   if (T.restingUnsafe) {
-    // sleeping rough: tickets and thieves (GDD §8.2)
+    // sleeping rough: tickets and thieves (GDD §8.2). Thieves can only take cargo that is
+    // actually ON the truck — a rest on the empty deadhead leg risks a ticket, not the load
+    // (this used to fail whole contracts for "stolen" freight the truck never picked up).
+    const loaded = T.legs[T.legIdx].loaded;
     const cg = CARGO[T.contract.cargoType];
-    let theftP = 0.12 * (cg.theft ? 2.2 : 1);
+    let theftP = loaded ? 0.12 * (cg.theft ? 2.2 : 1) : 0;
     if (truck.upgrades.alarm) theftP *= 0.35;
     if (TRUCK_TYPES[truck.type].secure) theftP *= 0.2;
     const r = rand(S);
-    if (r < theftP) {
+    if (loaded && r < theftP) {
       alert_(S, `🥷 Cargo stolen overnight while street-parked! The ${T.contract.shipper} load is gone.`, "bad");
       finishTrip(S, truck, "Cargo stolen");
       return true;

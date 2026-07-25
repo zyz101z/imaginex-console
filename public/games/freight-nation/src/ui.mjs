@@ -7,7 +7,7 @@ import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, au
   fmtClock, fmtDur, dayOf, isRush, truckPos, truckHighway, truckShields, eventsOn, edgeClosed,
   edgeOf, tankOf, zoneWeather,
   tzOf, tzName, localClock, edgeTz, cityUnlocked, unlockedRegions, nextRegion,
-  truckRange, longestLeg } from "./sim.mjs";
+  truckRange, longestLeg, pathInRange } from "./sim.mjs";
 import * as GEO from "./geometry.mjs"; // baked real OSM centerlines, full network, state boundary
 import * as ATLAS from "./states.mjs"; // baked lower-48 outlines — the offline map's landmass
 const GEOM = GEO.GEOM || {}, CA_SHAPE = GEO.CA_SHAPE, NETWORK = GEO.NETWORK || null;
@@ -1077,6 +1077,9 @@ function contractQuote(c) {
       : findRoute(S, truck.at, c.from, truck, driver, "fastest");
     const loaded = findRoute(S, c.from, c.to, truck, driver, "fastest");
     if (!dead || !loaded) continue;
+    // a truck that can't cross the longest leg (to the pickup OR on the run) is no quote at
+    // all — otherwise the card offers a PLAN ROUTE button that dead-ends in a range refusal
+    if (!pathInRange(truck, dead.path) || !pathInRange(truck, loaded.path)) continue;
     const repositionOverhead = Math.round(dead.mi * CFG.DEADHEAD_OVERHEAD_PER_MI);
     const operatingCost = dead.fuel$ + loaded.fuel$ + dead.tolls + loaded.tolls + repositionOverhead;
     const q = { truck, dead, loaded, pickupMi: dead.mi, pickupMins: dead.mins,
@@ -1145,7 +1148,9 @@ function contractsHtml() {
         <div class="small"><b>Estimated net $${q.net}</b> <span class="dim">after route fuel and tolls</span></div>` : ""}
       <div class="cardbot"><b class="pay">$${c.pay} gross</b>
         ${canHaul ? `<button class="btn go" data-accept="${c.id}">PLAN ROUTE ▶</button>`
-          : `<span class="dim">needs ${c.pallets}-pallet truck</span>`}</div>
+          : `<span class="dim">${S.trucks.some(t => TRUCK_TYPES[t.type].cap >= c.pallets)
+              ? "no truck has the range for this run yet"
+              : `needs ${c.pallets}-pallet truck`}</span>`}</div>
     </div>`;
   }).join("");
 }
@@ -1276,14 +1281,18 @@ function fleetHtml() {
     if (T) {
       const c = T.contract;
       const leg = T.legs[T.legIdx];
-      const timeLeft = fmtDur(c.deadline - S.time);
+      // before pickup the delivery window hasn't started (deadline is set at loading) —
+      // the old code printed "NaNm left" here for the whole deadhead
+      const timeLeft = c.deadline == null ? "window starts at pickup"
+        : c.deadline - S.time < 0 ? `<span class="bad">⏰ LATE</span>`
+        : `${fmtDur(c.deadline - S.time)} left`;
       const hwy = truckHighway(tr);
       const nextNode = leg.path[T.edgeIdx + 1];
       tripHtml = `${hwy ? `<div class="nowon ${shieldClass(hwy)} ${justChangedHighway(T) ? "changed" : ""}">
           <span class="nowon-label">NOW ON</span> <b>${hwy}</b>
           ${nextNode ? `<span class="nowon-to">→ ${NODES[nextNode].name}</span>` : ""}
         </div>` : ""}
-        <div class="dim">${cargoDisplay(c).icon} ${c.special ? `<b>${c.special.name}</b> · ` : ""}${NODES[c.from].name} → ${NODES[c.to].name} · $${c.pay} · ${timeLeft} left</div>
+        <div class="dim">${cargoDisplay(c).icon} ${c.special ? `<b>${c.special.name}</b> · ` : ""}${NODES[c.from].name} → ${NODES[c.to].name} · $${c.pay} · ${timeLeft}</div>
         <div class="dim small">${leg.path.slice(T.edgeIdx).map(n => NODES[n].name).join(" → ")}</div>
         ${CARGO[c.cargoType].fragile ? bar("Cargo", 100 - T.cargo.dmg, "#c586ff") : ""}
         ${CARGO[c.cargoType].perishable ? bar("Fresh", T.cargo.fresh, "#7ee08a") : ""}
