@@ -4,8 +4,11 @@
 0. **SURVIVAL feel-checks pending (2026-07-25 expansion):** wave pacing for a 9yo (enemy
    counts 1→4, tiers ramp by `survTier`), boss lethality (WARLORD radial bursts are HOT —
    they broke godmode-by-shield in probes), FREEZE 3.5s duration, TEMPEST twin feel +
-   whether 6k/wave-10 gate is right. TEMPEST has NO Meshy sprite yet (vector twin-barrel
-   fallback) — next Meshy batch: tank_tempest.png + SPRITE_META entry.
+   whether 6k/wave-10 gate is right. ✅ TEMPEST Meshy sprite DONE same day (9cr, bal 1311):
+   nano-banana-pro magenta-key recipe → img/tank_tempest.png 269×128 cx109 (hull-span
+   heuristic: columns ≥55% max alpha height = hull; barrels too thin to count).
+   ✅ Same-day fix: tap-anywhere-to-resume (`resumeGame()`, canvas pointerdown) — auto-pause
+   on blur was a DEAD END on iPad (P key was the only unpause); banner now says how.
 1. **User feel-checks pending:** Minelayer pace (mine every 2.5s — one number), Ghost cloak
    strength in open arenas, snow 15% slow, lava pool density, friend-or-foe shell read at
    speed (escalation if weak: red danger ring on enemy shells).
@@ -28,7 +31,7 @@ Test suites: tanktest 76 + netsim 29 + doortest 6 (scratchpad; recreate via DEVL
 ## Session log — 2026-07-25
 | Ver | Commit | What |
 |---|---|---|
-| STORM | (this) | **SURVIVAL — TANK STORM** (user: son wants more): endless waves vs up to 4 AI at once, per-tank AI tiers (`t.aiLv`), BOSS every 5th wave (`hp`/armor bar, r=18, red tint slot 2 in tankSprites): W5 WARLORD radial bursts · W10 JUGGERNAUT telegraphed charge (charge contact = damage) · W15 VORTEX photon + summons 2 minions at half HP; between-wave PERK DRAFT (1 of 3, stack all run: overdrive/quickload/magazine/velocity/aegis/salvage — aegis leaves pool once owned), draft = canvas cards (keys 1-3 + pointerdown, mobile OK); scrap: +2/kill +22/boss, wave pay 6+w(+24 boss), milestones 25/75/150/300 @ w5/10/15/20, SALVAGE +40%/stack; `profile.bestWave`; menu ⚡ button + STORM BEST badge; survover reuses victory overlay; ❄ FREEZE powerup (offline pools only — not in online snapshot format): enemies iced 3.5s, AI can grab it too; **TEMPEST 6k** twin-cannon tank gated on bestWave≥10 (garage shows SURVIVE WAVE 10). Core plumbing: `team` on tanks+shells (teammates never collide — shells/lasers/mines/AI-dodge all team-aware), `damageTank()` funnel (shield→armor→explode), pair-wise tank push, boss/frozen/telegraph overlays drawn world-space (`drawTankOverlays`), survival HUD (wave/left/run-scrap), sudden death at 45s in survival. NEW `window.__tw` debug hook (freight-nation __rd pattern) — harness no longer needs IIFE injection. Tests: scratchpad stormtest.js **66 checks** (quick-play e2e regression, maze integrity ×36, teams, all 3 bosses, freeze, tempest, perks, garage gate, 2-min soak) + stormprobe.js deep-run (wave 17, 3 trials, 0 crashes) |
+| STORM | (this) | **SURVIVAL — TANK STORM** (user: son wants more): endless waves vs up to 4 AI at once, per-tank AI tiers (`t.aiLv`), BOSS every 5th wave (`hp`/armor bar, r=18, red tint slot 2 in tankSprites): W5 WARLORD radial bursts · W10 JUGGERNAUT telegraphed charge (charge contact = damage) · W15 VORTEX photon + summons 2 minions at half HP; between-wave PERK DRAFT (1 of 3, stack all run: overdrive/quickload/magazine/velocity/aegis/salvage — aegis leaves pool once owned), draft = canvas cards (keys 1-3 + pointerdown, mobile OK); scrap: +2/kill +22/boss, wave pay 6+w(+24 boss), milestones 25/75/150/300 @ w5/10/15/20, SALVAGE +40%/stack; `profile.bestWave`; menu ⚡ button + STORM BEST badge; survover reuses victory overlay; ❄ FREEZE powerup (offline pools only — not in online snapshot format): enemies iced 3.5s, AI can grab it too; **TEMPEST 6k** twin-cannon tank gated on bestWave≥10 (garage shows SURVIVE WAVE 10). Core plumbing: `team` on tanks+shells (teammates never collide — shells/lasers/mines/AI-dodge all team-aware), `damageTank()` funnel (shield→armor→explode), pair-wise tank push, boss/frozen/telegraph overlays drawn world-space (`drawTankOverlays`), survival HUD (wave/left/run-scrap), sudden death at 45s in survival. NEW `window.__tw` debug hook (freight-nation __rd pattern) — harness no longer needs IIFE injection. Tests: test_storm.js **71 checks** (quick-play e2e regression, maze integrity ×36, teams, all 3 bosses, freeze, tempest, perks, garage gate, 2-min soak) + stormprobe.js deep-run (wave 17, 3 trials, 0 crashes) |
 
 ## Session log — 2026-07-03
 | Ver | Commit | What |

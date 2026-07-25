@@ -325,6 +325,20 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   check('soak: numbers stayed finite', Number.isFinite(tw.profile.scrap) && Number.isFinite(tw.surv.run));
 }
 
+// ---------- 16. pause is never a dead end (iPad had no unpause) ----------
+{
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.setPaused(true);
+  check('pause: paused state set', tw.paused === true);
+  check('pause: a tap resumes the game', tw.resumeGame() === true && tw.paused === false);
+  check('pause: resume is a no-op while unpaused', tw.resumeGame() === false);
+  tw.setPaused(true);
+  tw.matchCfg.mode = 'online';
+  check('pause: online matches are not tap-resumable (host pause rules)', tw.resumeGame() === false && tw.paused === true);
+  tw.matchCfg.mode = 'quick'; tw.setPaused(false);
+  check('pause: TEMPEST sprite manifest present', /tempest: \{ w: \d+, h: 128/.test(m[1]));
+}
+
 // ---------- 16. campaign regression: config untouched ----------
 check('campaign: still 10 battles', tw.CAMPAIGN.length === 10);
 check('campaign: rewards intact', tw.CAMPAIGN[9].reward === 150);

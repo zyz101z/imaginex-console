@@ -247,6 +247,7 @@ const SPRITE_META = {
   photon:  { w: 230, h: 128, cx: 99,  cy: 64 },
   minelayer: { w: 175, h: 128, cx: 82, cy: 64 },
   ghost:   { w: 313, h: 128, cx: 122, cy: 64 },
+  tempest: { w: 269, h: 128, cx: 109, cy: 64 },
 };
 const tankSprites = {};   // kind -> { 0: amber-tinted canvas, 1: teal-tinted canvas }
 if (typeof Image !== 'undefined') {
@@ -2172,7 +2173,10 @@ function render() {
     if (surv.on && banner && phase === 'play') drawBanner(banner, bannerCol, 30, 60);
     if (phase === 'draft') drawDraft();
     if (suddenDeath && phase === 'play' && (roundTime % 1) < 0.55) drawBanner('SUDDEN DEATH', '#ff6b6b', 26, 44);
-    if (paused) drawBanner('PAUSED', '#dfe8ff', 50);
+    if (paused) {
+      drawBanner('PAUSED', '#dfe8ff', 50);
+      drawBanner('tap anywhere or press P to resume', '#8fa5cf', 18, H / 2 + 52);
+    }
     // confetti (drawn under DOM victory panel)
     for (const c of confetti) {
       ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a);
@@ -2471,6 +2475,15 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+// Auto-pause (window blur) had NO touch escape: on an iPad "PAUSED" was a dead end,
+// because the only unpause was the P key. Any tap or click now resumes.
+function resumeGame() {
+  if (mode !== 'play' || !paused || matchCfg.mode === 'online') return false;
+  paused = false;
+  touchState.fire = 0;   // the resuming tap must not also fire the cannon
+  return true;
+}
+canvas.addEventListener('pointerdown', () => { resumeGame(); });
 window.addEventListener('blur', () => {
   if (mode === 'play' && matchCfg.mode !== 'online') { paused = true; if (music) music.pause(); }
   for (const k in keys) keys[k] = false;
@@ -3269,6 +3282,7 @@ window.__tw = {
   updatePowerups, endRound, endMatch, saveProfile, renderGarage,
   TANKS, PERKS, PERK_ORDER, AI_LEVELS, CAMPAIGN,
   setPhase(v) { phase = v; }, setTanks(v) { tanks = v; },
+  get paused() { return paused; }, setPaused(v) { paused = !!v; }, resumeGame,
 };
 
 requestAnimationFrame(frame);
