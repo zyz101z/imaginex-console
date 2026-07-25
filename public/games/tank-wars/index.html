@@ -75,6 +75,8 @@
     <p class="subtitle">BOUNCING-SHELL MAZE BATTLE</p>
     <p class="scrapBadge">&#128296; <span id="scrapMenu">0</span> SCRAP</p>
     <button class="btn teal" id="btnCampaign">&#9658;&nbsp; CAMPAIGN</button>
+    <button class="btn" id="btnSurvival" style="background:linear-gradient(180deg,#ffd97a,#f0973a);">&#9889; SURVIVAL &mdash; TANK STORM</button>
+    <p class="tag" id="survTag" style="margin:2px 0 0;"></p>
     <div class="row">
       <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
       <button class="btn" id="btnAce">QUICK &bull; ACE</button>
@@ -108,6 +110,11 @@
   <div class="panel">
     <h1 class="title" style="font-size:30px;">HOW TO PLAY</h1>
     <div class="help">
+      <p><b style="color:#ffd166">&#9889; SURVIVAL — TANK STORM:</b> endless waves, up to 4 tanks at once.
+      Every 5th wave is a <b style="color:#ff5d73">BOSS</b> with an armor bar — watch for its special attack.
+      Clear a wave, pick 1 of 3 upgrades; they stack for the whole run. How deep can you go?</p>
+      <p><b style="color:#7fd8ff">&#10052; FREEZE</b> power-up (offline modes): grab it to freeze every enemy
+      solid for 3.5 seconds. The AI can grab it too — don't let it.</p>
       <p><b>Destroy the other tank!</b> Shells <b>bounce off walls</b> — and yes, your own shell
       can come back and get you. First to <b>5 rounds</b> wins the match.</p>
       <p><b>Drive</b> (amber tank): <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span>
@@ -187,6 +194,7 @@ const SUDDEN_DEATH_AT = 26;      // seconds into a round
 const POWERUP_EVERY = [6.5, 10]; // seconds range
 const POWERUP_LIFE = 12;
 const P1_COL = '#ffb347', P2_COL = '#4de3c2';
+const BOSS_COL = '#ff5d73', BOSS_GLOW = 'rgba(255,93,115,0.55)';   // SURVIVAL bosses read as DANGER
 const P1_GLOW = 'rgba(255,179,71,0.5)', P2_GLOW = 'rgba(77,227,194,0.5)';
 
 // ============================== TANKS (garage) ==============================
@@ -208,8 +216,11 @@ const TANKS = {
              speed: 145, fireCd: 0.5, mines: true, shell: { speed: 250, r: 4, life: 8, bounces: -1 } },
   ghost:   { name: 'GHOST',   cost: 4000, tag: 'Cloaks when you hold fire. Tread marks still show — hunt the trail.',
              speed: 155, fireCd: 0.42, cloak: true, shell: { speed: 265, r: 4, life: 9, bounces: -1 } },
+  tempest: { name: 'TEMPEST', cost: 6000, tag: 'TWIN cannons — every trigger pull fires two parallel shells.',
+             speed: 152, fireCd: 0.5, twin: true, reqWave: 10,
+             shell: { speed: 275, r: 3.5, life: 8, bounces: -1, maxLive: 6 } },
 };
-const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost'];
+const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost', 'tempest'];
 // Cosmetic catalogs (scrap sinks — never touch the friend-or-foe color language)
 const TRAILS = {
   ember:   { name: 'EMBER TRAIL',   cost: 300, tag: 'Your shells leave burning sparks.', col: () => (Math.random() < 0.5 ? '#ff9a3c' : '#ffc46b') },
@@ -253,7 +264,7 @@ if (typeof Image !== 'undefined') {
         x.fillRect(0, 0, c.width, c.height);
         return c;
       };
-      tankSprites[k] = { 0: tint(P1_COL), 1: tint(P2_COL) };
+      tankSprites[k] = { 0: tint(P1_COL), 1: tint(P2_COL), 2: tint(BOSS_COL) };
     };
     im.src = 'img/tank_' + k + '.png';
   }
@@ -283,7 +294,7 @@ const CAMPAIGN = [
 
 // ============================== PROFILE (persistent) ==============================
 let profile = { scrap: 0, owned: { scout: true }, tank: 'scout', stars: {}, done: {},
-                trailsOwned: {}, trail: '', vicsOwned: {}, vic: '' };
+                trailsOwned: {}, trail: '', vicsOwned: {}, vic: '', bestWave: 0 };
 try {
   const raw = localStorage.getItem('tankwars_profile');
   if (raw) {
@@ -298,6 +309,7 @@ try {
       profile.trail = TRAILS[p.trail] ? p.trail : '';
       profile.vicsOwned = p.vicsOwned || {};
       profile.vic = VICS[p.vic] ? p.vic : '';
+      profile.bestWave = Math.max(0, parseInt(p.bestWave, 10) || 0);
     }
   }
 } catch (e) {}
@@ -518,7 +530,7 @@ function musicPlay() {
     if (pr && pr.catch) pr.catch(() => {
       // still blocked -> start on the player's first real input instead
       const kick = () => {
-        if (mode === 'play' && music.paused && phase !== 'matchover') music.play().catch(() => {});
+        if (mode === 'play' && music.paused && phase !== 'matchover' && phase !== 'survover') music.play().catch(() => {});
         window.removeEventListener('keydown', kick);
         window.removeEventListener('mousedown', kick);
         window.removeEventListener('touchstart', kick);
@@ -728,6 +740,8 @@ function makeTank(i, cellX, cellY, kind) {
     x: cellX * CELL + CELL / 2, y: cellY * CELL + CELL / 2,
     a: Math.atan2(ROWS / 2 * CELL - (cellY * CELL + CELL / 2), COLS / 2 * CELL - (cellX * CELL + CELL / 2)),
     alive: true, col: i === 0 ? P1_COL : P2_COL, glow: i === 0 ? P1_GLOW : P2_GLOW,
+    team: i === 0 ? 0 : 1,           // SURVIVAL: every enemy is team 1 — no enemy-on-enemy fire
+    r: TANK_R, hp: 1, frozenT: 0,    // bosses override r/hp; FREEZE power-up sets frozenT
     cd: 0, power: null, powerT: 0, shield: false,
     isAI: false, ai: { path: [], repath: 0, fireDelay: 0, dodge: 0, dodgeDir: 1, wander: null },
     score: 0, treadT: 0,
@@ -758,7 +772,7 @@ function fireShell(t) {
       id: ++shellSeq,
       x: mp0.x, y: mp0.y,
       vx: Math.cos(a) * SHELL_SPEED * 0.62, vy: Math.sin(a) * SHELL_SPEED * 0.62,
-      r: 9, owner: t.i, age: 0, grace: 0.12, big: true, heavy: true, smash: 2,
+      r: 9, owner: t.i, team: t.team, age: 0, grace: 0.12, big: true, heavy: true, smash: 2,
       bounces: -1, accel: 0, life: SHELL_LIFE, col: t.col,
     });
     t.power = null; t.powerT = 0;
@@ -772,24 +786,28 @@ function fireShell(t) {
 
   const sh = def.shell;
   const live = shells.filter(s => s.owner === t.i).length;
-  const max = t.power === 'rapid' ? 7 : (sh.maxLive || MAX_SHELLS);
+  const max = (t.power === 'rapid' ? 7 : (sh.maxLive || MAX_SHELLS)) + survMag(t);
   if (live >= max) return;
   const spread = t.power === 'triple' ? [-0.26, 0, 0.26] : [0];
-  const spdMul = t.power === 'rapid' ? 1.25 : 1;
+  const spdMul = (t.power === 'rapid' ? 1.25 : 1) * survShellMul(t);
+  // TEMPEST: two barrels — each trigger pull spawns a parallel PAIR (triple = 3 pairs)
+  const lats = def.twin ? [-5.5, 5.5] : [0];
   for (const off of spread) {
     const a = t.a + off;
     const mp = muzzlePoint(t, a);
-    shells.push({
-      id: ++shellSeq,
-      x: mp.x, y: mp.y,
-      vx: Math.cos(a) * sh.speed * spdMul, vy: Math.sin(a) * sh.speed * spdMul,
-      r: sh.r, owner: t.i, age: 0, grace: 0.12,
-      big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
-      bounces: sh.bounces === undefined ? -1 : sh.bounces, accel: sh.accel || 0,
-      life: sh.life || SHELL_LIFE, col: t.col,
-    });
+    for (const lat of lats) {
+      shells.push({
+        id: ++shellSeq,
+        x: mp.x - Math.sin(a) * lat, y: mp.y + Math.cos(a) * lat,
+        vx: Math.cos(a) * sh.speed * spdMul, vy: Math.sin(a) * sh.speed * spdMul,
+        r: sh.r, owner: t.i, team: t.team, age: 0, grace: 0.12,
+        big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
+        bounces: sh.bounces === undefined ? -1 : sh.bounces, accel: sh.accel || 0,
+        life: sh.life || SHELL_LIFE, col: t.col,
+      });
+    }
   }
-  t.cd = t.power === 'rapid' ? Math.max(0.1, def.fireCd * 0.45) : def.fireCd;
+  t.cd = (t.power === 'rapid' ? Math.max(0.1, def.fireCd * 0.45) : def.fireCd) * survReload(t);
   t.cloakT = 0;   // GHOST decloaks the moment it fires
   sfx.fire();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 10), t.y + Math.sin(t.a) * (TANK_R + 10), 5, t.col, 90, 0.18);
@@ -872,17 +890,12 @@ function fireLaser(t) {
       const [x1, y1, x2, y2] = segs[si];
       for (const tk of tanks) {
         if (!tk.alive) continue;
-        if (tk.i === t.i) continue;   // no friendly fire — reflections included
-        if (segCircleHit(x1, y1, x2, y2, tk.x, tk.y, TANK_R)) {
-          if (tk.shield) {
-            tk.shield = false; sfx.shield();
-            spawnParticles(tk.x, tk.y, 20, '#4de3c2', 180, 0.4);
-          } else explodeTank(tk);
-        }
+        if (tk.i === t.i || tk.team === t.team) continue;   // no friendly fire — reflections included
+        if (segCircleHit(x1, y1, x2, y2, tk.x, tk.y, tk.r || TANK_R)) damageTank(tk);
       }
     }
   }
-  t.cd = tankDef(t).fireCd * (t.power === 'rapid' ? 0.55 : 1);
+  t.cd = tankDef(t).fireCd * (t.power === 'rapid' ? 0.55 : 1) * survReload(t);
   t.cloakT = 0;
   sfx.laser();
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 8), t.y + Math.sin(t.a) * (TANK_R + 8), 8, '#ffffff', 120, 0.2);
@@ -899,6 +912,28 @@ function explodeTank(t) {
   spawnParticles(t.x, t.y, 22, '#ffffff', 160, 0.5);
   shake = 14; hitstop = 0.1;
   sfx.boom();
+  if (surv.on && t.team === 1) survEnemyDown(t);
+}
+// One hit lands on a tank. Order: shield eats it -> boss armor eats it -> tank dies.
+// Every damage source (shells, lasers, mines) funnels through here so bosses can't be
+// one-shot by a source someone forgot to teach about HP.
+function damageTank(t) {
+  if (t.shield) {
+    t.shield = false; sfx.shield();
+    spawnParticles(t.x, t.y, 20, '#4de3c2', 180, 0.4);
+    return;
+  }
+  if ((t.hp || 1) > 1) {
+    t.hp--; t.hurtT = 0.22;
+    spawnParticles(t.x, t.y, 14, '#ffffff', 150, 0.3);
+    shake = Math.max(shake, 6); sfx.crumble();
+    if (t.boss && t.boss.type === 'vortex' && !t.boss.summoned && t.hp <= Math.ceil(t.boss.maxHp / 2)) {
+      t.boss.summoned = true;
+      survSummonMinions(2);
+    }
+    return;
+  }
+  explodeTank(t);
 }
 function killShell(i) {
   const s = shells[i];
@@ -907,6 +942,272 @@ function killShell(i) {
 }
 
 // ============================== ROUND FLOW ==============================
+
+// ============================== SURVIVAL — TANK STORM ==============================
+// Endless waves vs up to 4 tanks at once. Boss every 5th wave (HP bar, special attacks).
+// Between waves: pick 1 of 3 stacking perks — the roguelite loop that makes run #40 as
+// interesting as run #1. Offline-only by design (net.role stays null throughout).
+const surv = { on: false, wave: 0, kills: 0, run: 0, perks: {}, draft: [], bossName: '', enemiesAtStart: 0 };
+const PERKS = {
+  overdrive: { icon: '⚙️', name: 'OVERDRIVE',    desc: '+10% tank speed' },
+  quickload: { icon: '🔫', name: 'QUICKLOAD',    desc: '-18% reload time' },
+  magazine:  { icon: '➕', name: 'BIG MAGAZINE', desc: '+1 shell in the air' },
+  velocity:  { icon: '🎯', name: 'VELOCITY',     desc: '+12% shell speed' },
+  aegis:     { icon: '🛡️', name: 'AEGIS',        desc: 'Start every wave with a shield' },
+  salvage:   { icon: '🔧', name: 'SALVAGE',      desc: '+40% scrap this run' },
+};
+const PERK_ORDER = ['overdrive', 'quickload', 'magazine', 'velocity', 'aegis', 'salvage'];
+// perk multipliers — player-only, and only while a survival run is live
+function survSpeed(t)    { return (surv.on && t.team === 0) ? 1 + 0.10 * (surv.perks.overdrive || 0) : 1; }
+function survReload(t)   { return (surv.on && t.team === 0) ? Math.pow(0.82, surv.perks.quickload || 0) : 1; }
+function survMag(t)      { return (surv.on && t.team === 0) ? (surv.perks.magazine || 0) : 0; }
+function survShellMul(t) { return (surv.on && t.team === 0) ? 1 + 0.12 * (surv.perks.velocity || 0) : 1; }
+function survGain(n) { surv.run += Math.round(n * (1 + 0.4 * (surv.perks.salvage || 0))); }
+
+function startSurvival() {
+  surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
+  matchCfg = { mode: 'survival', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
+               playerTank: profile.owned[profile.tank] ? profile.tank : 'scout', foeTank: 'scout', battle: null };
+  aiParams = AI_LEVELS.officer;
+  trailOf = [profile.trail || '', ''];
+  winReported = true;   // survival never posts to the wins leaderboard — wins mean matches
+  matchScrap = 0;
+  survStartWave(1);
+  mode = 'play'; paused = false;
+  musicPlay();
+  show('menu', false); show('victory', false); show('helpBox', false);
+  show('garage', false); show('campaign', false); show('online', false);
+}
+// The storm's escalation table — all of survival's difficulty lives in these three helpers.
+function survPlan(w) {
+  if (w % 5 === 0) return { boss: true };
+  return { boss: false, count: w < 2 ? 1 : w < 4 ? 2 : w < 8 ? 3 : 4 };
+}
+function survTier(w) {
+  if (w <= 2) return 'rookie';
+  if (w <= 5) return Math.random() < 0.5 ? 'rookie' : 'officer';
+  if (w <= 9) return Math.random() < 0.35 ? 'ace' : 'officer';
+  if (w <= 12) return Math.random() < 0.7 ? 'ace' : 'officer';
+  return 'ace';
+}
+function survKind(w) {
+  const pool = ['scout'];
+  if (w >= 3) pool.push('viper');
+  if (w >= 4) pool.push('mammoth');
+  if (w >= 6) pool.push('pinball');
+  if (w >= 8) pool.push('minelayer');
+  if (w >= 10) pool.push('photon');
+  if (w >= 12) pool.push('ghost');
+  if (w >= 14) pool.push('tempest');
+  return pool[(Math.random() * pool.length) | 0];
+}
+// far free cells for enemy spawns: away from the player, apart from each other, off pools
+function survSpawnCells(n, px, py) {
+  const pcx = (px / CELL) | 0, pcy = (py / CELL) | 0;
+  const picked = [];
+  for (let minDist = 5; minDist >= 3 && picked.length < n; minDist--) {
+    for (let tries = 0; tries < 400 && picked.length < n; tries++) {
+      const cx = (Math.random() * COLS) | 0, cy = (Math.random() * ROWS) | 0;
+      if (poolCells.has(cx + ',' + cy)) continue;
+      if (Math.hypot(cx - pcx, cy - pcy) < minDist) continue;
+      if (picked.some(([ox, oy]) => Math.hypot(cx - ox, cy - oy) < 2)) continue;
+      picked.push([cx, cy]);
+    }
+  }
+  while (picked.length < n) picked.push([COLS - 1, ROWS - 1]);   // last-resort corner
+  return picked;
+}
+function survStartWave(w) {
+  surv.wave = w;
+  roundArena = pickArena();
+  genMaze(roundArena);
+  genPools();
+  const corners = [[0, 0], [COLS - 1, ROWS - 1], [COLS - 1, 0], [0, ROWS - 1]];
+  const pc = corners[(Math.random() * 4) | 0];
+  const player = makeTank(0, pc[0], pc[1], matchCfg.playerTank);
+  if (surv.perks.aegis) player.shield = true;
+  tanks = [player];
+  const plan = survPlan(w);
+  surv.bossName = '';
+  if (plan.boss) {
+    const types = [['warlord', 'THE WARLORD', 'scout'], ['juggernaut', 'THE JUGGERNAUT', 'mammoth'],
+                   ['vortex', 'THE VORTEX', 'photon']];
+    const [type, name, kind] = types[(((w / 5) | 0) - 1) % 3];
+    surv.bossName = name;
+    const [[cx, cy]] = survSpawnCells(1, player.x, player.y);
+    const boss = makeTank(1, cx, cy, kind);
+    boss.isAI = true; boss.aiLv = w >= 10 ? 'ace' : 'officer';
+    boss.boss = { type, maxHp: 5 + 2 * Math.floor((w - 5) / 5), summoned: false };
+    boss.hp = boss.boss.maxHp;
+    boss.r = 18;                       // bigger hitbox to match the bigger silhouette
+    boss.col = BOSS_COL; boss.glow = BOSS_GLOW;
+    tanks.push(boss);
+  } else {
+    const cells = survSpawnCells(plan.count, player.x, player.y);
+    for (let k = 0; k < plan.count; k++) {
+      const e = makeTank(1 + k, cells[k][0], cells[k][1], survKind(w));
+      e.isAI = true; e.aiLv = survTier(w);
+      tanks.push(e);
+    }
+  }
+  surv.enemiesAtStart = tanks.length - 1;
+  shells = []; beams = []; mines = []; particles = []; treads = []; powerup = null; confetti = [];
+  powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
+  roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
+  phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
+}
+function survEnemyDown(t) {
+  surv.kills++;
+  survGain(t.boss ? 22 : 2);
+}
+function survSummonMinions(n) {
+  // THE VORTEX calls for backup at half health — fresh rookies, far from the player
+  const cells = survSpawnCells(n, tanks[0].x, tanks[0].y);
+  for (let k = 0; k < n; k++) {
+    const e = makeTank(tanks.length, cells[k][0], cells[k][1], 'scout');
+    e.isAI = true; e.aiLv = 'rookie';
+    tanks.push(e);
+    spawnParticles(e.x, e.y, 24, P2_COL, 180, 0.5);
+  }
+  sfx.count();
+  banner = 'REINFORCEMENTS!'; bannerCol = BOSS_COL;
+  setTimeout(() => { if (banner === 'REINFORCEMENTS!') banner = ''; }, 1400);
+}
+function survBossThink(t, foe, dt) {
+  const B = t.boss;
+  if (B.type === 'warlord') {
+    // radial shell bursts on a timer — stand in a doorway or die in the open
+    B.burstCd = (B.burstCd === undefined ? 2.4 : B.burstCd) - dt;
+    if (B.burstCd <= 0 && phase === 'play') {
+      B.burstCd = Math.max(2.1, 3.6 - surv.wave * 0.04);
+      survRadialBurst(t, 10);
+    }
+    aiThink(t, foe, dt);
+  } else if (B.type === 'juggernaut') {
+    if (B.charging > 0) {
+      B.charging -= dt;
+      t.a = B.chargeA;
+      moveTankVec(t, Math.cos(B.chargeA) * tankDef(t).speed * 2.4 * dt,
+                     Math.sin(B.chargeA) * tankDef(t).speed * 2.4 * dt);
+      // a landed charge IS the attack
+      if (foe.alive && Math.hypot(t.x - foe.x, t.y - foe.y) < (t.r || TANK_R) + (foe.r || TANK_R) + 2) {
+        B.charging = 0;
+        damageTank(foe);
+      }
+      return;
+    }
+    if (t.telegraphT > 0) {
+      t.telegraphT -= dt;   // winding up: stands still — this is YOUR window
+      if (t.telegraphT <= 0) {
+        B.charging = 1.05;
+        B.chargeA = Math.atan2(foe.y - t.y, foe.x - t.x);
+        sfx.go();
+      }
+      return;
+    }
+    B.chargeCd = (B.chargeCd === undefined ? 4 : B.chargeCd) - dt;
+    if (B.chargeCd <= 0 && phase === 'play' && foe.alive && hasLOS(t.x, t.y, foe.x, foe.y)) {
+      B.chargeCd = 5.5;
+      t.telegraphT = 0.7;
+      sfx.count();
+    }
+    aiThink(t, foe, dt);
+  } else aiThink(t, foe, dt);   // VORTEX: photon AI; reinforcements arrive at half HP
+}
+function survRadialBurst(t, n) {
+  const rot = (Math.random() * Math.PI) / n;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2 + rot;
+    shells.push({
+      id: ++shellSeq,
+      x: t.x + Math.cos(a) * ((t.r || TANK_R) + 8), y: t.y + Math.sin(a) * ((t.r || TANK_R) + 8),
+      vx: Math.cos(a) * 215, vy: Math.sin(a) * 215,
+      r: 4, owner: t.i, team: 1, age: 0, grace: 0.05,
+      big: false, heavy: false, smash: 0, bounces: 1, accel: 0, life: 4.5, col: BOSS_COL,
+    });
+  }
+  sfx.fire();
+  spawnParticles(t.x, t.y, 20, BOSS_COL, 180, 0.4);
+  shake = Math.max(shake, 6);
+}
+function survWaveCleared() {
+  survGain(6 + surv.wave + (surv.bossName ? 24 : 0));
+  // draft: 3 distinct perks (AEGIS leaves the pool once owned — a second shield is nothing)
+  const pool = PERK_ORDER.filter(id => id !== 'aegis' || !surv.perks.aegis);
+  surv.draft = [];
+  while (surv.draft.length < 3 && pool.length) {
+    const i = (Math.random() * pool.length) | 0;
+    surv.draft.push(pool.splice(i, 1)[0]);
+  }
+  phase = 'draft'; phaseT = 0;
+  sfx.powerup();
+}
+let survDraftRects = [];
+function survApplyPerk(i) {
+  const id = surv.draft[i];
+  if (!id || phase !== 'draft') return;
+  surv.perks[id] = (surv.perks[id] || 0) + 1;
+  sfx.powerup();
+  survStartWave(surv.wave + 1);
+}
+function survOver() {
+  phase = 'survover'; phaseT = 0;
+  musicStop(true);
+  // milestone bonuses for how deep the run got (paid raw — salvage already paid its share)
+  for (const [w, pay] of [[5, 25], [10, 75], [15, 150], [20, 300]]) if (surv.wave >= w) surv.run += pay;
+  const newBest = surv.wave > (profile.bestWave || 0);
+  if (newBest) profile.bestWave = surv.wave;
+  profile.scrap += surv.run;
+  saveProfile();
+  document.getElementById('winName').textContent = 'THE STORM ENDS';
+  document.getElementById('winName').style.color = BOSS_COL;
+  document.getElementById('winScore').textContent =
+    'WAVE ' + surv.wave + '  ·  ' + surv.kills + ' TANKS DESTROYED' + (newBest ? '  ·  ★ NEW BEST!' : '');
+  document.getElementById('winScrap').textContent = '+' + surv.run + ' SCRAP EARNED';
+  document.getElementById('btnRematch').classList.remove('hidden');
+  document.getElementById('winWait').classList.add('hidden');
+  show('victory', true);
+  sfx.win();
+  if (newBest) makeVicConfetti();
+  updateWinTag();
+}
+// the between-wave upgrade draft, drawn on the canvas so it works on every device
+function drawDraft() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(5,8,15,0.78)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#4de3c2'; ctx.font = '900 30px sans-serif';
+  ctx.fillText('WAVE ' + surv.wave + ' CLEARED!', W / 2, 92);
+  ctx.fillStyle = '#dfe8ff'; ctx.font = '800 18px sans-serif';
+  ctx.fillText('CHOOSE AN UPGRADE — it lasts the whole storm', W / 2, 128);
+  survDraftRects = [];
+  const cw = 240, ch = 190, gap = 34;
+  const x0 = W / 2 - (cw * 1.5 + gap);
+  for (let i = 0; i < surv.draft.length; i++) {
+    const pk = PERKS[surv.draft[i]];
+    const x = x0 + i * (cw + gap), y = H / 2 - ch / 2 + 30;
+    survDraftRects.push({ x, y, w: cw, h: ch, i });
+    ctx.fillStyle = '#101a30';
+    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.5;
+    ctx.shadowColor = 'rgba(255,209,102,0.35)'; ctx.shadowBlur = 16;
+    roundRect(x, y, cw, ch, 14);
+    ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
+    ctx.shadowBlur = 0;
+    ctx.font = '46px serif';
+    ctx.fillText(pk.icon, x + cw / 2, y + 52);
+    ctx.fillStyle = '#ffd166'; ctx.font = '900 19px sans-serif';
+    ctx.fillText(pk.name, x + cw / 2, y + 100);
+    const lvl = surv.perks[surv.draft[i]] || 0;
+    ctx.fillStyle = '#dfe8ff'; ctx.font = '600 14px sans-serif';
+    ctx.fillText(pk.desc, x + cw / 2, y + 128);
+    if (lvl) { ctx.fillStyle = '#7fd8c8'; ctx.font = '700 12px sans-serif'; ctx.fillText('owned ×' + lvl + ' — stacks!', x + cw / 2, y + 150); }
+    ctx.fillStyle = '#5f7099'; ctx.font = '800 13px sans-serif';
+    ctx.fillText('PRESS ' + (i + 1) + '  ·  OR TAP', x + cw / 2, y + ch - 16);
+  }
+  ctx.restore();
+}
+
 function startMatch(cfg) {
   matchCfg = {
     mode: cfg.mode || 'quick',
@@ -917,6 +1218,7 @@ function startMatch(cfg) {
     foeTank: cfg.foeTank || 'scout',
     battle: cfg.battle || null,
   };
+  surv.on = false;   // any classic match ends survival's rule changes
   aiParams = AI_LEVELS[matchCfg.aiLevel] || AI_LEVELS.rookie;
   trailOf = [profile.trail || '', (matchCfg.mode === 'online') ? (net.guestTrail || '') : ''];
   tanks = []; roundNum = 1; winReported = false; matchScrap = 0;
@@ -1017,22 +1319,27 @@ function makeVicConfetti() {
 function updateWinTag() {
   document.getElementById('winTag').textContent = totalWins > 0 ? ('★ career match wins: ' + totalWins) : '';
   const sm = document.getElementById('scrapMenu');
-  if (sm) sm.textContent = profile.scrap;
+  if (sm) sm.textContent = profile.scrap;  const st = document.getElementById('survTag');
+  if (st) st.textContent = (profile.bestWave || 0) > 0
+    ? ('STORM BEST: WAVE ' + profile.bestWave + (profile.bestWave >= 10 ? '  ·  TEMPEST UNLOCKED' : ''))
+    : 'How deep into the storm can you go?';
 }
 
 // ============================== AI ==============================
 function aiThink(t, foe, dt) {
   const ai = t.ai;
+  const aiP = (t.aiLv && AI_LEVELS[t.aiLv]) || aiParams;   // per-tank tier when set
   const cx = Math.max(0, Math.min(COLS - 1, (t.x / CELL) | 0));
   const cy = Math.max(0, Math.min(ROWS - 1, (t.y / CELL) | 0));
   const fx = Math.max(0, Math.min(COLS - 1, (foe.x / CELL) | 0));
   const fy = Math.max(0, Math.min(ROWS - 1, (foe.y / CELL) | 0));
 
   // dodge incoming shells (officer & ace)
-  if (aiParams.dodge) {
+  if (aiP.dodge) {
     ai.dodge -= dt;
     for (const s of shells) {
       if (s.owner === t.i) continue;   // own shells are harmless now — don't dodge them
+      if (s.team !== undefined && s.team === t.team) continue;   // teammates' too
       const rx = t.x - s.x, ry = t.y - s.y;
       const dist = Math.sqrt(rx * rx + ry * ry);
       if (dist > 190) continue;
@@ -1042,6 +1349,7 @@ function aiThink(t, foe, dt) {
     }
     for (const m of mines) {   // armed enemy mines: steer around, don't step on
       if (m.owner === t.i || m.age < 1) continue;
+      if (tanks[m.owner] && tanks[m.owner].team === t.team) continue;
       const rx = t.x - m.x, ry = t.y - m.y;
       const dist = Math.hypot(rx, ry);
       if (dist < 62) { ai.dodge = 0.3; ai.dodgeDir = ((rx * (foe.y - t.y) - ry * (foe.x - t.x)) > 0) ? -1 : 1; break; }
@@ -1057,7 +1365,7 @@ function aiThink(t, foe, dt) {
   // repath periodically
   ai.repath -= dt;
   if (ai.repath <= 0) {
-    ai.repath = aiParams.repath;
+    ai.repath = aiP.repath;
     ai.path = bfsPath(cx, cy, fx, fy) || [];
   }
   // steer to next waypoint
@@ -1092,25 +1400,26 @@ function steerToward(t, targetA, dt, drive) {
 }
 function tryAIFire(t, foe, dt) {
   const ai = t.ai;
+  const aiP = (t.aiLv && AI_LEVELS[t.aiLv]) || aiParams;
   ai.fireDelay -= dt;
   if (!foe.alive || ai.fireDelay > 0) return;
   const def = tankDef(t);
   // predicted foe position (top tier leads moving targets)
   let tx = foe.x, ty = foe.y;
-  if (aiParams.lead && !def.laser) {
+  if (aiP.lead && !def.laser) {
     const dist = Math.hypot(foe.x - t.x, foe.y - t.y);
     const tta = dist / (def.shell ? def.shell.speed : SHELL_SPEED);
     tx += (foe.lastVX || 0) * tta * 0.7; ty += (foe.lastVY || 0) * tta * 0.7;
   }
   if (!hasLOS(t.x, t.y, tx, ty)) return;
   const aimA = Math.atan2(ty - t.y, tx - t.x);
-  if (Math.abs(angDiff(t.a, aimA)) < aiParams.aimErr + 0.06) {
+  if (Math.abs(angDiff(t.a, aimA)) < aiP.aimErr + 0.06) {
     // don't fire point-blank into a wall next to us
     const mx = t.x + Math.cos(t.a) * (TANK_R + 10), my = t.y + Math.sin(t.a) * (TANK_R + 10);
     if (hasLOS(mx, my, tx, ty)) {
       fireShell(t);
       // laser foes get a long extra breather — an instant-hit weapon must not spam
-      ai.fireDelay = (aiParams.fireMin + Math.random() * aiParams.fireRnd) * (def.laser ? 2.4 : 1);
+      ai.fireDelay = (aiP.fireMin + Math.random() * aiP.fireRnd) * (def.laser ? 2.4 : 1);
     }
   }
 }
@@ -1128,7 +1437,7 @@ function moveTankVec(t, dx, dy) {
     for (let iter = 0; iter < 3; iter++) {
       let hitAny = false;
       for (const r of wallRects) {
-        const hit = circleRectPush(t.x, t.y, TANK_R, r);
+        const hit = circleRectPush(t.x, t.y, t.r || TANK_R, r);
         if (hit) { t.x += hit.nx * hit.push; t.y += hit.ny * hit.push; hitAny = true; }
       }
       for (const pl of pools) {   // molten pools: solid for tanks (shells ignore them)
@@ -1195,14 +1504,10 @@ function updateShells(dt) {
       for (const t of tanks) {
         if (!t.alive) continue;
         if (s.owner === t.i) continue;
+        if (s.team !== undefined && s.team === t.team) continue;   // teammates never collide
         const d = Math.hypot(s.x - t.x, s.y - t.y);
-        if (d < s.r + TANK_R - 2) {
-          if (t.shield) {
-            t.shield = false; sfx.shield();
-            spawnParticles(t.x, t.y, 20, '#4de3c2', 180, 0.4);
-            dead = true; break;
-          }
-          explodeTank(t);
+        if (d < s.r + (t.r || TANK_R) - 2) {
+          damageTank(t);
           dead = true; break;
         }
       }
@@ -1240,12 +1545,10 @@ function updateMines(dt) {
     if (m.age < 1) continue;   // arming
     for (const t of tanks) {
       if (!t.alive || t.i === m.owner) continue;   // no friendly fire — mines follow suit
-      if (Math.hypot(t.x - m.x, t.y - m.y) < TANK_R + 11) {
+      if (t.team !== undefined && tanks[m.owner] && t.team === tanks[m.owner].team) continue;
+      if (Math.hypot(t.x - m.x, t.y - m.y) < (t.r || TANK_R) + 11) {
         mines.splice(i, 1);
-        if (t.shield) {
-          t.shield = false; sfx.shield();
-          spawnParticles(t.x, t.y, 20, '#4de3c2', 180, 0.4);
-        } else explodeTank(t);
+        damageTank(t);
         break;
       }
     }
@@ -1279,6 +1582,11 @@ function updatePowerups(dt) {
         if (!t.alive) continue;
         if (Math.hypot(t.x - powerup.x, t.y - powerup.y) < TANK_R + 13) {
           if (powerup.kind === 'shield') t.shield = true;
+          else if (powerup.kind === 'freeze') {
+            // instant: every tank on the OTHER team gets iced for 3.5s (AI can grab it too!)
+            for (const o of tanks) if (o.alive && o.team !== t.team) o.frozenT = 3.5;
+            sfx.shield();
+          }
           else { t.power = powerup.kind; t.powerT = powerup.kind === 'big' ? 99 : 8; }
           sfx.powerup();
           spawnParticles(powerup.x, powerup.y, 16, powerColor(powerup.kind), 140, 0.4);
@@ -1291,7 +1599,10 @@ function updatePowerups(dt) {
     powerupTimer -= dt;
     if (powerupTimer <= 0) {
       powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
-      const kinds = ['triple', 'rapid', 'shield', 'big'];
+      // FREEZE stays offline-only: the frozen flag isn't in the online snapshot format,
+      // and desyncing a guest over an ice cube isn't worth it.
+      const kinds = matchCfg.mode === 'online' ? ['triple', 'rapid', 'shield', 'big']
+        : ['triple', 'rapid', 'shield', 'big', 'freeze'];
       // random free cell not too near either tank
       for (let tries = 0; tries < 30; tries++) {
         const cx = (Math.random() * COLS) | 0, cy = (Math.random() * ROWS) | 0;
@@ -1311,7 +1622,8 @@ function updatePowerups(dt) {
   }
 }
 function powerColor(kind) {
-  return kind === 'triple' ? '#ffd166' : kind === 'rapid' ? '#ff6b6b' : kind === 'shield' ? '#4de3c2' : '#c792ea';
+  return kind === 'triple' ? '#ffd166' : kind === 'rapid' ? '#ff6b6b' : kind === 'shield' ? '#4de3c2'
+    : kind === 'freeze' ? '#7fd8ff' : '#c792ea';
 }
 
 // ============================== UPDATE ==============================
@@ -1336,7 +1648,8 @@ function readLocalInput() {
 // and by the GUEST's client-side prediction — one implementation so they never diverge.
 function applyDrive(t, target, throttle, dt) {
   const speedMul = (t.power === 'rapid' ? 1.12 : 1) * (throttle || 1)
-    * (roundArena === 'snow' ? SNOW_SPEED : 1);   // deep snow: everyone 15% slower
+    * (roundArena === 'snow' ? SNOW_SPEED : 1)   // deep snow: everyone 15% slower
+    * survSpeed(t);                              // survival OVERDRIVE perks
   const ox = t.x, oy = t.y;
   if (target !== null && target !== undefined) {
     const step = tankDef(t).speed * speedMul * dt;
@@ -1391,8 +1704,12 @@ function update(dt) {
     if (phaseT >= 1.8) { phase = 'play'; phaseT = 0; sfx.go(); }
     return;
   }
-  if (phase === 'matchover') {
+  if (phase === 'matchover' || phase === 'survover') {
     updateParticles(dt);   // confetti keeps drifting behind the victory panel
+    return;
+  }
+  if (phase === 'draft') {
+    updateParticles(dt);   // the storm waits while you choose your upgrade
     return;
   }
   if (phase === 'roundover') {
@@ -1438,7 +1755,7 @@ function update(dt) {
     }
   }
   // sudden death: crumble walls
-  if (!suddenDeath && roundTime > SUDDEN_DEATH_AT) { suddenDeath = true; sdTimer = 0; banner = ''; }
+  if (!suddenDeath && roundTime > (surv.on ? 45 : SUDDEN_DEATH_AT)) { suddenDeath = true; sdTimer = 0; banner = ''; }
   if (suddenDeath) {
     sdTimer -= dt;
     if (sdTimer <= 0 && wallRects.length > 6) {
@@ -1459,9 +1776,16 @@ function update(dt) {
     if (!t.alive) continue;
     t.cd -= dt;
     if (tankDef(t).cloak) t.cloakT = (t.cloakT || 0) + dt;
+    if (t.frozenT > 0) {   // FREEZE power-up: engine's iced — no driving, no firing
+      t.frozenT -= dt;
+      t.lastVX = 0; t.lastVY = 0;
+      continue;
+    }
     if (t.isAI) {
       const ox = t.x, oy = t.y;
-      aiThink(t, tanks[1 - t.i], dt);
+      const foe = surv.on ? tanks[0] : tanks[1 - t.i];
+      if (t.boss) survBossThink(t, foe, dt);
+      else aiThink(t, foe, dt);
       t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
     } else if (t.isRemote) {
       // online guest's tank: replay their latest input through the SAME drive path
@@ -1476,13 +1800,17 @@ function update(dt) {
       if (treads.length > 260) treads.shift();
     }
   }
-  // tank-tank soft push
-  const [a, b] = tanks;
-  if (a.alive && b.alive) {
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (d < TANK_R * 2 && d > 0) {
-      const push = (TANK_R * 2 - d) / 2, nx = (a.x - b.x) / d, ny = (a.y - b.y) / d;
-      a.x += nx * push; a.y += ny * push; b.x -= nx * push; b.y -= ny * push;
+  // tank-tank soft push — every alive pair (survival runs up to 5 tanks at once)
+  for (let pi = 0; pi < tanks.length; pi++) {
+    for (let pj = pi + 1; pj < tanks.length; pj++) {
+      const a = tanks[pi], b = tanks[pj];
+      if (!a.alive || !b.alive) continue;
+      const rr = (a.r || TANK_R) + (b.r || TANK_R);
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < rr && d > 0) {
+        const push = (rr - d) / 2, nx = (a.x - b.x) / d, ny = (a.y - b.y) / d;
+        a.x += nx * push; a.y += ny * push; b.x -= nx * push; b.y -= ny * push;
+      }
     }
   }
   updateShells(dt);
@@ -1493,7 +1821,12 @@ function update(dt) {
   for (const tr of treads) tr.life -= dt;
   while (treads.length && treads[0].life <= 0) treads.shift();
 
-  if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
+  if (surv.on) {
+    if (phase === 'play') {
+      if (!tanks[0].alive) survOver();
+      else if (!tanks.some(t => t.team === 1 && t.alive)) survWaveCleared();
+    }
+  } else if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
   netHostTick();   // online host: snapshots @20/s + dirty-wall broadcasts (no-op offline)
 }
 function updateParticles(dt) {
@@ -1796,6 +2129,7 @@ function render() {
     ctx.globalAlpha = 1;
     // tanks
     for (const t of tanks) if (t.alive) drawTank(t);
+    for (const t of tanks) if (t.alive) drawTankOverlays(t);
     // particles
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, p.life / p.max);
@@ -1824,13 +2158,19 @@ function render() {
       const n = Math.ceil(1.5 - phaseT);
       const label = phaseT < 1.5 ? String(Math.max(1, n)) : 'GO!';
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
-      drawBanner(ARENA_LABELS[roundArena] || '', '#8fa5cf', 20, H / 2 + 64);
+      drawBanner(surv.on
+        ? ('WAVE ' + surv.wave + ' · ' + (surv.bossName ? 'BOSS: ' + surv.bossName
+            : surv.enemiesAtStart + (surv.enemiesAtStart > 1 ? ' ENEMIES' : ' ENEMY'))
+            + ' · ' + (ARENA_LABELS[roundArena] || ''))
+        : (ARENA_LABELS[roundArena] || ''), surv.on && surv.bossName ? BOSS_COL : '#8fa5cf', 20, H / 2 + 64);
       const fxNote = roundArena === 'snow' ? 'deep snow — all tanks 15% slower'
         : roundArena === 'lava' ? 'molten pools — tanks blocked, shells fly over' : '';
       if (fxNote) drawBanner(fxNote, '#6b7ea3', 14, H / 2 + 92);
       if (!render._lastCount || render._lastCount !== label) { render._lastCount = label; label === 'GO!' ? sfx.go() : sfx.count(); }
     } else render._lastCount = null;
     if (phase === 'roundover' && banner) drawBanner(banner, bannerCol, 46);
+    if (surv.on && banner && phase === 'play') drawBanner(banner, bannerCol, 30, 60);
+    if (phase === 'draft') drawDraft();
     if (suddenDeath && phase === 'play' && (roundTime % 1) < 0.55) drawBanner('SUDDEN DEATH', '#ff6b6b', 26, 44);
     if (paused) drawBanner('PAUSED', '#dfe8ff', 50);
     // confetti (drawn under DOM victory panel)
@@ -1881,6 +2221,53 @@ function render() {
   }
   ctx.restore();
 }
+// World-space add-ons that must not rotate with the hull: boss armor pips, the hurt
+// flash, and the FREEZE ice block.
+function drawTankOverlays(t) {
+  if (t.hurtT > 0) {
+    t.hurtT -= 1 / 60;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, t.hurtT / 0.22) * 0.8;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(t.x, t.y, (t.r || TANK_R) + 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  if (t.boss && (t.hp || 1) > 0) {
+    // armor pips above the boss — the health bar IS the fight's progress bar
+    ctx.save();
+    const n = t.boss.maxHp, w = Math.min(90, n * 12);
+    const x0 = t.x - w / 2, y0 = t.y - (t.r || TANK_R) - 18;
+    ctx.fillStyle = 'rgba(7,10,18,0.7)';
+    roundRect(x0 - 4, y0 - 4, w + 8, 12, 5);
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = i < t.hp ? BOSS_COL : 'rgba(160,170,200,0.25)';
+      ctx.fillRect(x0 + (i * w / n) + 1, y0, w / n - 2, 4);
+    }
+    ctx.restore();
+  }
+  if (t.telegraphT > 0) {   // JUGGERNAUT wind-up: unmistakable red pulse = get out of the lane
+    ctx.save();
+    ctx.globalAlpha = 0.5 + 0.45 * Math.sin(performance.now() / 60);
+    ctx.strokeStyle = BOSS_COL; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(t.x, t.y, (t.r || TANK_R) + 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  if (t.frozenT > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.55 + 0.1 * Math.sin(performance.now() / 150);
+    ctx.fillStyle = '#bfe9ff';
+    ctx.beginPath(); ctx.arc(t.x, t.y, (t.r || TANK_R) + 4, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = '#e8fbff'; ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {   // icicle spikes
+      const a2 = i * Math.PI / 3 + 0.3;
+      ctx.beginPath();
+      ctx.moveTo(t.x + Math.cos(a2) * 6, t.y + Math.sin(a2) * 6);
+      ctx.lineTo(t.x + Math.cos(a2) * ((t.r || TANK_R) + 9), t.y + Math.sin(a2) * ((t.r || TANK_R) + 9));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
 function drawTank(t) {
   ctx.save();
   // GHOST cloak: fades after ~1.2s without firing. Your own ghost stays readable to you;
@@ -1904,11 +2291,12 @@ function drawTank(t) {
   ctx.rotate(t.a);
   const spr = tankSprites[t.kind];
   if (spr && SPRITE_META[t.kind]) {
-    // Meshy sprite: hull-centered, team-tinted, soft team glow
+    // Meshy sprite: hull-centered, team-tinted, soft team glow.
+    // Tint slot: player 0, boss 2 (red), any other enemy 1 — survival tanks have i > 1.
     const sm = SPRITE_META[t.kind];
-    const scale = (TANK_R * 2.55) / sm.h;
-    ctx.shadowColor = t.glow; ctx.shadowBlur = 12;
-    ctx.drawImage(spr[t.i], -sm.cx * scale, -sm.cy * scale, sm.w * scale, sm.h * scale);
+    const scale = ((t.r || TANK_R) * 2.55) / sm.h;
+    ctx.shadowColor = t.glow; ctx.shadowBlur = t.boss ? 20 : 12;
+    ctx.drawImage(spr[t.boss ? 2 : (t.i === 0 ? 0 : 1)], -sm.cx * scale, -sm.cy * scale, sm.w * scale, sm.h * scale);
     ctx.restore();
   } else {
     // vector fallback (sprite still loading / failed)
@@ -1927,8 +2315,13 @@ function drawTank(t) {
     ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
     // barrel (shape varies a touch by tank type)
     ctx.fillStyle = t.col;
-    const bw = t.kind === 'mammoth' ? 8 : (t.kind === 'viper' ? 3 : 5);
-    ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
+    if (t.kind === 'tempest') {   // twin cannons — no sprite yet, but the silhouette sells it
+      ctx.fillRect(6, -7, TANK_R + 6, 4);
+      ctx.fillRect(6, 3, TANK_R + 6, 4);
+    } else {
+      const bw = t.kind === 'mammoth' ? 8 : (t.kind === 'viper' ? 3 : 5);
+      ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
+    }
     if (t.kind === 'photon') {   // glowing emitter tip
       ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8;
       ctx.beginPath(); ctx.arc(TANK_R + 11, 0, 3, 0, Math.PI * 2); ctx.fill();
@@ -1969,7 +2362,8 @@ function drawPowerup(p) {
   ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = col;
   ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const glyph = p.kind === 'triple' ? '▲' : p.kind === 'rapid' ? '⚡' : p.kind === 'shield' ? '⬤' : '■';
+  const glyph = p.kind === 'triple' ? '▲' : p.kind === 'rapid' ? '⚡' : p.kind === 'shield' ? '⬤'
+    : p.kind === 'freeze' ? '❄' : '■';
   ctx.fillText(glyph, 0, 1);
   // expiry blink
   if (p.age > POWERUP_LIFE - 3 && (p.age % 0.5) < 0.25) { ctx.globalAlpha = 0.3; }
@@ -1989,6 +2383,22 @@ function drawBanner(text, col, size, yOff) {
   ctx.restore();
 }
 function drawHUD() {
+  if (surv.on) {
+    // survival header: wave · enemies left · scrap banked this run
+    ctx.save();
+    const alive = tanks.filter(t => t.team === 1 && t.alive).length;
+    ctx.fillStyle = 'rgba(7, 10, 18, 0.72)';
+    roundRect(W / 2 - 190, 4, 380, 28, 14);
+    ctx.textBaseline = 'middle'; ctx.font = '900 15px sans-serif';
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffd166';
+    ctx.fillText('⚡ WAVE ' + surv.wave, W / 2 - 172, 19);
+    ctx.textAlign = 'center'; ctx.fillStyle = alive ? '#ff8f9f' : '#7fd8c8';
+    ctx.fillText(alive ? ('⚔ ' + alive + ' LEFT') : 'CLEAR!', W / 2 + 10, 19);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#9fb3d9';
+    ctx.fillText('🔧 +' + surv.run, W / 2 + 172, 19);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   // score pips top center
   const cx = W / 2, y = 18;
@@ -2022,6 +2432,17 @@ function drawPip(x, y, filled, col) {
   ctx.restore();
 }
 
+// draft cards accept taps and clicks (same coordinate mapping the touch controls use)
+canvas.addEventListener('pointerdown', (e) => {
+  if (!surv.on || phase !== 'draft') return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (W / rect.width);
+  const y = (e.clientY - rect.top) * (H / rect.height);
+  for (const r of survDraftRects) {
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { survApplyPerk(r.i); break; }
+  }
+});
+
 // ============================== LOOP ==============================
 let last = performance.now(), acc = 0;
 const STEP = 1 / 60;
@@ -2037,12 +2458,16 @@ function frame(now) {
 
 // ============================== INPUT ==============================
 window.addEventListener('keydown', (e) => {
+  if (surv.on && phase === 'draft' && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) {
+    survApplyPerk(+e.code.slice(-1) - 1);
+    return;
+  }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   audioInit();
   if (e.code === 'KeyP' && mode === 'play' && matchCfg.mode !== 'online') {
     paused = !paused;
-    if (music && phase !== 'matchover') { if (paused) music.pause(); else music.play().catch(() => {}); }
+    if (music && phase !== 'matchover' && phase !== 'survover') { if (paused) music.pause(); else music.play().catch(() => {}); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -2120,6 +2545,7 @@ function renderGarage() {
     card.className = 'gcard' + (sel ? ' sel' : '');
     const thumb = document.createElement('img');
     thumb.src = 'img/tank_' + k + '.png';
+    thumb.onerror = () => { thumb.style.visibility = 'hidden'; };   // tanks without art yet
     thumb.alt = d.name;
     thumb.style.cssText = 'height:46px;max-width:100px;object-fit:contain;flex:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.55));';
     card.appendChild(thumb);
@@ -2133,13 +2559,17 @@ function renderGarage() {
       '<div class="gtag">' + d.tag + '</div>' +
       '<div class="gstats">SPEED <b>' + spd + '</b> &nbsp; RATE <b>' + rate + '</b> &nbsp; PUNCH <b>' + pwr + '</b></div>';
     const btn = document.createElement('button');
+    // TEMPEST is earned, not just bought: prove yourself in the storm first
+    const waveLocked = !owned && d.reqWave && (profile.bestWave || 0) < d.reqWave;
     if (sel) { btn.className = 'cardBtn sel'; btn.textContent = 'SELECTED'; }
     else if (owned) { btn.className = 'cardBtn own'; btn.textContent = 'SELECT'; }
+    else if (waveLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'SURVIVE WAVE ' + d.reqWave; }
     else if (profile.scrap >= d.cost) { btn.className = 'cardBtn'; btn.textContent = 'BUY ' + d.cost; }
     else { btn.className = 'cardBtn cant'; btn.textContent = d.cost + ' SCRAP'; }
     btn.onclick = () => {
       if (profile.tank === k) return;
       if (!profile.owned[k]) {
+        if (d.reqWave && (profile.bestWave || 0) < d.reqWave) return;
         if (profile.scrap < d.cost) return;
         profile.scrap -= d.cost;
         profile.owned[k] = true;
@@ -2226,6 +2656,7 @@ function renderCampaign() {
 }
 
 document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'rookie' }); };
+document.getElementById('btnSurvival').onclick = () => { audioInit(); startSurvival(); };
 document.getElementById('btnAce').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'ace' }); };
 document.getElementById('btnCampaign').onclick = () => { audioInit(); renderCampaign(); show('menu', false); show('campaign', true); };
 document.getElementById('btnCampaignBack').onclick = () => { show('campaign', false); show('menu', true); };
@@ -2233,10 +2664,14 @@ document.getElementById('btnGarage').onclick = () => { audioInit(); renderGarage
 document.getElementById('btnGarageBack').onclick = () => { show('garage', false); show('menu', true); };
 document.getElementById('btnHelp').onclick = () => { show('menu', false); show('helpBox', true); };
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
-document.getElementById('btnRematch').onclick = () => { show('victory', false); startMatch(matchCfg); };
+document.getElementById('btnRematch').onclick = () => {
+  show('victory', false);
+  if (matchCfg.mode === 'survival') startSurvival(); else startMatch(matchCfg);
+};
 document.getElementById('btnMenu').onclick = () => {
   musicStop(false);
   if (matchCfg.mode === 'online') netDisconnect();
+  surv.on = false;
   show('victory', false); mode = 'menu'; tanks = []; shells = []; beams = []; genMaze(); updateWinTag(); show('menu', true);
 };
 
@@ -2821,6 +3256,20 @@ if (/(\?|&)demo=1/.test(location.search)) {
     } catch (e) { rtcSetState('LOOPBACK FAILED: ' + e.message); }
   })();
 }
+
+// Debug/test hook (headless harness + console poking). Everything here reads or drives
+// the same closure state the game runs on — no parallel test-only paths.
+window.__tw = {
+  get tanks() { return tanks; }, get shells() { return shells; }, get mines() { return mines; },
+  get phase() { return phase; }, get surv() { return surv; }, get profile() { return profile; },
+  get matchCfg() { return matchCfg; }, get powerup() { return powerup; }, get roundArena() { return roundArena; },
+  set powerup(v) { powerup = v; },
+  update, startMatch, startSurvival, survStartWave, survApplyPerk, survWaveCleared, survOver,
+  damageTank, fireShell, fireLaser, makeTank, spawnTanks, genMaze, allCellsReachable,
+  updatePowerups, endRound, endMatch, saveProfile, renderGarage,
+  TANKS, PERKS, PERK_ORDER, AI_LEVELS, CAMPAIGN,
+  setPhase(v) { phase = v; }, setTanks(v) { tanks = v; },
+};
 
 requestAnimationFrame(frame);
 })();

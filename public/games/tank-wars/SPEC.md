@@ -82,6 +82,19 @@ single-file canvas game for ImagineX. The niche it fills on the shelf: a **same-
 - Quick Play unchanged (first-to-5, rookie/ace) and pays scrap too.
 - Screenshot hooks: `?demo=1` (AI match), `?screen=garage`, `?screen=campaign`.
 
+## Survival — TANK STORM (2026-07-25 expansion)
+Endless solo waves, arena re-rolls every wave. Enemy count 1→4 (`survPlan`), AI tier and
+tank pool ramp with the wave (`survTier`/`survKind`; tempest enemies from w14). Every 5th
+wave is a BOSS (armor bar, bigger hitbox, red sprite tint): WARLORD (radial shell bursts),
+JUGGERNAUT (telegraphed ram — the wind-up pulse is your window), VORTEX (photon + summons
+2 rookies at half HP). Clear a wave → draft 1 of 3 stacking perks (speed/reload/magazine/
+shell-speed/wave-shield/scrap+40%). Scrap: per-kill + wave pay + milestone bonuses at
+5/10/15/20. `profile.bestWave` gates the TEMPEST garage tank (twin cannons, 6000 scrap,
+requires wave 10). ❄ FREEZE powerup joins offline pools only. Teams: player=0, all
+enemies=1 — teammates' fire passes through (shells, lasers, mines, AI dodge). All damage
+funnels through `damageTank()` so bosses can't be one-shot by a forgotten source.
+`window.__tw` exposes the closure for the headless harness.
+
 ## Testing
 - Headless node harness (scratchpad `tanktest.js`, technique per imaginex memory):
   21 checks — maze connectivity (20 mazes × all 150 cells), wall containment under
