@@ -29,7 +29,7 @@ changing road network, and grow one rusty van into a fleet.
 
 ## Test
 ```
-node test/sim.test.mjs              # 4,759-check headless sim battery
+node test/sim.test.mjs              # 4,804-check headless sim battery
 node test/ui.smoke.mjs              # UI layer, live-map path (MapLibre + OSRM stubbed)
 node test/ui.smoke.mjs --offline    # UI layer, offline-atlas fallback path
 node test/ui.smoke.mjs --seed=7     # replay a specific game; default seed is fixed
@@ -103,6 +103,21 @@ Attribution "© OpenStreetMap contributors" is in the game footer — keep it.
   is perishable, the trophy is fragile). Specials are picked from the loads whose base cargo
   the player's rep allows — filter first, then roll, or low-rep boards almost never see one.
   Gated behind the two tutorial trips. Tune with `CFG.SPECIAL_CHANCE`.
+- **🎓 Driver careers** — XP per delivery by tier (`XP_PER_TIER`), levels at 6/15/30/50 XP
+  raise skill AND wage (`CFG.WAGE_PER_LEVEL`), traits at L2/L4 from `DRIVER_TRAITS` (Night
+  Owl / Hypermiler / Iron Back / Smooth Hands / Storm Rider) hook straight into the physics
+  (risk, mpg, fatigue, fragile damage, weather speed). Drivers renameable. All career logic
+  in `awardDriverXp` — fired from `finishTrip`, failures teach nothing.
+- **🚨 Emergency dispatches** — when a zone has severe weather (risk ≥ 2.4) or a closure-class
+  event (`crisisZones`), Relief Command can post ONE red contract INTO the trouble:
+  ~2.6× danger pay, +3 rep, tight deadline. Spawn is scarcity-tuned (`EMERGENCY_CHANCE`
+  per event-check + `EMERGENCY_COOLDOWN_MIN` after the last one left the board) — probes
+  target ~1/day so the siren stays an event. Gated behind the tutorial.
+- **🏠 Depots** — buy company bases in hub cities (tier 2+) of unlocked regions
+  (`DEPOT_COST_BY_TIER`); Lakewood is the free founding depot. Benefits: repairs half price
+  at a depot, overnight rest there is free and always safe, and `buyTruck` delivers to your
+  HOME depot (`setHomeDepot`). Flags render on both maps. Older v2 saves migrate in
+  `deserialize` (depots + driver career fields defaulted).
 - **🎨 The garage** — rename any truck (free) and paint it (`CFG.PAINT_COST`, palette in
   `PAINT_COLORS`). The color rides the marker ring on the live map, a ring around the rig on
   the canvas, and a dot in the fleet card. `renameTruck`/`paintTruck`/`truckPaint` in sim.mjs.

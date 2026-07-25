@@ -282,6 +282,48 @@ ok("passport: no unknown roads leaked into the collection",
   catch (e) { ok("regions: overlay renders without throwing", false, e.message); }
 }
 
+// --- COMPANY EXPANSION: driver careers, emergencies, depots --------------------
+{
+  const { buyDepot, maybeSpawnEmergency } = await import("../src/sim.mjs");
+  const { CFG: CFG2 } = await import("../src/data.mjs");
+  // driver career cards render with level chip + XP bar + rename button
+  rd.setTab("fleet");
+  const fleet2 = dom.byId.get("side").innerHTML;
+  ok("careers: level chip renders", fleet2.includes("lvl-chip"), fleet2.slice(0, 80));
+  ok("careers: XP bar renders", fleet2.includes("XP ") || fleet2.includes("MAX LEVEL"));
+  ok("careers: driver rename button renders", fleet2.includes("data-drename"));
+
+  // depots: shop section renders; buying one shows HOME controls and the map flag path runs
+  S.cash += 60000;
+  rd.setTab("shop");
+  const shop2 = dom.byId.get("side").innerHTML;
+  ok("depots: shop section renders", shop2.includes("Depots"), shop2.slice(0, 60));
+  ok("depots: Lakewood is home", shop2.includes("HOME BASE"));
+  ok("depots: a hub is buyable", shop2.includes("data-depot"));
+  ok("depots: buying works from UI state", buyDepot(S, "SD").ok);
+  rd.setTab("shop");
+  ok("depots: SET HOME appears for the new depot", dom.byId.get("side").innerHTML.includes("data-home"));
+  try { rd.frame(30000); rd.frame(30016); ok("depots: map renders flags without throwing", true); }
+  catch (e) { ok("depots: map renders flags without throwing", false, e.message); }
+
+  // emergencies: force one and check the board screams
+  S.stats.delivered = Math.max(S.stats.delivered, 2);
+  S.weather.south = { type: "storm", until: S.time + 9999 };
+  S.contracts = S.contracts.filter(c => !c.emergency);
+  S.lastEmergencyAt = 0;
+  const oldCh = CFG2.EMERGENCY_CHANCE; CFG2.EMERGENCY_CHANCE = 1;
+  const em = maybeSpawnEmergency(S);
+  CFG2.EMERGENCY_CHANCE = oldCh;
+  ok("emergency: spawned under a forced storm", !!em);
+  if (em) {
+    rd.setTab("contracts");
+    const board3 = dom.byId.get("side").innerHTML;
+    ok("emergency: red banner renders", board3.includes("EMERGENCY — DANGER PAY"), board3.slice(0, 100));
+    S.contracts = S.contracts.filter(c => c.id !== em.id);
+  }
+  rd.setTab("contracts");
+}
+
 // --- save / load round trip --------------------------------------------------
 try {
   rd.save();

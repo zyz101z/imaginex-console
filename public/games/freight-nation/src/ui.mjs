@@ -1,10 +1,11 @@
 // FREIGHT NATION — browser UI layer (real map + offline atlas + panels). Game logic lives in sim.mjs.
 import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, CFG, WEATHER, EVENT_DEFS,
   REGIONS, REGION_ORDER, PASSPORT_ROADS, SHIELD_REGIONS, parseHighways, PAINT_COLORS,
-  STATE_REGIONS, REGION_COLORS, REGION_LABELS } from "./data.mjs";
+  STATE_REGIONS, REGION_COLORS, REGION_LABELS, DRIVER_TRAITS, DRIVER_LEVELS } from "./data.mjs";
 import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, autoPlanStops,
   serialize, deserialize, buyTruck, sellTruck, buyUpgrade, repairTruck, hireDriver,
-  renameTruck, paintTruck, truckPaint,
+  renameTruck, paintTruck, truckPaint, renameDriver, hasTrait, xpForNextLevel,
+  buyDepot, setHomeDepot, hasDepot, depotList, depotCost,
   fmtClock, fmtDur, dayOf, isRush, truckPos, truckHighway, truckShields, eventsOn, edgeClosed,
   edgeOf, tankOf, zoneWeather,
   tzOf, tzName, localClock, edgeTz, cityUnlocked, unlockedRegions, nextRegion,
@@ -429,9 +430,11 @@ function drawMap() {
       ctx.beginPath(); ctx.arc(x, y, (9 + Math.sin(lastT / 200) * 2) * s, 0, 7);
       ctx.strokeStyle = "rgba(255,150,40,.6)"; ctx.lineWidth = 2 * s; ctx.stroke();
     }
+    const depot = hasDepot(S, id);
     ctx.beginPath(); ctx.arc(x, y, (n.tier >= 3 ? 6 : n.tier === 2 ? 5 : 4) * s, 0, 7);
-    ctx.fillStyle = n.yard ? "#ffd75e" : n.tier >= 2 ? "#fff" : "#eaf6ea"; ctx.fill();
-    ctx.strokeStyle = "#315b62"; ctx.lineWidth = 1.5 * s; ctx.stroke();
+    ctx.fillStyle = depot ? "#ffd75e" : n.tier >= 2 ? "#fff" : "#eaf6ea"; ctx.fill();
+    ctx.strokeStyle = depot ? "#9d5a0b" : "#315b62"; ctx.lineWidth = (depot ? 2.2 : 1.5) * s; ctx.stroke();
+    if (depot) { ctx.font = `${11 * s}px serif`; ctx.fillText("🏠", x - 5.5 * s, y - 8 * s); }
     // On a 66-city national map, labelling everything at once is a wall of text. Major hubs
     // and your own yard read at country view; the rest bloom in as you zoom into a region.
     const showLabel = n.yard || n.tier >= 3 || (n.tier >= 2 && cam.z >= 1.8) || cam.z >= 3;
@@ -673,6 +676,7 @@ const lastPushed = { route: undefined, pickup: undefined, mission: undefined };
 function updateRealMap() {
   if (!realMapReady) return;
   refreshRegionLayer(); // lifts the gray off newly unlocked territory
+  refreshDepotMarkers();
   const geometry = currentRealGeometry();
   if (geometry !== lastPushed.route) {
     lastPushed.route = geometry;
@@ -770,6 +774,31 @@ function regionLabelsGeo() {
         : `LOCKED — ${REGIONS[rg].name} — ${REGIONS[rg].repReq} STARS` },
     geometry: { type: "Point", coordinates: REGION_LABELS[rg] } })) };
 }
+// depot flags on the live map — rebuilt when the depot list changes
+const depotMarkers = new Map();
+let lastDepotsKey = "";
+function refreshDepotMarkers() {
+  if (!realMap || !realMapReady || !window.maplibregl) return;
+  const key = depotList(S).join(",") + "|" + S.homeDepot;
+  if (key === lastDepotsKey) return;
+  lastDepotsKey = key;
+  for (const [, mk] of depotMarkers) { try { mk.remove(); } catch (e) {} }
+  depotMarkers.clear();
+  for (const id of depotList(S)) {
+    const n = NODES[id];
+    if (!n) continue;
+    const el = document.createElement("div");
+    el.className = "depot-marker" + (S.homeDepot === id ? " home" : "");
+    el.textContent = "🏠";
+    el.title = `${n.name} depot${S.homeDepot === id ? " (home base)" : ""} — cheap repairs, free safe rest`;
+    try {
+      const mk = new window.maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -10] })
+        .setLngLat([n.lon, n.lat]).addTo(realMap);
+      depotMarkers.set(id, mk);
+    } catch (e) {}
+  }
+}
+
 let lastRegionsKey = "";
 function refreshRegionLayer() {
   if (!realMap || !realMapReady) return;
@@ -1234,7 +1263,8 @@ function contractsHtml() {
     const timeLeft = fmtDur(c.dlMins); // cross-country freight is measured in days, not hours
     const canHaul = !!q;
     const badFit = poorFit(c, q);
-    return `<div class="card ${canHaul ? "" : "locked"} ${badFit ? "failbg" : ""} ${c.special ? "special" : ""}">
+    return `<div class="card ${canHaul ? "" : "locked"} ${badFit ? "failbg" : ""} ${c.special ? "special" : ""} ${c.emergency ? "emergency" : ""}">
+      ${c.emergency ? `<div class="emergency-banner">🚨 EMERGENCY — DANGER PAY</div>` : ""}
       ${c.special ? `<div class="special-banner">⭐ SPECIAL DELIVERY</div>` : ""}
       <div class="cardtop"><b>${cg.icon} ${cg.name}</b> <span class="chip ${c.tier}">${c.tier}</span>${c.urgent ? ' <span class="chip URGENT">⚡ URGENT</span>' : ""}
         <span class="star-chip" title="Gold stars earned if you deliver ON TIME. Bigger jobs earn more. Late = −2, failed = −6.">⭐ +${repForTier(c.tier)}${c.special ? ` <span class="star-extra">+${CFG.SPECIAL_REP_BONUS}</span>` : ""}</span></div>
@@ -1436,9 +1466,23 @@ const bar = (label, pct, color) =>
   `<div class="bar"><span>${label}</span><div class="track"><div class="fill" style="width:${Math.max(0, Math.min(100, pct))}%;background:${color}"></div></div></div>`;
 
 function driversHtml() {
-  return `<h3>Drivers</h3>` + S.drivers.map(d =>
-    `<div class="drow">${d.name} ${"★".repeat(d.skill)}${"☆".repeat(5 - d.skill)}
-      <span class="dim">$${d.wage}/day · ${d.busy ? "on the road" : "available"} · fatigue ${Math.round(d.fatigue)}</span></div>`).join("");
+  return `<h3>Drivers <span class="dim small">(they get better with every delivery)</span></h3>` +
+    S.drivers.map(d => {
+      const next = xpForNextLevel(d);
+      const prev = DRIVER_LEVELS[(d.level || 1) - 1] || 0;
+      const pct = next == null ? 100 : Math.round(((d.xp || 0) - prev) / (next - prev) * 100);
+      return `<div class="card driver-card">
+        <div class="cardtop"><b>${d.name}</b>
+          <span class="lvl-chip">LV ${d.level || 1}</span>
+          <span class="dim">${"★".repeat(d.skill)}${"☆".repeat(5 - d.skill)}</span>
+          <button class="btn s" data-drename="${d.id}">✏️</button></div>
+        ${bar(next == null ? "MAX LEVEL" : `XP ${d.xp || 0}/${next}`, pct, "#c98ff2")}
+        ${(d.traits || []).length ? `<div class="trait-row">${d.traits.map(t =>
+          `<span class="trait-chip" title="${DRIVER_TRAITS[t].blurb}">${DRIVER_TRAITS[t].icon} ${DRIVER_TRAITS[t].name}</span>`).join("")}</div>`
+          : `<div class="dim small">Traits unlock at level 2 and 4.</div>`}
+        <div class="dim small">$${d.wage}/day · ${d.busy ? "on the road" : "available"} · fatigue ${Math.round(d.fatigue)}</div>
+      </div>`;
+    }).join("");
 }
 
 function shopHtml() {
@@ -1462,6 +1506,23 @@ function shopHtml() {
     html += `<div class="card"><div class="cardtop"><b>${TRUCK_TYPES[tr.type].icon} ${tr.nick}</b></div>` +
       missing.map(([k, u]) => `<div class="stoprow">${u.name} <span class="dim small">${u.blurb}</span>
         <button class="btn s" data-up="${k}" data-t="${tr.id}" ${S.cash >= u.cost ? "" : "disabled"}>$${u.cost}</button></div>`).join("") + `</div>`;
+  }
+  html += `<h3>🏠 Depots <span class="dim small">(own a piece of the map)</span></h3>
+    <div class="dim small" style="margin:0 2px 8px">Half-price repairs, free safe overnight rest,
+    and new trucks are delivered to your HOME depot. Hub cities (◆◆+) in unlocked regions only.</div>`;
+  const hubs = Object.entries(NODES)
+    .filter(([id, n]) => (n.tier >= 2 || id === "LKW") && cityUnlocked(S, id))
+    .sort((a2, b2) => (hasDepot(S, b2[0]) ? 1 : 0) - (hasDepot(S, a2[0]) ? 1 : 0) || b2[1].tier - a2[1].tier);
+  for (const [id, n] of hubs) {
+    const owned = hasDepot(S, id);
+    const home = S.homeDepot === id;
+    html += `<div class="stoprow">${owned ? "🏠" : "🏚️"} <b>${n.name}, ${n.st}</b>
+      <span class="dim small">${"◆".repeat(n.tier)}</span>
+      ${owned
+        ? (home ? `<span class="chip">HOME BASE</span>`
+                : `<button class="btn s" data-home="${id}">SET HOME</button>`)
+        : `<button class="btn s go" data-depot="${id}" ${S.cash >= depotCost(id) ? "" : "disabled"}>BUY $${depotCost(id).toLocaleString()}</button>`}
+    </div>`;
   }
   html += `<h3>Hire Drivers <span class="dim small">($200 signing + daily wage)</span></h3>`;
   html += S.hirePool.map((d, i) =>
@@ -1499,6 +1560,18 @@ function wireSide(el) {
   el.querySelectorAll("[data-paint]").forEach(b => b.onclick = () => {
     const [tid, colorId] = b.dataset.paint.split(":");
     if (paintTruck(S, +tid, colorId).ok) { save(); renderSide(); }
+  });
+  el.querySelectorAll("[data-drename]").forEach(b => b.onclick = () => {
+    const d = S.drivers.find(x => x.id === +b.dataset.drename);
+    if (!d || typeof window.prompt !== "function") return;
+    const name = window.prompt(`New name for ${d.name}?`, d.name);
+    if (name != null && renameDriver(S, d.id, name).ok) { save(); renderSide(); }
+  });
+  el.querySelectorAll("[data-depot]").forEach(b => b.onclick = () => {
+    if (buyDepot(S, b.dataset.depot).ok) { save(); renderSide(); }
+  });
+  el.querySelectorAll("[data-home]").forEach(b => b.onclick = () => {
+    if (setHomeDepot(S, b.dataset.home).ok) { save(); renderSide(); }
   });
   el.querySelectorAll("[data-contract-sort]").forEach(b => b.onclick = () => {
     contractSort = b.dataset.contractSort; renderSide();
@@ -1793,11 +1866,14 @@ function doDispatch() {
 function showReport(r) {
   const c = r.contract, cg = cargoDisplay(c);
   const ex = r.expenses;
-  const specialWin = !r.failed && !!c.special;
+  const specialWin = !r.failed && (!!c.special || !!c.emergency);
   $("#modalBody").innerHTML = `
-    <h2>${r.failed ? "🧭 LET'S TRY ANOTHER ROUTE" : specialWin ? `${c.special.icon} SPECIAL DELIVERY COMPLETE!` : "🎉 DELIVERY COMPLETE!"}</h2>
+    <h2>${r.failed ? "🧭 LET'S TRY ANOTHER ROUTE"
+      : c.emergency ? "🚨 EMERGENCY ANSWERED!"
+      : specialWin ? `${c.special.icon} SPECIAL DELIVERY COMPLETE!` : "🎉 DELIVERY COMPLETE!"}</h2>
     ${r.failed ? `<p class="bad"><b>${r.failedWhy}</b></p>` : ""}
-    ${specialWin ? `<p class="special-blurb">${c.special.blurb}</p>` : ""}
+    ${!r.failed && c.emergency ? `<p class="special-blurb">${NODES[c.to].name} got what it needed. Heroes drive trucks.</p>` : ""}
+    ${specialWin && c.special ? `<p class="special-blurb">${c.special.blurb}</p>` : ""}
     <p>${cg.icon} ${cg.name} · ${NODES[c.from].name} → ${NODES[c.to].name} · ${r.truck} · ${r.driver}</p>
     <table>
       <tr><td>Contract payment</td><td class="r">$${r.failed ? 0 : c.pay}</td></tr>
@@ -1923,6 +1999,14 @@ function wireTop() {
       <p><b>🗺️ Stars unlock America.</b> Each new region opens more cities to deliver to,
       new freight on the board, and new freeway shields for your passport. The gray areas on
       the map show where you can't work — yet. Click the 🗺️ counter up top to see them all.</p>
+      <p><b>🎓 Drivers grow.</b> Every delivery earns your driver XP — levels raise their skill
+      (and wage), and at levels 2 and 4 they learn a <b>trait</b> like Night Owl or Storm Rider.
+      Check the FLEET tab, and rename them whatever you like.</p>
+      <p><b>🚨 Emergencies.</b> When a storm or disaster hits, Relief Command may post a red
+      emergency on the board — danger pay and big reputation, but you're driving INTO the
+      trouble on a tight clock.</p>
+      <p><b>🏠 Depots.</b> Buy company depots in hub cities (SHOP tab): repairs are half price
+      there, overnight rest is free and safe, and new trucks are delivered to your home base.</p>
       <p class="dim">Drag to pan, scroll or use +/− to zoom, and click roads for current conditions.</p>
       <button class="btn go" onclick="document.getElementById('modal').classList.remove('open')">LET'S ROLL</button>`;
     $("#modal").classList.add("open");

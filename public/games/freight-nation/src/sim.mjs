@@ -4,7 +4,8 @@
 // Deterministic under a seed via mulberry32.
 import { NODES, EDGES, edgeKey, TRUCK_TYPES, UPGRADES, CARGO, SHIPPERS, DRIVER_NAMES,
   CFG, WEATHER, ZONE_WEATHER, EVENT_DEFS, REGIONS, REGION_ORDER, HOME_REGION,
-  PASSPORT_ROADS, parseHighways, SPECIAL_LOADS, PAINT_COLORS } from "./data.mjs";
+  PASSPORT_ROADS, parseHighways, SPECIAL_LOADS, PAINT_COLORS,
+  DRIVER_TRAITS, TRAIT_ORDER, DRIVER_LEVELS, XP_PER_TIER, DEPOT_COST_BY_TIER } from "./data.mjs";
 
 // ---------------------------------------------------------------- rng
 function rand(S) {
@@ -58,6 +59,7 @@ export function newGame(seed = 1) {
     stats: { delivered: 0, failed: 0, earned: 0, spent: 0, miles: 0, statesVisited: [] },
     discoveredFreeways: [],
     regions: [HOME_REGION],   // you start at home; reputation earns the rest of the map
+    depots: ["LKW"], homeDepot: "LKW",   // the founding yard is your first depot
     milestones: {}, nextId: 1,
     lastEventRoll: 0, lastBoardRoll: -9999, lastWageDay: 0,
   };
@@ -83,7 +85,48 @@ export function addTruck(S, typeId, at) {
 function genDriver(S, forceSkill) {
   const skill = forceSkill || ri(S, 1, 5);
   return { id: S.nextId++, name: DRIVER_NAMES[ri(S, 0, DRIVER_NAMES.length - 1)] + (S.nextId % 7 === 0 ? " Jr." : ""),
-    skill, wage: CFG.WAGE_BASE + skill * 35, fatigue: 0, hired: false, busy: false };
+    skill, wage: CFG.WAGE_BASE + skill * 35, fatigue: 0, hired: false, busy: false,
+    xp: 0, level: 1, traits: [] };
+}
+// ---------------------------------------------------------------- driver careers
+export const hasTrait = (d, id) => !!(d && d.traits && d.traits.includes(id));
+export const driverLevelFor = xp => {
+  let lvl = 1;
+  for (let i = 1; i < DRIVER_LEVELS.length; i++) if (xp >= DRIVER_LEVELS[i]) lvl = i + 1;
+  return lvl;
+};
+export const xpForNextLevel = d =>
+  d.level >= DRIVER_LEVELS.length ? null : DRIVER_LEVELS[d.level];
+// XP lands with the delivery report; levels raise skill AND wage, milestones grant a trait.
+export function awardDriverXp(S, d, tier, failed) {
+  if (!d || failed) return [];
+  d.xp = (d.xp || 0) + (XP_PER_TIER[tier] || 1);
+  const events = [];
+  let newLvl = driverLevelFor(d.xp);
+  while ((d.level || 1) < newLvl) {
+    d.level = (d.level || 1) + 1;
+    d.skill = Math.min(5, d.skill + 1);
+    d.wage += CFG.WAGE_PER_LEVEL;
+    events.push(`level ${d.level}`);
+    alert_(S, `🎓 ${d.name} reached LEVEL ${d.level}! Skill ${d.skill}★ (wage now $${d.wage}/day).`, "milestone");
+    if (d.level === 2 || d.level === 4) {
+      const open = TRAIT_ORDER.filter(t => !d.traits.includes(t));
+      if (open.length) {
+        const t = open[ri(S, 0, open.length - 1)];
+        d.traits.push(t);
+        events.push(t);
+        alert_(S, `${DRIVER_TRAITS[t].icon} ${d.name} learned a trait: ${DRIVER_TRAITS[t].name} — ${DRIVER_TRAITS[t].blurb}`, "milestone");
+      }
+    }
+  }
+  return events;
+}
+export function renameDriver(S, driverId, name) {
+  const d = S.drivers.find(x => x.id === driverId);
+  const clean = String(name == null ? "" : name).trim().slice(0, 24);
+  if (!d || !clean) return { ok: false };
+  d.name = clean;
+  return { ok: true };
 }
 // "states you've rolled through" — a cheap, satisfying long-game counter for a national map
 function visitState(S, nodeId) {
@@ -179,6 +222,8 @@ export function effSpeed(S, e, truck, driver, t) {
   if (q <= 2) v *= 0.92;
   if (driver && driver.fatigue >= CFG.FATIGUE_TIRED) v *= 0.95;
   if (driver) v *= 1 + (driver.skill - 3) * 0.015;
+  // STORM RIDER claws back half of whatever the weather took
+  if (driver && hasTrait(driver, "stormrider") && w.speed < 1) v *= 1 + (1 - w.speed) * 0.5 / w.speed;
   return Math.max(8, v);
 }
 // per-mile incident risk multiplier
@@ -186,7 +231,11 @@ function riskMult(S, e, driver, t) {
   let r = 1;
   if (e.urban && isRush(t, edgeTz(e))) r *= CFG.RUSH_RISK;
   r *= zoneWeather(S, edgeZone(e)).risk;
-  if (isNight(t, edgeTz(e))) { r *= CFG.NIGHT_RISK; if (!e.urban) r *= 1.8; } // wildlife country (GDD §9)
+  if (isNight(t, edgeTz(e))) {   // wildlife country (GDD §9); NIGHT OWLs halve the extra risk
+    const owl = driver && hasTrait(driver, "nightowl");
+    r *= owl ? 1 + (CFG.NIGHT_RISK - 1) * 0.5 : CFG.NIGHT_RISK;
+    if (!e.urban) r *= owl ? 1.4 : 1.8;
+  }
   if (driver) {
     if (driver.fatigue >= CFG.FATIGUE_CRIT) r *= 6;
     else if (driver.fatigue >= CFG.FATIGUE_VERY) r *= 3;
@@ -196,10 +245,11 @@ function riskMult(S, e, driver, t) {
   if (e.mtn) r *= 1.25;
   return r;
 }
-function mpgOf(S, truck, e, cargoType) {
+function mpgOf(S, truck, e, cargoType, driver) {
   const tt = TRUCK_TYPES[truck.type];
   let mpg = tt.mpg;
   if (truck.upgrades.aero) mpg *= 1.12;
+  if (driver && hasTrait(driver, "hypermiler")) mpg *= 1.08;
   if (e && e.mtn) mpg *= 0.82;
   if (e && e.urban && isRush(S.time, edgeTz(e))) mpg *= 0.85;
   if (cargoType && CARGO[cargoType].heavy) mpg *= 0.88;
@@ -513,6 +563,7 @@ function rollEvents(S) {
     }
   }
   S.events = S.events.filter(ev => ev.endsAt > S.time);
+  maybeSpawnEmergency(S);
   // spawn: weighted, weather- and rush-aware, capped so it isn't constant interruption
   if (S.events.length >= 4) return;
   const roll = rand(S);
@@ -537,6 +588,83 @@ function rollEvents(S) {
     if (["gulf", "dixie", "florida"].includes(zone) && wType === "storm") pool.push(["flood", 2]);
     forceEvent(S, pickW(S, pool), edgeKey(e.a, e.b));
   }
+}
+
+// ---------------------------------------------------------------- emergency dispatches
+// When part of the country is in crisis — severe weather or a closure-class event — the
+// board can post ONE emergency: a relief load INTO the trouble, paying danger rates on a
+// deadline that means it. The storm stops being scenery and starts being the job.
+export function crisisZones(S) {
+  const zones = new Set();
+  for (const [z, w] of Object.entries(S.weather || {}))
+    if ((WEATHER[w.type] || {}).risk >= 2.4) zones.add(z);           // storm, ice
+  for (const ev of S.events) {
+    if (!EVENT_DEFS[ev.type].closed || ev.endsAt <= S.time) continue;
+    const e = edgeOf(ev.edge);
+    if (e) { zones.add(NODES[e.a].zone); zones.add(NODES[e.b].zone); }
+  }
+  return zones;
+}
+export function maybeSpawnEmergency(S) {
+  if (S.stats.delivered < 2) return null;                            // not during the tutorial
+  if (S.contracts.some(c => c.emergency)) return null;               // one crisis at a time
+  // scarcity keeps the siren meaningful: quiet hours after the last one left the board
+  if (S.lastEmergencyAt && S.time - S.lastEmergencyAt < CFG.EMERGENCY_COOLDOWN_MIN) return null;
+  if (rand(S) >= CFG.EMERGENCY_CHANCE) return null;
+  const zones = crisisZones(S);
+  if (!zones.size) return null;
+  const pool = unlockedCities(S);
+  const targets = pool.filter(id => zones.has(NODES[id].zone));
+  const sources = pool.filter(id => !zones.has(NODES[id].zone));
+  if (!targets.length || !sources.length) return null;
+  const fleetRange = Math.max(...S.trucks.map(truckRange));
+  for (let tries = 0; tries < 12; tries++) {
+    const to = targets[ri(S, 0, targets.length - 1)];
+    const from = sources[ri(S, 0, sources.length - 1)];
+    const probe = findRoute(S, from, to, S.trucks[0], null, "fastest");
+    if (!probe || longestLeg(probe.path) > fleetRange) continue;
+    const cargoType = S.rep >= CARGO.medical.repReq ? "medical" : "grocery";
+    const pallets = ri(S, 2, Math.max(2, Math.min(6, Math.max(...S.trucks.map(t => TRUCK_TYPES[t.type].cap)))));
+    const pay = Math.round((CFG.PAY_BASE + probe.mi * CFG.PAY_PER_MI * CARGO[cargoType].mult * (1 + pallets / 22))
+      * CFG.EMERGENCY_PAY_MULT * lanePremium(probe.path));
+    const c = { id: S.nextId++, shipper: "Relief Command", cargoType, pallets, from, to,
+      pay, mi: probe.mi, urgent: true, emergency: true,
+      dlMins: Math.round(probe.mins * CFG.EMERGENCY_SLACK + 60),
+      expires: S.time + ri(S, 200, 360),
+      tier: tierOf(probe.mi) };
+    S.contracts.unshift(c);
+    S.lastEmergencyAt = S.time;
+    alert_(S, `🚨 EMERGENCY DISPATCH: ${CARGO[cargoType].name} needed in ${NODES[to].name} — ` +
+      `$${pay} danger pay, deliver within ${Math.round(c.dlMins / 60)}h of pickup!`, "bad");
+    return c;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- depots (company bases)
+// You can unlock all of America — depots are how you OWN a piece of it. Bought in hub
+// cities (tier 2+) of unlocked regions. Benefits live in repairTruck / applyNodeStops /
+// wakeFromRest / buyTruck. Lakewood is the free founding depot.
+export const depotList = S => S.depots || ["LKW"];
+export const hasDepot = (S, id) => depotList(S).includes(id);
+export const depotCost = id => DEPOT_COST_BY_TIER[NODES[id].tier] || DEPOT_COST_BY_TIER[2];
+export function buyDepot(S, cityId) {
+  const n = NODES[cityId];
+  if (!n || hasDepot(S, cityId)) return { ok: false };
+  if (n.tier < 2 && cityId !== "LKW") return { ok: false, why: "Depots need a hub city (tier 2+)." };
+  if (!cityUnlocked(S, cityId)) return { ok: false, why: "That region isn't yours yet." };
+  const cost = depotCost(cityId);
+  if (S.cash < cost) return { ok: false, why: "Not enough cash." };
+  S.cash -= cost; S.stats.spent += cost;
+  S.depots = [...depotList(S), cityId];
+  alert_(S, `🏠 New depot opened in ${n.name}, ${n.st}! Cheap repairs, safe free rest, and trucks can call it home.`, "milestone");
+  return { ok: true };
+}
+export function setHomeDepot(S, cityId) {
+  if (!hasDepot(S, cityId)) return { ok: false };
+  S.homeDepot = cityId;
+  alert_(S, `🏠 ${NODES[cityId].name} is now home base — new trucks will be delivered there.`, "info");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------- per-minute truck sim
@@ -618,6 +746,17 @@ function finishTrip(S, truck, failedWhy = null) {
     S.stats.specials = (S.stats.specials || 0) + 1;
     notes.push(`⭐ Special delivery! (+${CFG.SPECIAL_REP_BONUS} bonus rep)`);
   }
+  // an emergency answered is worth more than money
+  if (!failed && c.emergency) {
+    repD += CFG.EMERGENCY_REP_BONUS;
+    S.stats.emergencies = (S.stats.emergencies || 0) + 1;
+    notes.push(`🚨 Emergency answered! (+${CFG.EMERGENCY_REP_BONUS} bonus rep)`);
+  }
+  // the driver grows with every delivered load (XP by tier; levels at 6/15/30/50)
+  if (driver) {
+    const grew = awardDriverXp(S, driver, c.tier, failed);
+    if (grew.length) notes.push(`🎓 ${driver.name}: ${grew.join(", ")}`);
+  }
   S.rep = Math.max(0, Math.min(100, S.rep + repD));
   S.stats.earned += revenue;
   const report = {
@@ -661,11 +800,12 @@ function applyNodeStops(S, truck, node) {
     truck.status = `Refueling in ${n.name} ($${cost})`;
   }
   if (plan && plan.rest && driver) {
-    const safe = n.safety >= 3;
-    const cost = safe ? CFG.REST_COST_SAFE : 0;
+    const depot = hasDepot(S, node);        // your own yard: gated, lit, and free
+    const safe = depot || n.safety >= 3;
+    const cost = depot ? 0 : (safe ? CFG.REST_COST_SAFE : 0);
     T.spend.stops += cost; S.cash -= cost; S.stats.spent += cost;
     pause += CFG.REST_MIN;
-    truck.status = `Driver sleeping in ${n.name} (${safe ? "secure lot" : "street parking…"})`;
+    truck.status = `Driver sleeping in ${n.name} (${depot ? "company depot 🏠" : safe ? "secure lot" : "street parking…"})`;
     T.restingUnsafe = !safe;
     T.restDriver = driver.id;
   }
@@ -783,7 +923,7 @@ function stepTruck(S, truck) {
   T.posMi += dm;
   S.stats.miles += dm;
   // fuel
-  const gal = dm / mpgOf(S, truck, e, T.contract.cargoType);
+  const gal = dm / mpgOf(S, truck, e, T.contract.cargoType, driver);
   truck.fuel -= gal;
   if (truck.fuel <= 0) {
     truck.fuel = tankOf(truck) * 0.2;
@@ -795,7 +935,8 @@ function stepTruck(S, truck) {
     return;
   }
   // fatigue
-  if (driver) driver.fatigue = Math.min(100, driver.fatigue + CFG.FATIGUE_PER_HR / 60);
+  if (driver) driver.fatigue = Math.min(100, driver.fatigue +
+    (CFG.FATIGUE_PER_HR / 60) * (hasTrait(driver, "ironback") ? 0.75 : 1));
   // Hours-of-service backstop: out west a single leg can be longer than a legal shift, and
   // there may be no town to book a rest stop in. The driver shuts down where they are.
   if (CFG.HOS_ENABLED && driver && driver.fatigue >= CFG.FATIGUE_CRIT) {
@@ -842,6 +983,7 @@ function stepTruck(S, truck) {
       if (zoneWeather(S, edgeZone(e)).risk >= 2) d += 0.02 * dm;
       if (truck.upgrades.tires) d *= 0.6;
       if (TRUCK_TYPES[truck.type].softride) d *= 0.5;
+      if (driver && hasTrait(driver, "smoothhands")) d *= 0.7;
       T.cargo.dmg = Math.min(100, T.cargo.dmg + d);
     }
     if (cg.perishable) {
@@ -946,7 +1088,9 @@ export function buyTruck(S, typeId) {
   const t = TRUCK_TYPES[typeId];
   if (!t || S.cash < t.cost || S.rep < t.repReq) return { ok: false };
   S.cash -= t.cost; S.stats.spent += t.cost;
-  const yard = S.trucks.find(x => x.at) ? S.trucks.find(x => x.at).at : "LKW";
+  // delivered to your HOME depot (falls back to wherever the fleet is, then Lakewood)
+  const yard = (S.homeDepot && hasDepot(S, S.homeDepot)) ? S.homeDepot
+    : (S.trucks.find(x => x.at) ? S.trucks.find(x => x.at).at : "LKW");
   const truck = addTruck(S, typeId, yard);
   alert_(S, `🛒 Bought a ${t.name} — delivered to ${NODES[yard].name}.`, "good");
   checkMilestones(S);
@@ -998,7 +1142,9 @@ export const truckPaint = truck =>
 export function repairTruck(S, truckId) {
   const truck = S.trucks.find(t => t.id === truckId);
   if (!truck || truck.trip) return { ok: false };
-  const cost = Math.round((100 - truck.cond) * 9);
+  // company depots have their own bays — half price when the truck is parked at one
+  const atDepot = truck.at && hasDepot(S, truck.at);
+  const cost = Math.round((100 - truck.cond) * 9 * (atDepot ? 0.5 : 1));
   if (cost <= 0 || S.cash < cost) return { ok: false };
   S.cash -= cost; S.stats.spent += cost;
   truck.cond = 100;
@@ -1047,5 +1193,11 @@ export function deserialize(json) {
   S.discoveredFreeways = S.discoveredFreeways || [];
   S.regions = S.regions && S.regions.length ? S.regions : [HOME_REGION];
   S.stats.statesVisited = S.stats.statesVisited || [];
+  // COMPANY EXPANSION migration: older v2 saves predate depots and driver careers
+  S.depots = S.depots && S.depots.length ? S.depots : ["LKW"];
+  S.homeDepot = S.homeDepot || "LKW";
+  for (const d of [...S.drivers, ...(S.hirePool || [])]) {
+    d.xp = d.xp || 0; d.level = d.level || 1; d.traits = d.traits || [];
+  }
   return S;
 }

@@ -498,6 +498,28 @@ export const SHIPPERS = ["Pallet Pals", "Golden Bear Freight", "SunCoast Traders
   "Great Plains Dry Goods", "Rustbelt Machine Works", "Bayou Bottling", "Liberty Bell Supply",
   "Twin Pines Lumber", "Gulfstream Chemical", "Copper State Provisions", "Northstar Outfitters"];
 
+// ---------------------------------------------------------------- driver careers
+// Drivers grow with every delivery: XP by contract tier, levels raise skill (and wage —
+// good people cost money), and at levels 2 and 4 they earn a TRAIT that changes how they
+// drive. This is what turns "a driver" into "MY driver".
+export const DRIVER_TRAITS = {
+  nightowl:    { name: "Night Owl",     icon: "🦉", blurb: "Half the extra risk of night driving." },
+  hypermiler:  { name: "Hypermiler",    icon: "🍃", blurb: "+8% fuel economy in any truck." },
+  ironback:    { name: "Iron Back",     icon: "🪨", blurb: "Tires 25% slower behind the wheel." },
+  smoothhands: { name: "Smooth Hands",  icon: "🤲", blurb: "Fragile cargo takes 30% less damage." },
+  stormrider:  { name: "Storm Rider",   icon: "🌩️", blurb: "Half the speed lost to bad weather." },
+};
+export const TRAIT_ORDER = ["nightowl", "hypermiler", "ironback", "smoothhands", "stormrider"];
+// XP needed to REACH each level (level 1 = hired). Tier XP: LOCAL 1 · REGIONAL 2 · LONG-HAUL 3 · TRANSCON 5.
+export const DRIVER_LEVELS = [0, 6, 15, 30, 50];   // L1..L5
+export const XP_PER_TIER = { "LOCAL": 1, "REGIONAL": 2, "LONG-HAUL": 3, "TRANSCON": 5 };
+
+// ---------------------------------------------------------------- depots
+// Company bases you BUY in hub cities once their region is unlocked. Benefits:
+// repairs cost half there, overnight rest is free and always safe, and new trucks are
+// delivered to your HOME depot. Lakewood is the free starter depot (it's the yard).
+export const DEPOT_COST_BY_TIER = { 1: 6000, 2: 10000, 3: 16000 };
+
 export const DRIVER_NAMES = ["Dana Ortiz", "Sam Whitfield", "Rosa Delgado", "Chuck Petersen", "Maya Chen",
   "Big Al Kowalski", "Frankie Rivers", "June Nakamura", "Otis Bell", "Priya Raman",
   "Hank Morrow", "Lupe Fuentes", "Dee Callahan", "Marcus Webb", "Sky Tanaka",
@@ -541,6 +563,14 @@ export const CFG = {
   SPECIAL_REP_BONUS: 2,           // extra rep on top of the normal delivery gain
   SPECIAL_EXPIRE_MULT: 2,         // stays on the board longer so it can actually be spotted
   PAINT_COST: 150,                // repaint a truck at any shop; renaming is free
+  // ---- emergency dispatches (the world calls YOU)
+  EMERGENCY_CHANCE: 0.15,         // roll per event-check while a crisis zone exists (one at a time)
+  EMERGENCY_COOLDOWN_MIN: 720,    // quiet hours after the last siren — scarcity is the point
+  EMERGENCY_PAY_MULT: 2.6,        // danger pay — you're driving INTO the storm
+  EMERGENCY_REP_BONUS: 3,         // the whole region remembers who showed up
+  EMERGENCY_SLACK: 1.18,          // tight: an emergency that can wait isn't one
+  // ---- driver careers
+  WAGE_PER_LEVEL: 20,             // each level raises the daily wage — talent isn't free
   REGION: "the United States",    // the whole play area — UI copy reads this instead of a state
   HOME_REGION_NAME: "California", // where you start (see REGIONS.west)
   LATE_GRACE_MIN: 20,

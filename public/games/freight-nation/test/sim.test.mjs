@@ -3,10 +3,12 @@
 import { NODES, EDGES, edgeKey, TRUCK_TYPES, CFG, CARGO, REGIONS, REGION_ORDER,
   PASSPORT_ROADS, SHIELD_REGIONS, parseHighways, ZONE_WEATHER, WEATHER, PAINT_COLORS } from "../src/data.mjs";
 import { newGame, tick, routeOptions, findRoute, assign, reroute, forceEvent, autoPlanStops,
-  serialize, deserialize, effSpeed, edgeOf, buyTruck, hireDriver, tankOf,
+  serialize, deserialize, effSpeed, edgeOf, buyTruck, hireDriver, tankOf, repairTruck,
   isRush, edgeTz, tzOf, truckRange, longestLeg, pathInRange, tierOf, restAllowance,
   unlockedCities, cityUnlocked, checkRegionUnlocks, fmtDur, lanePremium, zoneSeverity,
-  truckHighway, truckShields, truckEdge, renameTruck, paintTruck, truckPaint, repForTier } from "../src/sim.mjs";
+  truckHighway, truckShields, truckEdge, renameTruck, paintTruck, truckPaint, repForTier,
+  awardDriverXp, driverLevelFor, xpForNextLevel, hasTrait, renameDriver, effSpeed as effSpeed2,
+  maybeSpawnEmergency, crisisZones, buyDepot, setHomeDepot, hasDepot, depotList, depotCost } from "../src/sim.mjs";
 
 let pass = 0, fail = 0;
 const check = (n, c, d = "") => { if (c) pass++; else { fail++; console.log("  FAIL:", n, d); } };
@@ -862,6 +864,138 @@ try {
     check("region label coordinates are inside the lower 48",
       REGION_ORDER.every(rg => { const [lo, la] = REGION_LABELS[rg];
         return lo > -125 && lo < -66 && la > 24 && la < 50; }));
+  }
+
+  // --- COMPANY EXPANSION: driver careers ---
+  {
+    const S20 = newGame(200);
+    const d = S20.drivers[0];
+    check("drivers start a career", d.xp === 0 && d.level === 1 && Array.isArray(d.traits));
+    check("level curve is sane", driverLevelFor(0) === 1 && driverLevelFor(6) === 2 &&
+      driverLevelFor(15) === 3 && driverLevelFor(30) === 4 && driverLevelFor(50) === 5);
+    const skill0 = d.skill = 2, wage0 = d.wage;
+    // six LOCAL deliveries = 6 XP = level 2 + a trait
+    for (let i = 0; i < 6; i++) awardDriverXp(S20, d, "LOCAL", false);
+    check("XP accrues by tier", d.xp === 6, d.xp);
+    check("level 2 reached", d.level === 2);
+    check("levels raise skill", d.skill === skill0 + 1);
+    check("levels raise wages", d.wage === wage0 + CFG.WAGE_PER_LEVEL, d.wage - wage0);
+    check("level 2 grants a trait", d.traits.length === 1, d.traits.join());
+    check("failures teach nothing", (awardDriverXp(S20, d, "TRANSCON", true), d.xp === 6));
+    // ride to level 4: second trait; level 5: no more
+    awardDriverXp(S20, d, "TRANSCON", false); awardDriverXp(S20, d, "TRANSCON", false); // 16 -> L3
+    for (let i = 0; i < 3; i++) awardDriverXp(S20, d, "TRANSCON", false);               // 31 -> L4
+    check("level 4 grants the second trait", d.level === 4 && d.traits.length === 2, `${d.level}/${d.traits.length}`);
+    for (let i = 0; i < 4; i++) awardDriverXp(S20, d, "TRANSCON", false);               // 51 -> L5
+    check("level 5 is the cap", d.level === 5 && xpForNextLevel(d) === null);
+    check("skill caps at 5", d.skill <= 5);
+    check("traits are distinct", new Set(d.traits).size === d.traits.length);
+    // trait effect: STORM RIDER claws back weather speed
+    const S21 = newGame(201);
+    const e21 = EDGES.find(x => x.a === "LKW" && x.b === "LGB");
+    S21.weather[NODES.LKW.zone] = { type: "storm", until: 1e9 };
+    const plain = { skill: 3, fatigue: 0, traits: [] };
+    const rider = { skill: 3, fatigue: 0, traits: ["stormrider"] };
+    const vPlain = effSpeed(S21, e21, S21.trucks[0], plain, 12 * 60);
+    const vRider = effSpeed(S21, e21, S21.trucks[0], rider, 12 * 60);
+    check("STORM RIDER is faster in a storm", vRider > vPlain * 1.15, `${vRider.toFixed(1)} vs ${vPlain.toFixed(1)}`);
+    check("renameDriver works + trims", renameDriver(S21, S21.drivers[0].id, "  Ace  ").ok && S21.drivers[0].name === "Ace");
+    check("empty driver rename rejected", !renameDriver(S21, S21.drivers[0].id, " ").ok);
+    // XP lands via a real delivery
+    const S22 = newGame(202);
+    const t22 = S22.trucks[0], d22 = S22.drivers[0];
+    S22.contracts = [{ id: 1, shipper: "X", cargoType: "general", pallets: 3, from: "LKW", to: "LGB",
+      pay: 100, mi: 7, urgent: false, deadline: S22.time + 900, expires: S22.time + 900, tier: "LOCAL" }];
+    assign(S22, 1, t22.id, d22.id, routeOptions(S22, "LKW", "LGB", t22, d22)[0], {});
+    tick(S22, 400);
+    check("a delivery pays XP", d22.xp === 1, d22.xp);
+  }
+
+  // --- COMPANY EXPANSION: emergency dispatches ---
+  {
+    const S23 = newGame(203);
+    S23.stats.delivered = 2;
+    const oldChance = CFG.EMERGENCY_CHANCE; CFG.EMERGENCY_CHANCE = 1;
+    // no crisis anywhere -> no emergency
+    for (const z of Object.keys(S23.weather)) S23.weather[z] = { type: "clear", until: 1e9 };
+    S23.events = [];
+    check("no crisis, no emergency", maybeSpawnEmergency(S23) === null);
+    // put a storm over the south
+    S23.weather.south = { type: "storm", until: 1e9 };
+    check("a storm is a crisis", crisisZones(S23).has("south"));
+    const em = maybeSpawnEmergency(S23);
+    check("the crisis posts an emergency", !!em, em);
+    if (em) {
+      check("emergency flagged + urgent", em.emergency === true && em.urgent === true);
+      check("it goes INTO the crisis zone", NODES[em.to].zone === "south", em.to);
+      check("...from outside it", NODES[em.from].zone !== "south", em.from);
+      check("danger pay is real", em.pay > em.mi * CFG.PAY_PER_MI * 2, `${em.pay} for ${em.mi}mi`);
+      check("deadline is tight", em.dlMins < em.mi * 3 + 200, em.dlMins);
+      check("only one at a time", maybeSpawnEmergency(S23) === null);
+      check("it was announced", S23.alerts.some(a => /EMERGENCY DISPATCH/.test(a.msg)));
+      // deliver it: bonus rep + counter
+      const t23 = S23.trucks[0], d23 = S23.drivers[0];
+      t23.type = "semi"; t23.fuel = 140; t23.at = em.from;
+      const r23 = routeOptions(S23, em.from, em.to, t23, d23)[0];
+      const rep0 = S23.rep;
+      if (assign(S23, em.id, t23.id, d23.id, r23, autoPlanStops(S23, t23, d23, r23.path)).ok) {
+        let g = 0; while (t23.trip && g++ < 4000) tick(S23, 5);
+        const rpt = S23.reports[0];
+        check("emergency delivered", rpt && !rpt.failed, rpt && rpt.failedWhy);
+        if (rpt && !rpt.failed) {
+          check("emergency pays bonus rep", S23.rep >= rep0 + CFG.EMERGENCY_REP_BONUS, `${rep0}->${S23.rep}`);
+          check("emergency counted", S23.stats.emergencies === 1);
+          check("the report tells the story", rpt.notes.some(n => /Emergency answered/.test(n)));
+        }
+      } else check("emergency assignable", false, "assign failed");
+    }
+    check("tutorial games get no emergencies", (() => {
+      const St = newGame(2031); St.stats.delivered = 0;
+      St.weather.south = { type: "storm", until: 1e9 };
+      return maybeSpawnEmergency(St) === null;
+    })());
+    CFG.EMERGENCY_CHANCE = oldChance;
+  }
+
+  // --- COMPANY EXPANSION: depots ---
+  {
+    const S24 = newGame(204);
+    check("Lakewood is the founding depot", hasDepot(S24, "LKW") && S24.homeDepot === "LKW");
+    check("tier pricing", depotCost("LA") === 16000 && depotCost("SD") === 10000);
+    check("tier-1 towns can't host depots", !buyDepot(S24, "RIV").ok);
+    check("locked regions can't host depots", !buyDepot(S24, "PHX").ok);
+    check("no double-buys", !buyDepot(S24, "LKW").ok);
+    S24.cash = 100;
+    check("no depot on an empty wallet", !buyDepot(S24, "SD").ok);
+    S24.cash = 50000;
+    check("buying a hub depot works", buyDepot(S24, "SD").ok && hasDepot(S24, "SD"));
+    check("...and charges tier price", S24.cash === 50000 - 10000, S24.cash);
+    // repairs: half price at a depot
+    const t24 = S24.trucks[0];
+    t24.cond = 60;
+    t24.at = "SD";
+    const c1 = S24.cash; repairTruck(S24, t24.id);
+    const paidDepot = c1 - S24.cash;
+    t24.cond = 60; t24.at = "LA";
+    const c2 = S24.cash; repairTruck(S24, t24.id);
+    const paidCity = c2 - S24.cash;
+    check("repairs are half price at your depot", Math.abs(paidDepot * 2 - paidCity) <= 2,
+      `${paidDepot} vs ${paidCity}`);
+    // home depot: new trucks arrive there
+    check("set home depot", setHomeDepot(S24, "SD").ok && S24.homeDepot === "SD");
+    check("can't call a non-depot home", !setHomeDepot(S24, "SF").ok);
+    S24.rep = 30; S24.cash = 100000;
+    const bought = buyTruck(S24, "semi");
+    check("new trucks are delivered to home base", bought.ok && bought.truck.at === "SD", bought.truck && bought.truck.at);
+    // save round-trip + legacy migration
+    const back24 = deserialize(serialize(S24));
+    check("depots survive a save", back24.depots.includes("SD") && back24.homeDepot === "SD");
+    const legacy = JSON.parse(serialize(S24));
+    delete legacy.depots; delete legacy.homeDepot;
+    for (const d of legacy.drivers) { delete d.xp; delete d.level; delete d.traits; }
+    const mig = deserialize(JSON.stringify(legacy));
+    check("older v2 saves migrate cleanly", mig.depots.join() === "LKW" && mig.homeDepot === "LKW" &&
+      mig.drivers.every(d => d.xp === 0 && d.level === 1 && Array.isArray(d.traits)));
   }
 
   // --- v1 (California-only) saves are retired, not half-loaded
