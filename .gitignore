@@ -40,3 +40,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+public/games/route-dispatcher/tools/cache/
+public/games/freight-nation/tools/cache/

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="560" viewBox="0 0 400 560">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1420"/>
+      <stop offset="1" stop-color="#16283b"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="560" fill="url(#sky)"/>
+  <!-- stylized California -->
+  <path d="M 120 90 L 128 150 L 118 200 L 148 260 L 182 330 L 226 380 L 262 400 L 300 415 L 296 440 L 180 440 L 150 380 L 116 300 L 104 200 Z"
+        fill="#16231a" stroke="#2e4636" stroke-width="4"/>
+  <!-- route line -->
+  <path d="M 262 396 L 200 330 L 170 260 L 140 180 L 128 120" fill="none"
+        stroke="#5ec4ff" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 14"/>
+  <circle cx="262" cy="396" r="9" fill="#ffd75e"/>
+  <circle cx="128" cy="120" r="9" fill="#7ee08a"/>
+  <!-- hazard -->
+  <text x="150" y="245" font-size="30">🔥</text>
+  <text x="215" y="360" font-size="30">🚧</text>
+  <!-- truck -->
+  <text x="152" y="205" font-size="46">🚚</text>
+  <text x="200" y="60" text-anchor="middle" font-family="system-ui,sans-serif" font-size="34" font-weight="800" fill="#ffd75e">FREIGHT</text>
+  <text x="200" y="498" text-anchor="middle" font-family="system-ui,sans-serif" font-size="34" font-weight="800" fill="#ffd75e">NATION</text>
+  <text x="200" y="527" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" fill="#93a7b8">plan the route · collect the roads</text>
+</svg>

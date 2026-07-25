@@ -91,6 +91,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "freight-nation",
+    title: "Freight Nation",
+    description:
+      "You dispatch, you don't drive. Run a freight company from the map: plan routes on real highways, dodge rush hour, wildfires and wrecks, keep drivers rested and tanks full, and collect a passport of freeway shields as you go. Grow one rusty van into a whole fleet.",
+    genre: "Logistics / Strategy Sim",
+    cover: "/games/freight-nation/cover.png",
+    url: "/games/freight-nation/index.html",
+    color: "#ffd75e",
+    cartridgeColor: "#101c2b",
+    cartridgeLabelColor: "#ffd75e",
+    status: "available",
+  },
+  {
     id: "x-bros",
     title: "X-Bros",
     description:
