@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // cycletls spawns a Go binary from a path relative to its own __dirname —
+  // it must stay an unbundled runtime require, and tracing can't see the
+  // binary, so force it into the /api/kyootbot function bundle.
+  serverExternalPackages: ["cycletls"],
+  outputFileTracingIncludes: {
+    "/api/kyootbot": ["./node_modules/cycletls/dist/index"],
+  },
   async headers() {
     return [
       {
