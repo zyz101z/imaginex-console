@@ -20,7 +20,10 @@ const STOPWORDS = new Set(
     "it its this that these those i im me my you your u ur he she they them we us our his her " +
     "what who when where why how not no yes do does did done can cant cannot will would should could " +
     "just like get got go going gonna lol lmao omg wtf tbh has have had as from by too very really " +
-    "up down out about all some any more most much than then there here now one two dont didnt isnt thats"
+    "up down out about all some any more most much than then there here now one two dont didnt isnt thats " +
+    // Channel-specific noise: chat says "kyoot" constantly, so it never makes
+    // an interesting top word. An explicit ?word=kyoot still bypasses this.
+    "kyoot"
   ).split(/\s+/)
 );
 
@@ -115,7 +118,7 @@ function wordsOf(content: string): string[] {
   return text.match(/[a-z0-9']{3,}/g) ?? [];
 }
 
-async function analyze(channel: string, minutes: number): Promise<Result> {
+async function analyze(channel: string, minutes: number, target: string | null): Promise<Result> {
   const ch = (await kickGet(`https://kick.com/api/v2/channels/${channel}`)) as { id: number };
   const cutoff = Date.now() - minutes * 60 * 1000;
 
@@ -139,10 +142,13 @@ async function analyze(channel: string, minutes: number): Promise<Result> {
   const counts = new Map<string, number>();
   for (const m of inWindow) {
     for (const w of new Set(wordsOf(m.content))) {
-      if (!STOPWORDS.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+      counts.set(w, (counts.get(w) ?? 0) + 1);
     }
   }
-  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  // Stopwords only shape the automatic pick — an explicit target bypasses them.
+  const ranked = [...counts.entries()]
+    .filter(([w]) => !STOPWORDS.has(w))
+    .sort((a, b) => b[1] - a[1]);
 
   // Greedy clustering: walk words highest-count first, folding each into the
   // first cluster whose representative it's a near-spelling of.
@@ -163,12 +169,22 @@ async function analyze(channel: string, minutes: number): Promise<Result> {
   let topWordVariants: string[] = [];
   let topWordCount = 0;
   const users = new Set<string>();
-  if (clusters.length > 0) {
-    const top = clusters[0];
-    topWord = top.rep;
-    topWordVariants = top.words;
+  let variantSet = new Set<string>();
+
+  if (target) {
+    // Caller picked the word: gather its near-spellings from everything seen.
+    topWord = target;
+    topWordVariants = [...counts.keys()].filter((w) => w === target || sameWordish(target, w));
+    if (!topWordVariants.includes(target)) topWordVariants.unshift(target);
+    variantSet = new Set(topWordVariants);
+  } else if (clusters.length > 0) {
+    topWord = clusters[0].rep;
+    topWordVariants = clusters[0].words;
+    variantSet = new Set(topWordVariants);
+  }
+
+  if (topWord) {
     // Recount properly: a message with two variants should count once.
-    const variantSet = new Set(top.words);
     for (const m of inWindow) {
       if (wordsOf(m.content).some((w) => variantSet.has(w))) {
         topWordCount++;
@@ -185,7 +201,10 @@ async function analyze(channel: string, minutes: number): Promise<Result> {
     topWordVariants,
     topWordCount,
     users: [...users].sort((a, b) => a.localeCompare(b)),
-    runnersUp: clusters.slice(1, 6).map((cl) => ({ word: cl.words.join("/"), count: cl.count })),
+    runnersUp: clusters
+      .filter((cl) => !cl.words.some((w) => variantSet.has(w)))
+      .slice(0, 5)
+      .map((cl) => ({ word: cl.words.join("/"), count: cl.count })),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -200,15 +219,17 @@ export async function GET(req: NextRequest) {
     MAX_MINUTES,
     Math.max(1, Number(req.nextUrl.searchParams.get("minutes")) || 10)
   );
+  const word =
+    (req.nextUrl.searchParams.get("word") ?? "").toLowerCase().replace(/[^a-z0-9']/g, "") || null;
 
-  const cacheKey = `${channel}:${minutes}`;
+  const cacheKey = `${channel}:${minutes}:${word ?? ""}`;
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
     return NextResponse.json(hit.result, { headers: { "X-Cache": "hit" } });
   }
 
   try {
-    const result = await analyze(channel, minutes);
+    const result = await analyze(channel, minutes, word);
     cache.set(cacheKey, { at: Date.now(), result });
     return NextResponse.json(result);
   } catch (e) {

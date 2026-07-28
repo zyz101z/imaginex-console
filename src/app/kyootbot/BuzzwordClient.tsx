@@ -17,15 +17,17 @@ type Result = {
 export default function BuzzwordClient() {
   const [channel, setChannel] = useState("kyootbot");
   const [minutes, setMinutes] = useState(10);
+  const [word, setWord] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const run = useCallback(async (ch: string, min: number) => {
+  const run = useCallback(async (ch: string, min: number, w: string) => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`/api/kyootbot?channel=${encodeURIComponent(ch)}&minutes=${min}`);
+      const wordParam = w.trim() ? `&word=${encodeURIComponent(w.trim())}` : "";
+      const r = await fetch(`/api/kyootbot?channel=${encodeURIComponent(ch)}&minutes=${min}${wordParam}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
       setResult(data);
@@ -37,7 +39,7 @@ export default function BuzzwordClient() {
   }, []);
 
   useEffect(() => {
-    run("kyootbot", 10);
+    run("kyootbot", 10, "");
   }, [run]);
 
   return (
@@ -49,7 +51,7 @@ export default function BuzzwordClient() {
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            run(channel, minutes);
+            run(channel, minutes, word);
           }}
         >
           <label className="flex flex-col text-sm text-zinc-400">
@@ -58,6 +60,15 @@ export default function BuzzwordClient() {
               className="mt-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
               value={channel}
               onChange={(e) => setChannel(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col text-sm text-zinc-400">
+            Word (optional)
+            <input
+              placeholder="auto-detect"
+              className="mt-1 w-36 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 placeholder:text-zinc-600"
+              value={word}
+              onChange={(e) => setWord(e.target.value)}
             />
           </label>
           <label className="flex flex-col text-sm text-zinc-400">
