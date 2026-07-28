@@ -59,15 +59,29 @@ function editDistance(a: string, b: string, max: number): number {
   return prev[b.length];
 }
 
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+
 // Group near-identical spellings (ukulele/ukelele/ukalele, plurals) into one
 // bucket. Short words merge only exactly — "code"/"core" must stay separate.
 function sameWordish(a: string, b: string): boolean {
   const len = Math.min(a.length, b.length);
   if (len < 5) return false;
-  // Distinct words one substitution apart (stake/snake, words/cords) almost
-  // never share a prefix, while typo/spelling variants nearly always do.
+  // Distinct words one substitution apart (words/cords) almost never share a
+  // prefix, while typo/spelling variants nearly always do.
   if (a.slice(0, 2) !== b.slice(0, 2)) return false;
   const max = len >= 8 ? 2 : 1;
+  if (a.length === b.length) {
+    // Same-length: only vowel↔vowel swaps count as spelling variants
+    // (ukulele/ukelele yes, stake/stare no).
+    let diffs = 0;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        if (!VOWELS.has(a[i]) || !VOWELS.has(b[i])) return false;
+        if (++diffs > max) return false;
+      }
+    }
+    return diffs > 0;
+  }
   return editDistance(a, b, max) <= max;
 }
 
