@@ -21,6 +21,7 @@ export default function BuzzwordClient() {
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const run = useCallback(async (ch: string, min: number, w: string) => {
     setLoading(true);
@@ -128,6 +129,17 @@ export default function BuzzwordClient() {
                     <li key={u} className="truncate">{u}</li>
                   ))}
                 </ul>
+                <button
+                  type="button"
+                  className="mt-3 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm font-medium hover:bg-zinc-700"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(result.users.join("\n"));
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                >
+                  {copied ? "Copied!" : "Copy names"}
+                </button>
               </div>
             )}
 
