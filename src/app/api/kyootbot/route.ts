@@ -35,11 +35,41 @@ type Result = {
   minutes: number;
   messageCount: number;
   topWord: string | null;
+  topWordVariants: string[];
   topWordCount: number;
   users: string[];
   runnersUp: { word: string; count: number }[];
   generatedAt: string;
 };
+
+// Edit distance capped at `max` — bails early once the distance can't stay under it.
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      rowMin = Math.min(rowMin, cur[j]);
+    }
+    if (rowMin > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// Group near-identical spellings (ukulele/ukelele/ukalele, plurals) into one
+// bucket. Short words merge only exactly — "code"/"core" must stay separate.
+function sameWordish(a: string, b: string): boolean {
+  const len = Math.min(a.length, b.length);
+  if (len < 5) return false;
+  // Distinct words one substitution apart (stake/snake, words/cords) almost
+  // never share a prefix, while typo/spelling variants nearly always do.
+  if (a.slice(0, 2) !== b.slice(0, 2)) return false;
+  const max = len >= 8 ? 2 : 1;
+  return editDistance(a, b, max) <= max;
+}
 
 // The cycletls child process survives across warm invocations — never .exit() it.
 let cycleTLSPromise: ReturnType<typeof initCycleTLS> | null = null;
@@ -100,13 +130,36 @@ async function analyze(channel: string, minutes: number): Promise<Result> {
   }
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
 
+  // Greedy clustering: walk words highest-count first, folding each into the
+  // first cluster whose representative it's a near-spelling of.
+  type Cluster = { rep: string; words: string[]; count: number };
+  const clusters: Cluster[] = [];
+  for (const [w, c] of ranked) {
+    const cl = clusters.find((cl) => sameWordish(cl.rep, w));
+    if (cl) {
+      cl.words.push(w);
+      cl.count += c;
+    } else {
+      clusters.push({ rep: w, words: [w], count: c });
+    }
+  }
+  clusters.sort((a, b) => b.count - a.count);
+
   let topWord: string | null = null;
+  let topWordVariants: string[] = [];
   let topWordCount = 0;
   const users = new Set<string>();
-  if (ranked.length > 0) {
-    [topWord, topWordCount] = ranked[0];
+  if (clusters.length > 0) {
+    const top = clusters[0];
+    topWord = top.rep;
+    topWordVariants = top.words;
+    // Recount properly: a message with two variants should count once.
+    const variantSet = new Set(top.words);
     for (const m of inWindow) {
-      if (wordsOf(m.content).includes(topWord) && m.sender?.username) users.add(m.sender.username);
+      if (wordsOf(m.content).some((w) => variantSet.has(w))) {
+        topWordCount++;
+        if (m.sender?.username) users.add(m.sender.username);
+      }
     }
   }
 
@@ -115,9 +168,10 @@ async function analyze(channel: string, minutes: number): Promise<Result> {
     minutes,
     messageCount: inWindow.length,
     topWord,
+    topWordVariants,
     topWordCount,
     users: [...users].sort((a, b) => a.localeCompare(b)),
-    runnersUp: ranked.slice(1, 6).map(([word, count]) => ({ word, count })),
+    runnersUp: clusters.slice(1, 6).map((cl) => ({ word: cl.words.join("/"), count: cl.count })),
     generatedAt: new Date().toISOString(),
   };
 }

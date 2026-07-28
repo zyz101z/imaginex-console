@@ -7,6 +7,7 @@ type Result = {
   minutes: number;
   messageCount: number;
   topWord: string | null;
+  topWordVariants: string[];
   topWordCount: number;
   users: string[];
   runnersUp: { word: string; count: number }[];
@@ -95,7 +96,13 @@ export default function BuzzwordClient() {
                     {result.topWordCount} messages · {result.users.length} users
                   </span>
                 </p>
-              ) : (
+              ) : null}
+              {result.topWordVariants && result.topWordVariants.length > 1 ? (
+                <p className="mt-1 text-sm text-zinc-500">
+                  incl. spellings: {result.topWordVariants.join(", ")}
+                </p>
+              ) : null}
+              {!result.topWord && (
                 <p className="mt-2 text-zinc-400">No words found in that window.</p>
               )}
             </div>
