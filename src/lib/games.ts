@@ -23,7 +23,7 @@ export const games: Game[] = [
     color: "#a25bff",
     cartridgeColor: "#140f1e",
     cartridgeLabelColor: "#c89bff",
-    status: "coming_soon",
+    status: "available",
   },
   {
     id: "tennis-world",

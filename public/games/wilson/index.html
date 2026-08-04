@@ -223,6 +223,7 @@
     <div class="prompt"><small>DISTRICT <span id="cityNum">1</span></small><span id="cityProg">🎨 0/10</span></div>
     <div class="coins">🪙 <span class="c" id="coinCount2">0</span></div>
   </div>
+  <div class="mutewrap"><button class="iconbtn" id="btnMute2" title="Sound">🔊</button></div>
   <button class="btn gold bigpaint hidden" id="btnPaint">🎨 PAINT THIS WALL</button>
   <div class="hint" id="skateHint">Skate ◀ ▶ · Jump ⤒ · Jump again in the air = TRICK · Grind the rails</div>
   <div class="padL">
@@ -331,6 +332,7 @@ function defaultSave(){
     ownedSkins: ['purple'],
     equippedSkin: 'purple',
     seen: 0,
+    muted: false,
     gallery: [],      // finished murals, survives district rollover
     challenges: null, // {list:[...], done:0}
     stats: {walls:0,tricks:0,grinds:0,coinsEarned:0,best:{}}
@@ -627,6 +629,43 @@ window.addEventListener('pointercancel',up);
 
 // ============================================================= AUDIO (procedural)
 let AC=null,noiseBuf=null,hissNode=null,hissGain=null,muted=false;
+
+// ---- background music ----
+const MUSIC_VOL=0.30;
+let music=null, musicFade=null;
+function initMusic(){
+  if(music)return music;
+  music=new Audio('music.mp3');
+  music.loop=true; music.preload='auto'; music.volume=0;
+  return music;
+}
+function fadeMusicTo(target,ms){
+  const m=initMusic();
+  clearInterval(musicFade);
+  const from=m.volume, steps=Math.max(1,Math.round((ms||600)/40));
+  let i=0;
+  musicFade=setInterval(()=>{
+    i++; m.volume=Math.max(0,Math.min(1,from+(target-from)*(i/steps)));
+    if(i>=steps){clearInterval(musicFade);
+      if(target===0){try{m.pause();}catch(e){}}}
+  },40);
+}
+// Browsers need a real gesture before audio can start, so this is called from
+// the first pointerdown / PLAY press rather than on load.
+function startMusic(){
+  if(muted)return;
+  const m=initMusic();
+  if(!m.paused)return;
+  const p=m.play();
+  if(p&&p.catch)p.catch(()=>{});   // autoplay refused — next gesture retries
+  fadeMusicTo(MUSIC_VOL,900);
+}
+function applyMute(){
+  document.querySelectorAll('#btnMute,#btnMute2').forEach(b=>{
+    b.textContent=muted?'🔇':'🔊'; b.style.opacity=muted?'0.55':'1';});
+  if(muted){ hiss(false); if(music&&!music.paused)fadeMusicTo(0,250); }
+  else startMusic();
+}
 function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();
   noiseBuf=AC.createBuffer(1,AC.sampleRate*1,AC.sampleRate);const d=noiseBuf.getChannelData(0);
   for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}catch(e){}}return AC;}
@@ -1772,7 +1811,9 @@ function buildShop(){
 }
 
 // ============================================================= BUTTONS
-$('btnPlay').onclick=()=>{ac();enterSkate();};
+$('btnPlay').onclick=()=>{ac();startMusic();enterSkate();};
+// any first tap counts as the gesture that unlocks audio
+window.addEventListener('pointerdown',()=>{ac();startMusic();},{passive:true});
 $('btnShop2').onclick=()=>{buildShop();show('shop');};
 $('btnGallery').onclick=()=>{buildGallery();show('gallery');};
 $('btnGalClose').onclick=()=>show('title');
@@ -1799,7 +1840,9 @@ $('btnMenu2').onclick=()=>{show('title');};
 $('btnPaint').onclick=()=>{ if(nearWall)enterSpray(nearWall); };
 let shopReturn='title';
 $('btnShopClose').onclick=()=>{ show(shopReturn); shopReturn='title'; if(screen==='play')buildPalette(); };
-$('btnMute').onclick=()=>{muted=!muted;$('btnMute').textContent=muted?'🔇':'🔊';if(muted)hiss(false);};
+function toggleMute(){ muted=!muted; save.muted=muted; persist(); applyMute(); }
+$('btnMute').onclick=toggleMute;
+$('btnMute2').onclick=toggleMute;
 
 // keyboard (skate mode)
 window.addEventListener('keydown',e=>{
@@ -1815,7 +1858,10 @@ window.addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
 function clearInput(){ for(const k in keys)keys[k]=false; touchMove=0; touchJump=false;
   if(painting){painting=false;hiss(false);last=null;} }
 window.addEventListener('blur',clearInput);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden)clearInput(); });
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){ clearInput(); if(music&&!music.paused){clearInterval(musicFade);music.pause();} }
+  else if(!muted&&music&&music.paused){ const p=music.play(); if(p&&p.catch)p.catch(()=>{}); }
+});
 // touch pads
 function bindPad(id,down,up){ const el=$(id);
   el.addEventListener('pointerdown',e=>{e.preventDefault();ac();down();});
@@ -1854,6 +1900,7 @@ window.addEventListener('resize',()=>{
 });
 layout();
 setAccent();updateCoins();
+muted=!!save.muted; applyMute();
 requestAnimationFrame(render);
 
 // ============================================================= TEST HOOK
@@ -1933,6 +1980,10 @@ window.__wilson={
   goals(){ensureChallenges();return save.challenges.list.map(c=>({id:c.id,t:c.t,prog:c.prog,target:c.target,reward:c.reward,claimed:c.claimed}));},
   bump(stat,n){bumpStat(stat,n);},
   saveBytes(){return (localStorage.getItem(SAVE_KEY)||'').length;},
+  musicState(){return music?{paused:music.paused,vol:+music.volume.toFixed(2),
+    time:+music.currentTime.toFixed(2),loop:music.loop,src:music.src.split('/').pop()}:null;},
+  muted(){return muted;},
+  toggleMute(){toggleMute();},
   prompts(){return PROMPTS.map(p=>p.id);},
   paintHere(){ if(nearWall){enterSpray(nearWall);return true;} return false;},
   tick(dt){updateSkate(dt||0.016);}
