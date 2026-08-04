@@ -13,6 +13,19 @@ export interface Game {
 
 export const games: Game[] = [
   {
+    id: "wilson",
+    title: "Wilson's Spray World",
+    description:
+      "Wilson's a zombie skater kid with a spray can. Roll up to a wall, paint what it asks for — skulls, cats, his signature drip-smiley tag — and stack coins for wild fills. Unlock neon paint, fat caps, and fresh tag colors. Never fail a wall, just get fresher.",
+    genre: "Creative / Arcade",
+    cover: "/games/wilson/cover.png",
+    url: "/games/wilson/index.html",
+    color: "#a25bff",
+    cartridgeColor: "#140f1e",
+    cartridgeLabelColor: "#c89bff",
+    status: "coming_soon",
+  },
+  {
     id: "tennis-world",
     title: "Tennis World",
     description:

@@ -580,6 +580,7 @@ const GAME_SCORE_LABELS: Record<string, string> = {
   "divided-states": "Wins",
   "tank-wars": "Wins",
   "creature-cove": "Lifetime Gold",
+  wilson: "Best Tag",
 };
 
 function LeaderboardView() {
