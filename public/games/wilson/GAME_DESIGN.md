@@ -178,3 +178,19 @@ path filled to the mask; no image assets.
   first. Keep that ordering.
   Verified: all 5 suites still green, zero runtime errors, title fits without scrolling at
   960×640 and 390×720, and frame time is a locked 16.7ms (60fps) even on a software renderer.
+- 2026-08-10: real cover art from the user installed (`Wilsons_Spray_Wolrd.png` → cover.png,
+  1024×1536 → 512w, 235KB). Replaces the auto-generated crop of the character render.
+- 2026-08-10 (BUG 9 — user-reported "black dots you can't fill in"): **REPRODUCED and FIXED.**
+  Cause was the drip system, NOT the spray. A drip advanced only ~1px per frame while stamping
+  a circle up to 13px across, so at 60fps the same anti-aliased rim was composited a dozen+
+  times a second. At that faint rim, 8-bit premultiplied rounding zeroes the low channels while
+  the maxed channel survives (purple #a25bff → pure blue 0,0,255), and the repeats accumulate
+  until the specks are opaque — hence unpaintable, since fresh spray only adds 0.55 alpha.
+  Fix: drips now advance on real elapsed time (`speed` px/sec, so they no longer run faster on
+  120Hz displays) and only stamp once the tip has moved ≥0.7× its radius; single save/restore.
+  They also animate whenever the wall is open rather than only while the pointer is down, so a
+  drip no longer freezes mid-run when you lift your finger.
+  ⚠️ Diagnostic note for future bugs of this shape: an isolated A/B of the *spray* gradient
+  showed ZERO stray pixels — the gradient was NOT the cause, despite being the obvious suspect.
+  What identified it was disabling drips in the real game (51 stray px → 0). Reproduce, don't
+  reason. Regression guarded by BUG 9 in `test/regressions.test.js`.

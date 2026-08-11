@@ -154,6 +154,34 @@ const URL = 'http://localhost:3000/games/wilson/index.html';
   console.log('BUG8 submits across 3 walls (1 best + 2 worse):', JSON.stringify(submits));
   if (submits.length !== 1) problems.push('BUG8: expected exactly 1 submit, got ' + submits.length + ' -> ' + JSON.stringify(submits));
 
+  // ---- BUG 9: drips must not bake stray pixels into the paint ----
+  // A drip used to re-stamp the same anti-aliased rim every frame; 8-bit
+  // premultiplied rounding accumulated there into opaque off-colour specks
+  // that fresh paint could not cover ("black dots you can't fill in").
+  await page.setViewport({ width: 960, height: 700 });
+  await page.evaluate(() => { window.__wilson.reset(); window.__wilson.play(); window.__wilson.setPrompt('skull'); });
+  await sleep(300);
+  await page.evaluate(() => { const nz=[...document.querySelectorAll('#nozzles .nz')]; nz[nz.length-1].click(); });
+  for (let y = 200; y < 430; y += 9) {
+    await page.mouse.move(220, y); await page.mouse.down();
+    for (let x = 220; x <= 700; x += 18) await page.mouse.move(x, y);
+    await page.mouse.up();
+  }
+  await sleep(1200);   // let every drip finish running
+  const speckle = await page.evaluate(() => {
+    const ctx = document.getElementById('cv').getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const d = ctx.getImageData(260*dpr, 230*dpr, 380*dpr, 170*dpr).data;
+    let dark = 0, total = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      total++;
+      if (0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2] < 70) dark++;
+    }
+    return { total, dark };
+  });
+  console.log('BUG9 speckle scan inside solid paint: ' + speckle.dark + ' stray dark px of ' + speckle.total);
+  if (speckle.dark > 0) problems.push('BUG9: ' + speckle.dark + ' stray dark pixels baked into solid paint (drip rounding regression)');
+
   console.log('\n=== ERRORS (whole run) ===');
   console.log(errors.length ? errors.slice(0,5).join('\n') : '(none)');
   console.log('\n=== VERDICT ===');

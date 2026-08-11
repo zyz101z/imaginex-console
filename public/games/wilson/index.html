@@ -562,7 +562,8 @@ function stampAt(px,py,o){
   if(curStroke&&!quiet)curStroke.pts.push(px,py);
   // occasional drip (skipped on replay so undo stays deterministic)
   if(!erase&&!quiet&&Math.random()<0.04&&!nz.splatter){
-    drips.push({x:px,y:py,len:0,max:8+Math.random()*40,r:r*0.28,hex});}
+    drips.push({x:px,y:py,len:0,drawn:-99,max:8+Math.random()*40,
+      speed:26+Math.random()*34,r:r*0.28,hex});}
 }
 function replayStrokes(){
   pctx.clearRect(0,0,paint.width,paint.height);
@@ -586,11 +587,24 @@ function clearWall(){
 }
 function updateUndoBtn(){ const b=document.getElementById('btnUndo');
   if(b)b.style.opacity=strokeLog.length?'1':'0.4'; }
-function updateDrips(){
-  for(const d of drips){ if(d.len<d.max){ const step=Math.min(2.2,d.max-d.len);
-    pctx.globalAlpha=0.5;pctx.fillStyle=d.hex;
-    pctx.beginPath();pctx.arc(d.x*dpr,(d.y+d.len)*dpr,d.r*dpr,0,7);pctx.fill();pctx.globalAlpha=1;
-    d.len+=step*0.5;} }
+function updateDrips(dt){
+  // A drip used to advance ~1px per frame while stamping a circle up to 13px
+  // wide, so at 60fps the same anti-aliased rim was composited a dozen times a
+  // second. Sub-1/255 premultiplied rounding at that rim zeroed the low
+  // channels while the maxed one survived, and the repeats accumulated until
+  // those stray pixels went opaque — the "dots you can't paint over" bug.
+  // Fix: advance on real time, and only stamp once the tip has actually moved.
+  const step=Math.max(0.001,dt||0.016);
+  for(const d of drips){
+    if(d.len>=d.max)continue;
+    d.len=Math.min(d.max,d.len+d.speed*step);
+    if(d.len-d.drawn<d.r*0.7&&d.len<d.max)continue;
+    d.drawn=d.len;
+    pctx.save();
+    pctx.globalAlpha=0.72;pctx.fillStyle=d.hex;
+    pctx.beginPath();pctx.arc(d.x*dpr,(d.y+d.len)*dpr,d.r*dpr,0,7);pctx.fill();
+    pctx.restore();
+  }
   drips=drips.filter(d=>d.len<d.max);
 }
 
@@ -1535,7 +1549,9 @@ function render(ts){
       drawShapeTo(ctx,current.id,shapeBox,'#ffffff');ctx.restore();
     }
     // paint layer
-    if(painting)updateDrips();
+    // Run whenever the wall is open, not only while the pointer is down —
+    // otherwise a drip freezes mid-run the moment you lift your finger.
+    if(drips.length)updateDrips(dt);
     ctx.drawImage(paint,wall.x,wall.y,wall.w,wall.h);
     // wall frame + soft ambient glow around the panel
     ctx.strokeStyle='rgba(0,0,0,0.65)';ctx.lineWidth=7;
