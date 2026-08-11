@@ -194,3 +194,29 @@ path filled to the mask; no image assets.
   showed ZERO stray pixels — the gradient was NOT the cause, despite being the obvious suspect.
   What identified it was disabling drips in the real game (51 stray px → 0). Reproduce, don't
   reason. Regression guarded by BUG 9 in `test/regressions.test.js`.
+- 2026-08-10 (v7): **SCORING RECALIBRATED FOR HUMAN HANDS.** User: "even a good moon
+  scores 17%". Correct — and the fault was calibrating v4 against machine-perfect geometry,
+  which has no wobble. Built `scratchpad/human.js`, which simulates freehand drawings
+  (jittered polylines) and is now the PRIMARY calibration reference; `calibrate.js` stays as
+  the cheat/perfection check. Measured before → after on hand-drawn attempts:
+  moon 20%F→54%C · heart 37%D→64%B · tag-circle 50%D→73%A · ghost 48%D→71%B · star 68%B→75%A.
+  Two changes did it: (1) masks are BLURRED before comparison (`blurMask`, radius 3 on the
+  64² grid) so wobble is a near-miss not a miss; (2) similarity is soft **Dice**, not IoU —
+  IoU savages THIN shapes because a slightly-thick crescent stroke inflates the union, which
+  is precisely what buried the moon. Thresholds re-set from hand-drawn data:
+  S≥.84 A≥.72 B≥.60 C≥.48 D≥.34. Anti-cheese intact (spray-all and scribble still F).
+  Vocabulary +5 common doodles (face, house, sun, tree, flower) — a face was previously
+  IMPOSSIBLE to guess because it wasn't in the set.
+- 2026-08-10: **TRACE GUIDE (user's idea, good one).** District 1 shows a dashed trace
+  outline permanently to teach what the judge wants; District 2+ removes it. Title-screen
+  button cycles TRACE: AUTO / ON / OFF (`save.guide`, `guideOn()`).
+- ⚠️ **Freestyle recognition is still only ~50% top-1 and is a KNOWN LIMITATION.** Three
+  successive reweightings each fixed one case and broke another (silhouette-led: moon ✓
+  face ✗; ink-led: face ✓ moon ✗; blended: face ✓ star ✓ moon ✗ heart ✗) — classic
+  overfitting to a handful of examples. Mitigated in the UX instead: when the top two
+  candidates are within 0.06 Wilson offers both ("…or maybe a X?") and grades against
+  whichever fits better, so a near-miss reads as playful uncertainty rather than a wrong
+  answer. **The real fix is vocabulary confusability, not weights** — the set now holds ~23
+  shapes of which a dozen are round blobs (face/skull/tag/ghost/tomb/crown/alien/sun/cat).
+  Next attempt should curate a small, visually DISTINCT freestyle-only subset, or train an
+  actual sketch classifier. Do not keep tuning the weights; that road is exhausted.

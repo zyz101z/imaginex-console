@@ -247,6 +247,9 @@
       <button class="btn ghost" id="btnGallery">🖼️ GALLERY</button>
       <button class="btn ghost" id="btnGoals">🎯 GOALS</button>
     </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn ghost" id="btnGuide" style="font-size:12px;padding:8px 12px">📐 TRACE: AUTO</button>
+    </div>
     <div class="tag" style="margin-top:14px;font-size:12px">Best Tag: <b id="bestScore" style="color:var(--gold)">0</b></div>
   </div>
 </div>
@@ -429,6 +432,26 @@ const SHAPES = {
   can:(c)=>{c.beginPath();c.rect(30,26,40,66);c.fill();
     c.beginPath();c.ellipse(50,26,20,7,0,0,7);c.fill();
     c.beginPath();c.rect(43,10,14,14);c.fill();},
+  // Common doodles — added so Freestyle can actually recognise what people
+  // draw. A face was impossible to guess before: it simply wasn't in here.
+  face:(c)=>{c.beginPath();c.arc(50,50,36,0,7);c.fill();
+    c.save();c.globalCompositeOperation='destination-out';
+    c.beginPath();c.arc(38,40,5.5,0,7);c.fill();
+    c.beginPath();c.arc(62,40,5.5,0,7);c.fill();
+    c.lineWidth=6;c.lineCap='round';c.beginPath();
+    c.arc(50,54,17,0.18*Math.PI,0.82*Math.PI);c.stroke();c.restore();},
+  house:(c)=>{poly(c,[[50,10],[92,44],[92,92],[8,92],[8,44]]);},
+  sun:(c)=>{c.beginPath();c.arc(50,50,24,0,7);c.fill();
+    c.lineWidth=7;c.lineCap='round';
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;c.beginPath();
+      c.moveTo(50+Math.cos(a)*32,50+Math.sin(a)*32);
+      c.lineTo(50+Math.cos(a)*44,50+Math.sin(a)*44);c.stroke();}},
+  tree:(c)=>{c.beginPath();c.arc(50,38,30,0,7);c.fill();
+    c.beginPath();c.rect(42,58,16,38);c.fill();},
+  flower:(c)=>{for(let i=0;i<6;i++){const a=i*Math.PI/3;
+      c.beginPath();c.ellipse(50+Math.cos(a)*20,36+Math.sin(a)*20,11,11,0,0,7);c.fill();}
+    c.beginPath();c.arc(50,36,9,0,7);c.fill();
+    c.lineWidth=6;c.beginPath();c.moveTo(50,50);c.lineTo(50,96);c.stroke();},
   hand:(c)=>{c.beginPath();c.rect(34,52,32,42);c.fill();
     [[38,44],[47,38],[56,38],[65,46]].forEach((p,i)=>{c.beginPath();
       c.roundRect(p[0]-5,p[1]-(i===1||i===2?22:14),11,(i===1||i===2?34:26),5);c.fill();});}
@@ -443,7 +466,9 @@ const PROMPTS = [
   {id:'mushroom',name:'Mushroom'},{id:'bolt',name:'Lightning'},{id:'crown',name:'Crown'},
   {id:'board',name:'Skateboard'},{id:'tomb',name:'Tombstone'},
   {id:'diamond',name:'Diamond'},{id:'moon',name:'Moon'},{id:'bone',name:'Bone'},
-  {id:'alien',name:'Alien'},{id:'can',name:'Spray Can'},{id:'hand',name:'Zombie Hand'}
+  {id:'alien',name:'Alien'},{id:'can',name:'Spray Can'},{id:'hand',name:'Zombie Hand'},
+  {id:'face',name:'Face'},{id:'house',name:'House'},{id:'sun',name:'Sun'},
+  {id:'tree',name:'Tree'},{id:'flower',name:'Flower'}
 ];
 // Special wall: no assigned subject — draw anything and Wilson guesses it.
 const FREE={id:'free',name:'ANYTHING YOU WANT'};
@@ -756,7 +781,19 @@ function normalize(m,w,h){
     const sx=Math.floor(ox+(nx+0.5)*s/NORM), sy=Math.floor(oy+(ny+0.5)*s/NORM);
     if(sx>=0&&sx<w&&sy>=0&&sy<h&&m[sy*w+sx])out[ny*NORM+nx]=1;
   }
-  return {mask:out,count,bw,bh};
+  return {mask:out,count,bw,bh,ox,oy,s};
+}
+// Normalize a second mask using the crop/scale already chosen for another, so
+// the ink view lines up pixel-for-pixel with the silhouette view.
+function normalizeLike(m,w,h,ref){
+  if(!ref)return null;
+  const out=new Uint8Array(NORM*NORM);
+  for(let ny=0;ny<NORM;ny++)for(let nx=0;nx<NORM;nx++){
+    const sx=Math.floor(ref.ox+(nx+0.5)*ref.s/NORM),
+          sy=Math.floor(ref.oy+(ny+0.5)*ref.s/NORM);
+    if(sx>=0&&sx<w&&sy>=0&&sy<h&&m[sy*w+sx])out[ny*NORM+nx]=1;
+  }
+  return out;
 }
 function mirrorMask(a){const o=new Uint8Array(NORM*NORM);
   for(let y=0;y<NORM;y++)for(let x=0;x<NORM;x++)o[y*NORM+x]=a[y*NORM+(NORM-1-x)];return o;}
@@ -769,6 +806,44 @@ function shiftMask(a,dx,dy){ if(!dx&&!dy)return a;
 function iou(a,b){let inter=0,uni=0;
   for(let i=0;i<NORM*NORM;i++){const A=a[i],B=b[i]; if(A&&B)inter++; if(A||B)uni++;}
   return uni?inter/uni:0;}
+// Blur to a soft field so a wobbly hand-drawn line still overlaps the target.
+// Two box passes ≈ Gaussian. This is what makes the judge tolerate human hands
+// while still caring about shape.
+function blurMask(m,radius){
+  const w=NORM,h=NORM;
+  let src=Float32Array.from(m), tmp=new Float32Array(w*h);
+  for(let pass=0;pass<2;pass++){
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      let s=0,n=0;
+      for(let k=-radius;k<=radius;k++){const xx=x+k;if(xx<0||xx>=w)continue;s+=src[y*w+xx];n++;}
+      tmp[y*w+x]=s/n;
+    }
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      let s=0,n=0;
+      for(let k=-radius;k<=radius;k++){const yy=y+k;if(yy<0||yy>=h)continue;s+=tmp[yy*w+x];n++;}
+      src[y*w+x]=s/n;
+    }
+  }
+  return src;
+}
+// Soft Dice over blurred fields. Dice rather than IoU because IoU punishes
+// THIN shapes savagely — on a crescent, a slightly-too-thick stroke inflates
+// the union and craters the score, which is why a good moon scored 20%.
+function softIoU(a,b){
+  let inter=0,sa=0,sb=0;
+  for(let i=0;i<a.length;i++){const x=a[i],y=b[i];
+    inter+=x<y?x:y; sa+=x; sb+=y;}
+  return (sa+sb)?2*inter/(sa+sb):0;
+}
+function shiftF(a,dx,dy){ if(!dx&&!dy)return a;
+  const o=new Float32Array(NORM*NORM);
+  for(let y=0;y<NORM;y++){const sy=y-dy; if(sy<0||sy>=NORM)continue;
+    for(let x=0;x<NORM;x++){const sx=x-dx; if(sx<0||sx>=NORM)continue;
+      o[y*NORM+x]=a[sy*NORM+sx];}}
+  return o;}
+function mirrorF(a){const o=new Float32Array(NORM*NORM);
+  for(let y=0;y<NORM;y++)for(let x=0;x<NORM;x++)o[y*NORM+x]=a[y*NORM+(NORM-1-x)];return o;}
+
 // Boundary of a filled form (a solid disc and a drawn ring share one).
 function edgesOf(m){
   const o=new Uint8Array(NORM*NORM);
@@ -790,29 +865,54 @@ function distTransform(edge){
   return d;}
 // Area overlap ALONE can't tell a square from a circle (79% either way), so
 // contour distance is weighted equally — that's what makes shape actually count.
-function scorePair(pmask,pedge,ref){
-  const area=iou(pmask,ref.mask);
-  let sum=0,n=0;
-  for(let i=0;i<pedge.length;i++)if(pedge[i]){sum+=ref.dt[i];n++;}
-  const meanPx=n?(sum/n)/3:99;
-  const contour=Math.max(0,1-meanPx/7);
-  return 0.5*area+0.5*contour;
+const BLUR=3;      // wobble tolerance, in cells of the 64x64 normalized grid
+// Two views of a drawing, because each alone gets something wrong:
+//  - SILHOUETTE (hole-filled): lets an outline drawing match a solid target,
+//    but erases interior detail, which is why a drawn face used to read as a
+//    featureless blob and match a tombstone.
+//  - INK (raw strokes): keeps that interior detail and matches the target's
+//    contour, which is what tells a face apart from a headstone.
+// Score takes the better of the two so neither style of drawing is punished.
+function scorePair(pv,ref){
+  const sil=softIoU(pv.fill,ref.fill);
+  const ink=softIoU(pv.ink,ref.edge);
+  // Blend, don't take the max: on max, the ink term alone could crown a wrong
+  // shape (a drawn heart was matching Fish). Silhouette leads, ink refines.
+  return 0.72*sil+0.28*Math.max(ink,sil*0.6);
 }
-function bestMatch(pm,id){
+// Identifying a drawing is a different job from grading it. Grading asks "how
+// close is this to the target" and is silhouette-led. Identifying has to tell
+// near-identical silhouettes apart — a face, a crown and a tombstone are all
+// round blobs once filled — so it leans on the interior ink instead.
+function recogPair(pv,ref){
+  return 0.42*softIoU(pv.fill,ref.fill)+0.58*softIoU(pv.ink,ref.edge);
+}
+function bestMatch(pv,id,fn){
+  const f=fn||scorePair;
   let best=0;
-  for(const ref of refMasks(id))
+  for(const ref of refViews(id))
     for(let dy=-3;dy<=3;dy+=3)for(let dx=-3;dx<=3;dx+=3){
-      const s=shiftMask(pm,dx,dy);
-      best=Math.max(best,scorePair(s,edgesOf(s),ref));
+      best=Math.max(best,f(
+        {fill:shiftF(pv.fill,dx,dy), ink:shiftF(pv.ink,dx,dy)}, ref));
     }
   return best;
 }
 const refCache=new Map();
-function refMasks(id){
+function refViews(id){
   if(!refCache.has(id)){
     const R=120;
-    const base=normalize(fillHoles(maskFromShape(id,R,R),R,R),R,R).mask;
-    refCache.set(id,[base,mirrorMask(base)].map(m=>({mask:m,dt:distTransform(edgesOf(m))})));
+    const raw=maskFromShape(id,R,R);
+    const solid=normalize(fillHoles(raw,R,R),R,R);
+    // Ink view comes from the UNFILLED shape: on a face the eyes and mouth are
+    // holes, and taking edges after hole-filling erased exactly the features
+    // that identify it (a face then matched any round blob).
+    const rawN=normalizeLike(raw,R,R,solid);
+    const outline=edgesOf(solid.mask), detail=edgesOf(rawN);
+    const ink=new Uint8Array(NORM*NORM);
+    for(let i=0;i<ink.length;i++)ink[i]=(outline[i]||detail[i])?1:0;
+    const build=(f,e)=>({fill:blurMask(f,BLUR), edge:blurMask(e,BLUR)});
+    refCache.set(id,[build(solid.mask,ink),
+                     build(mirrorMask(solid.mask),mirrorMask(ink))]);
   }
   return refCache.get(id);
 }
@@ -830,15 +930,33 @@ function scoreWall(){
     return {id:current.id,guess:null,grade:'F',accuracy:0,match:0,inkRatio,
       score:0,coins:0,variety:false,fast:false,elapsed};
   }
-  const pn=normalize(fillHoles(raw,RW,RH),RW,RH);
+  // Normalize BOTH views through the same crop/scale so they stay aligned.
+  const filled=fillHoles(raw,RW,RH);
+  const nf=normalize(filled,RW,RH);
+  const ni=normalizeLike(raw,RW,RH,nf);
+  if(!nf||!ni){
+    return {id:current.id,guess:null,grade:'F',accuracy:0,match:0,inkRatio,
+      score:0,coins:0,variety:false,fast:false,elapsed};
+  }
+  const pv={fill:blurMask(nf.mask,BLUR), ink:blurMask(ni,BLUR)};
 
-  let guess=null, match=0;
-  if(isFree){ // Wilson works out what it looks most like
+  let guess=null, match=0, alt=null;
+  if(isFree){
+    // Rank on silhouette AND interior ink together; either alone mis-fires
+    // (silhouette calls every round doodle a crown, ink alone loses the moon).
+    const ranked=[];
     for(const p of PROMPTS){ if(p.id==='free')continue;
-      const m=bestMatch(pn.mask,p.id);
-      if(m>match){match=m;guess=p;} }
+      ranked.push({p, s:0.5*bestMatch(pv,p.id)+0.5*bestMatch(pv,p.id,recogPair)}); }
+    ranked.sort((a,b)=>b.s-a.s);
+    guess=ranked[0]&&ranked[0].p||null;
+    // A single confident-sounding wrong answer feels broken; offering a second
+    // reading is honest about how sure Wilson actually is — and usually lands.
+    if(ranked[1]&&ranked[0].s-ranked[1].s<0.06)alt=ranked[1].p;
+    // Grade against whichever of the two the drawing actually fits best.
+    match=guess?Math.max(bestMatch(pv,guess.id),
+      alt?bestMatch(pv,alt.id):0):0;
   }else{
-    match=bestMatch(pn.mask,current.id);
+    match=bestMatch(pv,current.id);
     guess=current;
   }
   let accuracy=match;
@@ -847,10 +965,13 @@ function scoreWall(){
   if(inkRatio>0.42)accuracy*=Math.max(0.25,1-(inkRatio-0.42)*1.7);
 
   const par=30, fast=elapsed<par;
-  // S is meant to be rare — a genuinely clean, well-proportioned piece.
+  // Calibrated against HAND-DRAWN attempts, not machine-perfect geometry —
+  // grading the latter is what made a good crescent score 20%. Reference points:
+  // perfect fill ~.88, tidy freehand ~.75, rough-but-recognisable ~.55,
+  // wrong shape ~.57, 60% of the wall sprayed ~.45, scribble ~.15.
   let grade='F';
-  if(accuracy>=0.86)grade='S';else if(accuracy>=0.76)grade='A';else if(accuracy>=0.66)grade='B';
-  else if(accuracy>=0.50)grade='C';else if(accuracy>=0.34)grade='D';
+  if(accuracy>=0.84)grade='S';else if(accuracy>=0.72)grade='A';else if(accuracy>=0.60)grade='B';
+  else if(accuracy>=0.48)grade='C';else if(accuracy>=0.34)grade='D';
   const gradeBonus={S:1600,A:700,B:320,C:130,D:40,F:0}[grade];
   const speedBonus=(fast&&grade!=='F')?Math.round((1-elapsed/par)*700):0;
   const varietyBonus=variety?400:0;
@@ -858,7 +979,7 @@ function scoreWall(){
   let coins=Math.round(accuracy*40)+{S:40,A:20,B:10,C:5,D:2,F:0}[grade]
     +(variety?12:0)+(fast&&grade!=='F'?12:0);
   if(grade==='F')coins=Math.min(coins,2);
-  return {id:current.id,guess,grade,accuracy,match,inkRatio,score,coins,variety,fast,elapsed};
+  return {id:current.id,guess,alt,grade,accuracy,match,inkRatio,score,coins,variety,fast,elapsed};
 }
 
 // ============================================================= SKATE WORLD
@@ -1541,12 +1662,29 @@ function render(ts){
   }else if(wallBg){
     // wall
     ctx.drawImage(wallBg,wall.x,wall.y,wall.w,wall.h);
-    // No permanent ghost outline (the judge is position/size independent, so a fixed
-    // hint would mislead) — but PEEK flashes it briefly for younger players.
-    if(screen==='play'&&current&&current.id!=='free'&&performance.now()<peekUntil){
-      const fade=Math.min(1,(peekUntil-performance.now())/400);
-      ctx.save();ctx.globalAlpha=0.22*fade;
-      drawShapeTo(ctx,current.id,shapeBox,'#ffffff');ctx.restore();
+    // Trace guide. District 1 shows it permanently so a new player learns what
+    // the judge is looking for; from District 2 the training wheels come off and
+    // it only appears while PEEK is held. Toggleable either way.
+    if(screen==='play'&&current&&current.id!=='free'){
+      const peeking=performance.now()<peekUntil;
+      const teaching=guideOn();
+      if(peeking||teaching){
+        const fade=peeking?Math.min(1,(peekUntil-performance.now())/400):1;
+        ctx.save();
+        ctx.globalAlpha=(peeking?0.22:0.13)*fade;
+        drawShapeTo(ctx,current.id,shapeBox,'#ffffff');
+        if(teaching&&!peeking){          // dashed outline reads as "trace me"
+          ctx.globalAlpha=0.30;ctx.setLineDash([7,7]);ctx.lineWidth=2;
+          ctx.strokeStyle='#ffffff';
+          ctx.save();ctx.translate(shapeBox.x,shapeBox.y);
+          ctx.scale(shapeBox.w/100,shapeBox.h/100);
+          const of=ctx.fill; ctx.fill=function(){ctx.stroke();};
+          SHAPES[current.id](ctx);
+          ctx.fill=of; ctx.restore();
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
     }
     // paint layer
     // Run whenever the wall is open, not only while the pointer is down —
@@ -1626,6 +1764,23 @@ function buildPalette(){
     nz.appendChild(el);
   }
 }
+// Trace guide: on through District 1 so a new player learns what the judge
+// wants, off from District 2. 'on'/'off' override the automatic behaviour.
+function guideOn(){
+  if(save.guide==='on')return true;
+  if(save.guide==='off')return false;
+  return (save.districts||1)<=1;
+}
+function cycleGuide(){
+  save.guide = save.guide==='on' ? 'off' : save.guide==='off' ? 'auto' : 'on';
+  persist(); updateGuideBtn(); rattle();
+}
+function updateGuideBtn(){
+  const b=document.getElementById('btnGuide'); if(!b)return;
+  const mode=save.guide||'auto';
+  b.textContent='📐 TRACE: '+(mode==='auto'
+    ? 'AUTO'+(guideOn()?' (on)':' (off)') : mode.toUpperCase());
+}
 function newWall(promptId){
   pctx.clearRect(0,0,paint.width,paint.height);drips=[];colorsUsed=new Set();strokes=0;
   strokeLog=[];curStroke=null;peekUntil=0;
@@ -1656,7 +1811,9 @@ function finishWall(){
   const free=current.id==='free';
   const headline=free
     ? (r.guess&&r.match>=0.32
-        ? `Wilson reckons that's a <b>${r.guess.name}</b>!`
+        ? (r.alt
+            ? `Wilson reckons that's a <b>${r.guess.name}</b>… or maybe a <b>${r.alt.name}</b>?`
+            : `Wilson reckons that's a <b>${r.guess.name}</b>!`)
         : `Wilson has no clue what that is 🤨`)
     : `You painted a <b>${current.name}</b>`;
   document.querySelector('#result .tag').innerHTML=
@@ -1831,6 +1988,7 @@ $('btnPlay').onclick=()=>{ac();startMusic();enterSkate();};
 // any first tap counts as the gesture that unlocks audio
 window.addEventListener('pointerdown',()=>{ac();startMusic();},{passive:true});
 $('btnShop2').onclick=()=>{buildShop();show('shop');};
+$('btnGuide').onclick=cycleGuide;
 $('btnGallery').onclick=()=>{buildGallery();show('gallery');};
 $('btnGalClose').onclick=()=>show('title');
 $('btnGoals').onclick=()=>{buildGoals();$('goalCoins').textContent=save.coins;show('goals');};
@@ -1917,6 +2075,7 @@ window.addEventListener('resize',()=>{
 layout();
 setAccent();updateCoins();
 muted=!!save.muted; applyMute();
+updateGuideBtn();
 requestAnimationFrame(render);
 
 // ============================================================= TEST HOOK
@@ -1951,6 +2110,19 @@ window.__wilson={
       const x=cx*paint.width+Math.cos(a)*rr, y=cy*paint.height+Math.sin(a)*rr;
       i?pctx.lineTo(x,y):pctx.moveTo(x,y);}
     pctx.closePath();pctx.fill();},
+  // Freehand simulation for calibration: stroke an arbitrary polyline given in
+  // wall-normalized coords, so tests can imitate a wobbly human drawing.
+  strokePoly(pts,width,color='purple',close=false){
+    cur.color=color;colorsUsed.add(color);strokes=10;
+    pctx.save();
+    pctx.strokeStyle=COLORS[color].hex;pctx.lineWidth=width*paint.width;
+    pctx.lineJoin='round';pctx.lineCap='round';pctx.globalAlpha=1;
+    pctx.beginPath();
+    pts.forEach((p,i)=>{const x=p[0]*paint.width,y=p[1]*paint.height;
+      i?pctx.lineTo(x,y):pctx.moveTo(x,y);});
+    if(close)pctx.closePath();
+    pctx.stroke();pctx.restore();
+  },
   shapeFill(id,color='purple'){cur.color=color;colorsUsed.add(color);strokes=10;
     const s=Math.min(paint.width,paint.height)*0.62;
     drawShapeTo(pctx,id,{x:(paint.width-s)/2,y:(paint.height-s)/2,w:s,h:s},COLORS[color].hex);},
