@@ -2,7 +2,7 @@
 
 **Game ID:** `x-bros`
 **Version:** 0.9
-**Last updated:** 2026-08-20 (v0.8 "second polish pass": title-screen rebuild with real cast lineup, themed platform art, CPU charged smashes, per-stage music tempo, animation pass)
+**Last updated:** 2026-08-20 (v0.9: painted key-art title screen of the real cast via Meshy image-to-image; v0.8: themed platform art, CPU charged smashes, per-stage tempo, animation pass)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -53,7 +53,7 @@ Wilson and Bigfoot sheets landed 2026-08-20: ChatGPT output arrived as 2172×724
 
 ## Stages
 
-Three layouts in the `STAGES` table. **The main floor footprint is identical in every stage** — the grab-destination clamp and the floor safety-net both assume it — so variety comes from platforms + palette only.
+Five layouts in the `STAGES` table. **The main floor footprint is identical in every stage** — the grab-destination clamp and the floor safety-net both assume it — so variety comes from platforms + palette only.
 
 | Stage | Palette | Platforms | Backdrop art |
 |---|---|---|---|
