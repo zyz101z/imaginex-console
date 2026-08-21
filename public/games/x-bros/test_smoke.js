@@ -55,11 +55,18 @@ check("script evaluates", true);
 const { ROSTER, DIFFICULTY, STAGES, SFX, W, CpuController, zeroInput } = sandbox.__X;
 
 // ---- Data tables ------------------------------------------------------------
-check("6 fighters", ROSTER.length === 6);
+check("8 fighters", ROSTER.length === 8);
+const wilson = ROSTER.find(c => c.id === "wilson");
+const bigfoot = ROSTER.find(c => c.id === "bigfoot");
+check("Wilson exists with projectile special", wilson && wilson.special.type === "projectile");
+check("Bigfoot exists with blur lunge", bigfoot && bigfoot.special.type === "lunge" && bigfoot.special.blur === true);
+check("Bigfoot is the heaviest", ROSTER.every(c => c.stats.weight <= bigfoot.stats.weight));
+check("select grid fits 8 cards in 1280", 8 * 130 + 7 * 14 <= 1280);
 check("3 stages", STAGES.length === 3);
 for (const st of STAGES) {
   check(`stage ${st.id} has palette`, [st.bgTop, st.bgBot, st.mtn, st.floor, st.plat].every(c => typeof c === "number"));
   check(`stage ${st.id} platforms array`, Array.isArray(st.platforms));
+  check(`stage ${st.id} has bg art path`, typeof st.bg === "string" && st.bg.startsWith("bg/"));
 }
 for (const d of ["Easy", "Normal", "Hard"]) {
   check(`${d} has shieldChance`, typeof DIFFICULTY[d].shieldChance === "number");

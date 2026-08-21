@@ -1,8 +1,8 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.5
-**Last updated:** 2026-08-20
+**Version:** 0.6
+**Last updated:** 2026-08-20 (v0.6: Wilson + Bigfoot fighters, Meshy-painted stage backdrops)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -20,6 +20,10 @@ X-Bros — "ImagineX Smash" — is a Smash Bros-style 2D platform fighter starri
 | **Steve** | Bloot | white | mountain-tough | **Mountain Charge** (faster lunge) |
 | **Bully Chad** | Tennis World | red/black | fast attacker | **Tennis Serve** (flat fast projectile) |
 | **Jimmy** | Origami Pet Simulator | blue/orange | light, multi-jumper | **Paper Plane** (slow gliding projectile) |
+| **Wilson** | Wilson's Spray World | pale zombie/purple | fastest walker | **Spray Blast** (purple paint blob projectile) |
+| **Bigfoot** | Creature Cove | brown/tan | heaviest in the game | **Photo Blur** (lunge; goes semi-transparent mid-dash) |
+
+Wilson and Bigfoot currently use the rectangle fallback — sprite sheets pending via the ChatGPT pipeline (prompts below).
 
 ## Controls (single player, P1 only)
 
@@ -51,11 +55,13 @@ P2 is always CPU.
 
 Three layouts in the `STAGES` table. **The main floor footprint is identical in every stage** — the grab-destination clamp and the floor safety-net both assume it — so variety comes from platforms + palette only.
 
-| Stage | Palette | Platforms |
-|---|---|---|
-| **Sky Plains** | blue night (original) | 1 center platform |
-| **Twin Peaks** | purple dusk | 2 side platforms |
-| **Sunset Flats** | orange sunset / green floor | none (pure ground game) |
+| Stage | Palette | Platforms | Backdrop art |
+|---|---|---|---|
+| **Sky Plains** | blue night (original) | 1 center platform | `bg/bg_plains.png` — moonlit floating islands |
+| **Twin Peaks** | purple dusk | 2 side platforms | `bg/bg_peaks.png` — aurora twin mountains |
+| **Sunset Flats** | orange sunset / green floor | none (pure ground game) | `bg/bg_sunset.png` — blazing sunset plains |
+
+Backdrops are Meshy text-to-image paintings (nano-banana-pro, 16:9, 1376×768; 9 credits each, generated 2026-08-20). The stage is picked in `BattleScene.init` so `preload` fetches only that stage's PNG; a 0.18-alpha black scrim sits over the painting for fighter/HUD readability. If the PNG fails to load, `create()` falls back to the original procedural gradient + mountains.
 
 ## Mechanics
 
@@ -235,9 +241,14 @@ public/games/x-bros/
     └── steve.png
 ```
 
+### Pending sprite prompts (ChatGPT pipeline, upload berserker.png as style ref)
+
+- **Wilson** (`wilson.png`): "Cartoon zombie skater kid named Wilson: pale grey-green skin, messy hair, purple hoodie, holding a purple spray paint can, small skateboard under one arm or foot. Six frames horizontally (idle / walk / jump / attack spraying paint forward / hit / KO), each 512×512 (3072×512 total), transparent background, facing right, identical proportions across frames. EVERY frame must clearly show two eyes (one droopy zombie eye is fine) and his mouth."
+- **Bigfoot** (`bigfoot.png`): "Cartoon Bigfoot creature: big friendly brown shaggy fur monster, tan face and belly, huge feet, heavy build. Six frames horizontally (idle / walk / jump / attack big two-handed swing / hit / KO), each 512×512 (3072×512 total), transparent background, facing right, identical proportions across frames. EVERY frame must clearly show two eyes and mouth."
+
 ## Open items (next session)
 
-- User playtest of v0.5 (shield/roll feel, smash charge timing, music volume, stage palettes) → flip launcher status to `available`
+- Wilson + Bigfoot sprite sheets (currently rectangle fallback) — prompts above
 - Local 2-player (WASD second keyboard player) — currently CPU-only
 - CPU use of tilts / smashes (it only jabs + specials + defends)
 - Per-character sprite tuning still needs play-test for Chad (displayH=280)

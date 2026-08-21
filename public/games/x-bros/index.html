@@ -322,6 +322,23 @@ const ROSTER = [
     sprite: { sheet: "sprites/jimmy.png", frameW: 512, frameH: 512, displayH: 140 },
     blurb: "Paper plane glides through enemies."
   },
+  { id: "wilson", name: "Wilson", color: 0xcdd2c0, accent: 0xa25bff,
+    stats: { weight: 0.95, walkSpeed: 340, jumpVel: -820, doubleJumpVel: -720,
+             attackDmg:  9, attackKbBase: 230, attackRange: 74, attackCooldown: 0.26 },
+    special: { type: "projectile", name: "Spray Blast", dmg: 12, kbBase: 240,
+               cooldown: 0.75, projectileSpeed: 600, gravityY: 120,
+               projColor: 0xa25bff, projW: 24, projH: 20, spin: true },
+    // Sprite sheet pending (ChatGPT pipeline) — rectangle fallback until then
+    blurb: "Zombie skater. Tags you with paint."
+  },
+  { id: "bigfoot", name: "Bigfoot", color: 0x6b4a2e, accent: 0xd9b38c,
+    stats: { weight: 1.40, walkSpeed: 220, jumpVel: -720, doubleJumpVel: -640,
+             attackDmg: 13, attackKbBase: 300, attackRange: 85, attackCooldown: 0.48 },
+    special: { type: "lunge", name: "Photo Blur", dmg: 18, kbBase: 340,
+               duration: 0.38, cooldown: 1.10, dashSpeed: 780, blur: true },
+    // Sprite sheet pending (ChatGPT pipeline) — rectangle fallback until then
+    blurb: "Blurry in photos. Heavy in fists."
+  },
 ];
 
 // Difficulty profiles for the CPU. attackChance is per-frame when in range.
@@ -347,15 +364,15 @@ const DIFFICULTY = {
 // Stages — the main floor footprint is IDENTICAL in every stage (the grab clamp
 // and floor safety-net both assume it), so variety comes from platforms + palette.
 const STAGES = [
-  { id: "plains", name: "SKY PLAINS",
+  { id: "plains", name: "SKY PLAINS", bg: "bg/bg_plains.png",
     bgTop: 0x1a2a4a, bgBot: 0x081828, mtn: 0x223759, haze: 0x12203a,
     floor: 0x432d20, floorEdge: 0x6b4632, plat: 0x6b4632, platEdge: 0x9b6c4a,
     platforms: [{ x: W / 2, y: 440, w: 360 }] },
-  { id: "peaks", name: "TWIN PEAKS",
+  { id: "peaks", name: "TWIN PEAKS", bg: "bg/bg_peaks.png",
     bgTop: 0x2a1a3e, bgBot: 0x120a24, mtn: 0x3d2a5c, haze: 0x1d1436,
     floor: 0x3a3a4c, floorEdge: 0x5e5e7a, plat: 0x5e5e7a, platEdge: 0x8888aa,
     platforms: [{ x: W / 2 - 330, y: 450, w: 260 }, { x: W / 2 + 330, y: 450, w: 260 }] },
-  { id: "sunset", name: "SUNSET FLATS",
+  { id: "sunset", name: "SUNSET FLATS", bg: "bg/bg_sunset.png",
     bgTop: 0x5c2a1a, bgBot: 0x1a0a08, mtn: 0x6e3a24, haze: 0x2a120a,
     floor: 0x2e4a2a, floorEdge: 0x4a7040, plat: 0x4a7040, platEdge: 0x6a9a58,
     platforms: [] },
@@ -428,8 +445,8 @@ class SelectScene extends Phaser.Scene {
       fontFamily: "Press Start 2P", fontSize: "9px", color: "#7788aa"
     }).setOrigin(0.5);
 
-    // Roster grid (single row, 6 cards)
-    const slotW = 150, slotH = 200, gap = 28;
+    // Roster grid (single row; sized so 8 cards fit in 1280)
+    const slotW = 130, slotH = 200, gap = 14;
     const total = ROSTER.length * slotW + (ROSTER.length - 1) * gap;
     const x0 = cx - total / 2 + slotW / 2;
     this.cards = ROSTER.map((c, i) => {
@@ -581,6 +598,8 @@ class BattleScene extends Phaser.Scene {
     this.p1Char = data.p1 || ROSTER[0];
     this.p2Char = data.p2 || ROSTER[1];
     this.difficulty = data.difficulty || "Normal";
+    // Pick the stage here (before preload) so we only fetch this stage's backdrop
+    this.stageDef = STAGES[Math.floor(Math.random() * STAGES.length)];
   }
 
   preload() {
@@ -590,6 +609,12 @@ class BattleScene extends Phaser.Scene {
       if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
         this.load.image(c.id + "_raw", c.sprite.sheet);
       }
+    }
+    // Stage backdrop painting (Meshy-generated). Missing file → load error →
+    // texture never exists → create() falls back to the procedural backdrop.
+    const st = this.stageDef;
+    if (st.bg && !this.textures.exists("bg_" + st.id)) {
+      this.load.image("bg_" + st.id, st.bg);
     }
   }
 
@@ -680,22 +705,27 @@ class BattleScene extends Phaser.Scene {
 
   create() {
     this.buildSpriteSheets();
-    // Pick a random stage layout + palette for this match
-    const st = this.stageDef = STAGES[Math.floor(Math.random() * STAGES.length)];
+    const st = this.stageDef;  // picked in init() so preload could fetch its art
 
-    // Backdrop
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(st.bgTop, st.bgTop, st.bgBot, st.bgBot, 1);
-    bg.fillRect(0, 0, W, H);
+    // Backdrop: Meshy-painted stage art when loaded, procedural fallback otherwise
+    if (st.bg && this.textures.exists("bg_" + st.id)) {
+      this.add.image(W / 2, H / 2, "bg_" + st.id).setDisplaySize(W, H);
+      // Subtle scrim so fighters + HUD stay readable over the painting
+      this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.18);
+    } else {
+      const bg = this.add.graphics();
+      bg.fillGradientStyle(st.bgTop, st.bgTop, st.bgBot, st.bgBot, 1);
+      bg.fillRect(0, 0, W, H);
 
-    // Distant mountains for depth
-    const mtn = this.add.graphics();
-    mtn.fillStyle(st.mtn, 1);
-    mtn.fillTriangle(0, 600, 320, 280, 640, 600);
-    mtn.fillTriangle(420, 600, 800, 320, 1180, 600);
-    mtn.fillTriangle(900, 600, 1200, 360, 1500, 600);
-    mtn.fillStyle(st.haze, 0.55);
-    mtn.fillRect(0, 600, W, 200);
+      // Distant mountains for depth
+      const mtn = this.add.graphics();
+      mtn.fillStyle(st.mtn, 1);
+      mtn.fillTriangle(0, 600, 320, 280, 640, 600);
+      mtn.fillTriangle(420, 600, 800, 320, 1180, 600);
+      mtn.fillTriangle(900, 600, 1200, 360, 1500, 600);
+      mtn.fillStyle(st.haze, 0.55);
+      mtn.fillRect(0, 600, W, 200);
+    }
 
     // Stage: main floor (same footprint everywhere) + per-stage platforms
     this.stage = this.physics.add.staticGroup();
@@ -1472,6 +1502,8 @@ class Fighter {
         consumed: false,
         sp,
       };
+      // Bigfoot's "Photo Blur" — go blurry (semi-transparent) for the dash
+      if (sp.blur) this.sprite.alpha = 0.45;
       // Recoil cue
       if (!this.useSprite) {
         this.scene.tweens.add({ targets: this.sprite, scaleX: 1.25, scaleY: 0.85, duration: 80, yoyo: true });
@@ -1539,6 +1571,10 @@ class Fighter {
   endActiveSpecial() {
     if (this.activeSpecial && this.activeSpecial.hitbox) {
       this.activeSpecial.hitbox.gfx.destroy();
+    }
+    // Restore Photo Blur transparency (harmless overlap with roll-ghost restore)
+    if (this.activeSpecial && this.activeSpecial.sp && this.activeSpecial.sp.blur) {
+      this.sprite.alpha = 1;
     }
     this.activeSpecial = null;
   }
