@@ -114,10 +114,11 @@ class SoundManager {
   // ---- Procedural chiptune BGM ----------------------------------------------
   // A 4-bar loop in A minor scheduled with a 350ms lookahead. All routed through
   // musicGain -> master so the M mute still silences everything at once.
-  startMusic(bpm = 138) {
+  startMusic(bpm = 138, leadIdx = 0) {
     this.ensure();
     this.resume();
-    this.bpm = bpm;   // per-stage tempo
+    this.bpm = bpm;         // per-stage tempo
+    this.leadIdx = leadIdx; // per-stage melody
     if (!this.ctx || this.musicTimer) return;
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.55;   // music sits under the SFX
@@ -150,14 +151,28 @@ class SoundManager {
     const BASS = [45, 45, 57, 45, 48, 48, 45, 45,   43, 43, 55, 43, 41, 41, 43, 44];
     const b = BASS[step % BASS.length];
     this.tone({ type: "triangle", freqStart: midi(b), dur: SPB * 0.92, volume: 0.26, at: t, dest: g });
-    // Lead: 4-bar melody (0 = rest), A minor pentatonic
-    const LEAD = [
-      69, 0, 72, 0, 74, 0, 72, 74,   76, 0, 74, 72, 69, 0, 0, 0,
-      67, 0, 69, 0, 72, 0, 69, 72,   74, 0, 72, 69, 67, 0, 0, 0,
-      69, 0, 72, 0, 74, 0, 76, 0,    79, 0, 76, 74, 76, 0, 0, 0,
-      81, 0, 79, 76, 74, 0, 72, 74,  69, 0, 0, 0, 0, 0, 64, 67,
+    // Leads: three 4-bar melodies (0 = rest), all A minor pentatonic — picked per stage
+    const LEADS = [
+      [ // 0 — driving (Plains / Rooftop)
+        69, 0, 72, 0, 74, 0, 72, 74,   76, 0, 74, 72, 69, 0, 0, 0,
+        67, 0, 69, 0, 72, 0, 69, 72,   74, 0, 72, 69, 67, 0, 0, 0,
+        69, 0, 72, 0, 74, 0, 76, 0,    79, 0, 76, 74, 76, 0, 0, 0,
+        81, 0, 79, 76, 74, 0, 72, 74,  69, 0, 0, 0, 0, 0, 64, 67,
+      ],
+      [ // 1 — moody, sparse (Peaks / Cavern)
+        69, 0, 0, 67, 69, 0, 72, 0,    0, 0, 74, 0, 72, 0, 69, 0,
+        64, 0, 0, 67, 69, 0, 0, 0,     72, 0, 69, 0, 67, 0, 0, 0,
+        69, 0, 0, 67, 69, 0, 74, 0,    0, 0, 76, 0, 74, 0, 72, 0,
+        79, 0, 76, 0, 74, 0, 72, 0,    69, 0, 0, 0, 67, 0, 64, 0,
+      ],
+      [ // 2 — bouncy syncopation (Sunset)
+        0, 69, 0, 72, 0, 74, 74, 0,    72, 0, 69, 0, 72, 72, 0, 0,
+        0, 67, 0, 69, 0, 72, 72, 0,    69, 0, 67, 0, 69, 69, 0, 0,
+        0, 69, 0, 72, 0, 76, 76, 0,    74, 0, 72, 0, 74, 74, 0, 0,
+        0, 79, 0, 76, 0, 74, 72, 0,    69, 0, 72, 0, 69, 0, 0, 0,
+      ],
     ];
-    const l = LEAD[step];
+    const l = LEADS[this.leadIdx || 0][step];
     if (l) this.tone({ type: "square", freqStart: midi(l), dur: SPB * 0.85, volume: 0.085, at: t, dest: g });
     // Drums: kick on the beat, snare on 2 & 4, hats on off-8ths
     if (step % 8 === 0) this.tone({ type: "sine", freqStart: 130, freqEnd: 45, dur: 0.09, volume: 0.34, at: t, dest: g });
@@ -368,26 +383,26 @@ const DIFFICULTY = {
 // Stages — the main floor footprint is IDENTICAL in every stage (the grab clamp
 // and floor safety-net both assume it), so variety comes from platforms + palette.
 const STAGES = [
-  { id: "plains", name: "SKY PLAINS", bg: "bg/bg_plains.png", theme: "earth", bpm: 132,
+  { id: "plains", name: "SKY PLAINS", bg: "bg/bg_plains.png", theme: "earth", bpm: 132, lead: 0,
     grass: 0x5fae52,
     bgTop: 0x1a2a4a, bgBot: 0x081828, mtn: 0x223759, haze: 0x12203a,
     floor: 0x432d20, floorEdge: 0x6b4632, plat: 0x6b4632, platEdge: 0x9b6c4a,
     platforms: [{ x: W / 2, y: 440, w: 360 }] },
-  { id: "peaks", name: "TWIN PEAKS", bg: "bg/bg_peaks.png", theme: "stone", bpm: 126,
+  { id: "peaks", name: "TWIN PEAKS", bg: "bg/bg_peaks.png", theme: "stone", bpm: 126, lead: 1,
     bgTop: 0x2a1a3e, bgBot: 0x120a24, mtn: 0x3d2a5c, haze: 0x1d1436,
     floor: 0x3a3a4c, floorEdge: 0x5e5e7a, plat: 0x5e5e7a, platEdge: 0x8888aa,
     platforms: [{ x: W / 2 - 330, y: 450, w: 260 }, { x: W / 2 + 330, y: 450, w: 260 }] },
-  { id: "sunset", name: "SUNSET FLATS", bg: "bg/bg_sunset.png", theme: "earth", bpm: 120,
+  { id: "sunset", name: "SUNSET FLATS", bg: "bg/bg_sunset.png", theme: "earth", bpm: 120, lead: 2,
     grass: 0x7dae4a,
     bgTop: 0x5c2a1a, bgBot: 0x1a0a08, mtn: 0x6e3a24, haze: 0x2a120a,
     floor: 0x4a3524, floorEdge: 0x6e5236, plat: 0x4a7040, platEdge: 0x6a9a58,
     platforms: [] },
-  { id: "rooftop", name: "NEON ROOFTOP", bg: "bg/bg_rooftop.png", theme: "metal", bpm: 150,
+  { id: "rooftop", name: "NEON ROOFTOP", bg: "bg/bg_rooftop.png", theme: "metal", bpm: 150, lead: 0,
     bgTop: 0x0a2a30, bgBot: 0x04121a, mtn: 0x123842, haze: 0x081e26,
     floor: 0x24343c, floorEdge: 0x3a565e, plat: 0x2c3e46, platEdge: 0x22e0e8,
     platforms: [{ x: W / 2 - 380, y: 470, w: 230 }, { x: W / 2 + 380, y: 470, w: 230 },
                 { x: W / 2, y: 380, w: 260 }] },
-  { id: "cavern", name: "CRYSTAL CAVERN", bg: "bg/bg_cavern.png", theme: "crystal", bpm: 112,
+  { id: "cavern", name: "CRYSTAL CAVERN", bg: "bg/bg_cavern.png", theme: "crystal", bpm: 112, lead: 1,
     bgTop: 0x10303a, bgBot: 0x061418, mtn: 0x1a4450, haze: 0x0a2028,
     floor: 0x1e3a34, floorEdge: 0x2fa08a, plat: 0x2a5a50, platEdge: 0x7ce8ff,
     platforms: [{ x: W / 2, y: 430, w: 480 }] },
@@ -655,6 +670,14 @@ function pickOtherIndex(p1Idx) {
   return i;
 }
 
+// Items — spawn on stage every ~11-18s, despawn after 9s, pickup by touch.
+//   star = 8s of 1.5x damage/knockback   taco = heal 35%   bomb = trap (shield blocks it)
+const ITEMS = [
+  { key: "star", frame: 0 },
+  { key: "taco", frame: 1 },
+  { key: "bomb", frame: 2 },
+];
+
 // ---- Battle scene ------------------------------------------------------------
 
 class BattleScene extends Phaser.Scene {
@@ -682,6 +705,10 @@ class BattleScene extends Phaser.Scene {
     const st = this.stageDef;
     if (st.bg && !this.textures.exists("bg_" + st.id)) {
       this.load.image("bg_" + st.id, st.bg);
+    }
+    // Item icons (star/taco/bomb). Missing → rectangle fallback in spawnItem.
+    if (!this.textures.exists("items")) {
+      this.load.spritesheet("items", "sprites/items.png", { frameWidth: 170, frameHeight: 170 });
     }
   }
 
@@ -870,6 +897,8 @@ class BattleScene extends Phaser.Scene {
 
     this.gameOver = false;
     this.hitstopUntil = 0;
+    this.items = [];
+    this.nextItemAt = this.time.now + 9000 + Math.random() * 6000;
 
     // READY... GO! intro — inputs held until GO
     this.introUntil = this.time.now + 1300;
@@ -885,7 +914,7 @@ class BattleScene extends Phaser.Scene {
     });
 
     SFX.play("matchStart");
-    SFX.startMusic(st.bpm);
+    SFX.startMusic(st.bpm, st.lead || 0);
     // Covers ESC-to-roster AND endMatch restart (shutdown fires before create re-runs)
     this.events.once("shutdown", () => SFX.stopMusic());
 
@@ -1026,9 +1055,88 @@ class BattleScene extends Phaser.Scene {
         if (show) this.offArrows[i].x = Math.max(20, Math.min(W - 20, f.sprite.x)) - 11;
       });
 
+      if (!intro) this.tickItems(time);
+
       if (this.p1.stocks <= 0 || this.p2.stocks <= 0) this.endMatch();
     }
     this.hud.tick();
+  }
+
+  // ---- Items ---------------------------------------------------------------
+
+  spawnItem(time) {
+    const def = ITEMS[Math.floor(Math.random() * ITEMS.length)];
+    // Spawn spots: anywhere along the floor + on any platform
+    const spots = [{ x: 160 + Math.random() * (W - 320), y: GROUND_Y - 44 }];
+    for (const p of this.stageDef.platforms) {
+      spots.push({ x: p.x - p.w / 2 + 24 + Math.random() * (p.w - 48), y: p.y - 56 });
+    }
+    const s = spots[Math.floor(Math.random() * spots.length)];
+    let gfx;
+    if (this.textures.exists("items")) {
+      gfx = this.add.sprite(s.x, s.y, "items", def.frame).setDisplaySize(46, 46);
+    } else {
+      gfx = this.add.rectangle(s.x, s.y, 34, 34,
+        def.key === "star" ? 0xffd94a : def.key === "taco" ? 0xd9a04a : 0x222233)
+        .setStrokeStyle(2, 0xffffff);
+    }
+    this.tweens.add({ targets: gfx, y: s.y - 8, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    spawnBurst(this, s.x, s.y, 0xffffff, 6, 90, 5, 300);
+    SFX.play("select");
+    this.items.push({ def, gfx, until: time + 9000 });
+  }
+
+  tickItems(time) {
+    if (time > this.nextItemAt && this.items.length < 2) {
+      this.spawnItem(time);
+      this.nextItemAt = time + 11000 + Math.random() * 7000;
+    }
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if (time > it.until) {
+        it.gfx.destroy();
+        this.items.splice(i, 1);
+        continue;
+      }
+      for (const f of [this.p1, this.p2]) {
+        if (f.stocks <= 0) continue;
+        if (Math.abs(f.sprite.x - it.gfx.x) < 42 && Math.abs(f.sprite.y - it.gfx.y) < 64) {
+          this.applyItem(f, it.def);
+          it.gfx.destroy();
+          this.items.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+
+  applyItem(f, def) {
+    const t = this.time.now / 1000;
+    if (def.key === "taco") {
+      f.damage = Math.max(0, f.damage - 35);
+      f.floatText("+HEAL!", "#7be680");
+      spawnBurst(this, f.sprite.x, f.sprite.y - 20, 0x7be680, 8, 140);
+      SFX.play("confirm");
+    } else if (def.key === "star") {
+      f.powerUntil = t + 8;
+      f.floatText("POWER UP!", "#ffd94a");
+      spawnBurst(this, f.sprite.x, f.sprite.y - 20, 0xffd94a, 12, 200);
+      SFX.play("chargeFull");
+    } else {
+      // Bomb trap — dodge i-frames or a raised shield beat it, otherwise BOOM
+      if (f.tryDefend(f, 14, "attack")) return;
+      f.damage += 14;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const kb = (320 + f.damage * ATTACK_KB_SCALE) / f.stats.weight;
+      f.sprite.body.setVelocity(dir * kb * 0.7, -kb * 0.8);
+      f.hitstunUntil = t + 0.35;
+      flashFighter(f, 0xffffff, 100);
+      spawnBurst(this, f.sprite.x, f.sprite.y - 10, 0xff8844, 16, 300, 9, 500);
+      spawnDamageNumber(this, f.sprite.x, f.sprite.y, 14);
+      this.hitstop(90);
+      this.cameras.main.shake(200, 0.01);
+      SFX.play("smashHit");
+    }
   }
 
   endMatch() {
@@ -1040,6 +1148,8 @@ class BattleScene extends Phaser.Scene {
       for (const p of f.projectiles) p.destroy();
       f.projectiles.length = 0;
     }
+    for (const it of this.items) it.gfx.destroy();
+    this.items.length = 0;
     const draw = this.p1.stocks <= 0 && this.p2.stocks <= 0;
     const winner = this.p1.stocks > 0 ? this.p1 : this.p2;
     // Fanfare only when the human wins; CPU wins and draws stay quiet.
@@ -1210,6 +1320,21 @@ class CpuController {
       } else {
         left = this.defAction.dir < 0;    // shield+direction on the press frame = roll
         right = this.defAction.dir > 0;
+      }
+    }
+
+    // Opportunistic item grabs: taco when hurt, star when the opponent is far
+    const scene = this.self.scene;
+    if (scene.items && scene.items.length && !this.defAction && !this.chargePlan) {
+      for (const it of scene.items) {
+        const idx = it.gfx.x - me.x;
+        const wantHeal = it.def.key === "taco" && this.self.damage > 55;
+        const wantStar = it.def.key === "star" && absDx > 260;
+        if ((wantHeal || wantStar) && Math.abs(idx) < 420 && Math.abs(it.gfx.y - me.y) < 90) {
+          left = idx < 0;
+          right = idx > 0;
+          break;
+        }
       }
     }
 
@@ -1642,6 +1767,12 @@ class Fighter {
       else if (Math.abs(body.velocity.x) > 50) frame = Math.floor(t * 7) % 2 === 0 ? 1 : 0;
       this.sprite.setFrame(frame);
       this.sprite.setFlipX(this.facing === -1);
+      // Power Star glow: pulsing gold tint while active
+      if (t < (this.powerUntil || 0)) {
+        this.sprite.setTint(Math.floor(t * 8) % 2 === 0 ? 0xffe08a : 0xffc040);
+      } else if (this.powerUntil && t < this.powerUntil + 0.1) {
+        this.sprite.clearTint();
+      }
     } else {
       this.eye.x = this.sprite.x + this.facing * 10;
       this.eye.y = this.sprite.y - 16;
@@ -1927,12 +2058,14 @@ class Fighter {
   }
 
   applySpecialHit(opponent, sp) {
-    if (opponent.tryDefend(this, sp.dmg, "special")) return;
     const t = this.scene.time.now / 1000;
-    opponent.damage += sp.dmg;
-    this.damageDealt += sp.dmg;
+    const powerMult = t < (this.powerUntil || 0) ? 1.5 : 1.0;
+    const dmg = sp.dmg * powerMult;
+    if (opponent.tryDefend(this, dmg, "special")) return;
+    opponent.damage += dmg;
+    this.damageDealt += dmg;
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
-    const rawKb = sp.kbBase + opponent.damage * ATTACK_KB_SCALE;
+    const rawKb = (sp.kbBase + opponent.damage * ATTACK_KB_SCALE) * powerMult;
     const kb = rawKb / opponent.stats.weight;
     opponent.sprite.body.setVelocity(dir * kb, -kb * 0.6);
     opponent.hitstunUntil = t + (HITSTUN_BASE + opponent.damage * 0.003) / opponent.stats.weight;
@@ -1941,7 +2074,7 @@ class Fighter {
     this.scene.cameras.main.shake(160, 0.007);
     this.scene.hitstop(80);
     spawnBurst(this.scene, opponent.sprite.x, opponent.sprite.y - 10, 0xff8844, 10, 200);
-    spawnDamageNumber(this.scene, opponent.sprite.x, opponent.sprite.y, sp.dmg);
+    spawnDamageNumber(this.scene, opponent.sprite.x, opponent.sprite.y, dmg);
     SFX.play("hit");
   }
 
@@ -2007,7 +2140,9 @@ class Fighter {
     const variant = hb ? hb.variant : "jab";
     const chargeMult = hb ? hb.chargeMult : 1;
     const dashMult = this.dashHit ? 1.25 : 1.0;
-    const dmg = s.attackDmg * (hb ? hb.dmgMult : 1) * chargeMult * dashMult;
+    // Power Star: 1.5x damage + knockback while active
+    const powerMult = (this.scene.time.now / 1000) < (this.powerUntil || 0) ? 1.5 : 1.0;
+    const dmg = s.attackDmg * (hb ? hb.dmgMult : 1) * chargeMult * dashMult * powerMult;
     if (opponent.tryDefend(this, dmg, "attack")) return;
     opponent.damage += dmg;
     this.damageDealt += dmg;
@@ -2015,7 +2150,7 @@ class Fighter {
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
     // Knockback scales with victim's accumulated damage, divided by victim's weight.
     const rawKb = (s.attackKbBase + opponent.damage * ATTACK_KB_SCALE)
-                  * (hb ? hb.kbMult : 1) * chargeMult * dashMult;
+                  * (hb ? hb.kbMult : 1) * chargeMult * dashMult * powerMult;
     const kb = rawKb / opponent.stats.weight;
     // Launch vector depends on the attack variant
     let vx = dir * kb, vy = -kb * 0.55;

@@ -1,8 +1,8 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.9
-**Last updated:** 2026-08-20 (v0.9: painted key-art title screen of the real cast via Meshy image-to-image; v0.8: themed platform art, CPU charged smashes, per-stage tempo, animation pass)
+**Version:** 1.0
+**Last updated:** 2026-08-21 (v1.0: ITEMS — Power Star / Taco / Bomb with Meshy-painted icons; per-stage melodies; subtitle removed from title art per user)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -72,7 +72,19 @@ Five layouts in the `STAGES` table. **The main floor footprint is identical in e
 - `crystal` (Cavern) — soft aura + glowing crystal clusters growing off the top
 Detail placement uses multiplicative hashing (no RNG) so redraws are stable. Stage entries carry `theme`, optional `grass`, and `bpm`.
 
-**Per-stage music tempo (v0.8):** `SFX.startMusic(bpm)` — Plains 132, Peaks 126, Sunset 120, Rooftop 150, Cavern 112.
+**Per-stage music (v0.8/v1.0):** `SFX.startMusic(bpm, leadIdx)` — tempo per stage (Plains 132, Peaks 126, Sunset 120, Rooftop 150, Cavern 112) AND melody per stage: three 64-step A-minor-pentatonic leads (0 driving — Plains/Rooftop; 1 moody sparse — Peaks/Cavern; 2 bouncy syncopated — Sunset) via `st.lead`.
+
+## Items (v1.0)
+
+Spawn every 11–18 s (max 2 on stage), on the floor or any platform, bobbing; despawn after 9 s. Pickup by touch (42×64 px box). Icons are Meshy-painted (`sprites/items.png`, 3 frames of 170×170, green-screen keyed by color distance so the taco's lettuce survived); rectangle fallback if the sheet is missing.
+
+| Item | Frame | Effect |
+|---|---|---|
+| **Power Star** | 0 | 8 s of **1.5× damage + knockback** on all attacks and specials; fighter pulses gold |
+| **Taco** | 1 | heal 35% ("+HEAL!") |
+| **Bomb** | 2 | trap — 14% + big random-direction launch, hitstop + shake; **dodge i-frames or shield beat it** |
+
+CPU item awareness: walks toward a taco when its damage > 55%, or a star when the opponent is > 260 px away (within 420 px, roughly level; suspended during defense/charge plans). Items cleaned up on endMatch.
 
 Backdrops are Meshy text-to-image paintings (nano-banana-pro, 16:9, 1376×768; 9 credits each, generated 2026-08-20). The stage is picked in `BattleScene.init` so `preload` fetches only that stage's PNG; a 0.18-alpha black scrim sits over the painting for fighter/HUD readability. If the PNG fails to load, `create()` falls back to the original procedural gradient + mountains.
 
@@ -282,8 +294,9 @@ public/games/x-bros/
 
 ## Open items (next session)
 
-- Playtest v0.8: new title screen, platform art, 2P controls comfort, hitstop feel, CPU smash frequency
-- Items / power-ups; alternate music melodies per stage (tempo already varies); online play (Tank Wars has the relay pattern)
+- Playtest v1.0: items balance (spawn rate / bomb damage / star duration), 2P comfort, CPU smash frequency
+- Portrait cartridge cover refresh (covers are 2:3; landscape key art doesn't fit — needs its own composition)
+- Online play (Tank Wars has the room-code/relay pattern)
 - Local 2-player (WASD second keyboard player) — currently CPU-only
 - CPU use of tilts / smashes (it only jabs + specials + defends)
 - Per-character sprite tuning still needs play-test for Chad (displayH=280)

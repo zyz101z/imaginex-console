@@ -49,10 +49,12 @@ const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1
 const src = scripts[scripts.length - 1];
 // Script consts are top-level (no IIFE), so an appended shim in the same script
 // scope can see them and export what we need.
-vm.runInContext(src + "\n;globalThis.__X = { ROSTER, DIFFICULTY, STAGES, SFX, CpuController, zeroInput, W };", sandbox);
+vm.runInContext(src + "\n;globalThis.__X = { ROSTER, DIFFICULTY, STAGES, SFX, CpuController, zeroInput, W, ITEMS };", sandbox);
 check("script evaluates", true);
 
-const { ROSTER, DIFFICULTY, STAGES, SFX, W, CpuController, zeroInput } = sandbox.__X;
+const { ROSTER, DIFFICULTY, STAGES, SFX, W, CpuController, zeroInput, ITEMS } = sandbox.__X;
+check("3 item types", ITEMS.length === 3 && ITEMS.map(i => i.key).join() === "star,taco,bomb");
+check("stages have music leads", STAGES.every(s => typeof s.lead === "number" && s.lead >= 0 && s.lead <= 2));
 
 // ---- Data tables ------------------------------------------------------------
 check("8 fighters", ROSTER.length === 8);
