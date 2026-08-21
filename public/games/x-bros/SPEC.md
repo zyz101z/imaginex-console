@@ -23,7 +23,7 @@ X-Bros — "ImagineX Smash" — is a Smash Bros-style 2D platform fighter starri
 | **Wilson** | Wilson's Spray World | pale zombie/purple | fastest walker | **Spray Blast** (purple paint blob projectile) |
 | **Bigfoot** | Creature Cove | brown/tan | heaviest in the game | **Photo Blur** (lunge; goes semi-transparent mid-dash) |
 
-Wilson and Bigfoot currently use the rectangle fallback — sprite sheets pending via the ChatGPT pipeline (prompts below).
+Wilson and Bigfoot sheets landed 2026-08-20: ChatGPT output arrived as 2172×724 with freely-placed overlapping poses and REAL alpha, so a pure-stdlib Python tool (`sprite_tool.py` pattern: PNG decode → connected-component labeling → per-pose masks → repack) re-slotted the six poses into clean 560×724 frames (3360×724 sheets). Component grouping preserved detached props (Wilson's floating skateboard/beanie/spray can, Bigfoot's stars/birds) with their poses.
 
 ## Controls (single player, P1 only)
 
@@ -199,6 +199,8 @@ sprite: { sheet: "sprites/<id>.png", frameW: ..., frameH: ..., displayH: ..., fe
 
 ChatGPT outputs are usually RGB, not RGBA — the apparent transparency is actually a checkerboard. `BattleScene.buildSpriteSheets` samples **32 points along the top row** of each image, clusters them by color, picks the top 1-2 clusters with ≥3 samples each as background colors, and zeros alpha on any pixel within distance 35 of any. Why top-row sampling: corners are unreliable (characters in attack/KO frames sometimes extend to image corners), but the top edge is almost always pure background.
 
+**Pre-keyed skip (v0.6):** if ≥29 of the 32 top-row samples already have alpha < 10, the PNG has real transparency (Wilson/Bigfoot) and chroma-keying is SKIPPED — otherwise the "background" cluster would be the black behind the alpha and the keyer would delete the black pixel-art outlines. `frameTrim` still applies either way.
+
 ### Current sprite settings (2026-05-10)
 
 | Character | sheet | frameW × frameH | displayH | feetY |
@@ -209,6 +211,8 @@ ChatGPT outputs are usually RGB, not RGBA — the apparent transparency is actua
 | Steve | steve.png | 512 × 512 | 150 | 0.94 |
 | Chad | chad.png | 288 × 910 | 280 | 0.66 (also `frameTrim: 28`) |
 | Jimmy | jimmy.png | 512 × 512 | 140 | 0.96 |
+| Wilson | wilson.png | 560 × 724 | 200 | 0.87 (real-alpha sheet, preKeyed) |
+| Bigfoot | bigfoot.png | 560 × 724 | 255 | 0.88 (real-alpha sheet, preKeyed; biggest render on purpose) |
 
 Chad's source is taller-than-tall because ChatGPT outputs varied. Different `displayH` / `feetY` compensate. Chad also uses `frameTrim: 28` because ChatGPT placed his overhead racket so close to the frame boundary that the bottom of it bleeds into the adjacent walk frame.
 
@@ -248,7 +252,7 @@ public/games/x-bros/
 
 ## Open items (next session)
 
-- Wilson + Bigfoot sprite sheets (currently rectangle fallback) — prompts above
+- Playtest Wilson/Bigfoot sprite scale + feel (displayH 200/255, feetY 0.87/0.88 — tuned by measurement, not yet play-verified)
 - Local 2-player (WASD second keyboard player) — currently CPU-only
 - CPU use of tilts / smashes (it only jabs + specials + defends)
 - Per-character sprite tuning still needs play-test for Chad (displayH=280)

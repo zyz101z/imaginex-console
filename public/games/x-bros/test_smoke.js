@@ -61,6 +61,9 @@ const bigfoot = ROSTER.find(c => c.id === "bigfoot");
 check("Wilson exists with projectile special", wilson && wilson.special.type === "projectile");
 check("Bigfoot exists with blur lunge", bigfoot && bigfoot.special.type === "lunge" && bigfoot.special.blur === true);
 check("Bigfoot is the heaviest", ROSTER.every(c => c.stats.weight <= bigfoot.stats.weight));
+check("Wilson sprite config (560x724)", wilson.sprite && wilson.sprite.frameW === 560 && wilson.sprite.frameH === 724);
+check("Bigfoot sprite config (560x724)", bigfoot.sprite && bigfoot.sprite.frameW === 560 && bigfoot.sprite.frameH === 724);
+check("all 8 fighters have sprite sheets", ROSTER.every(c => c.sprite && c.sprite.sheet));
 check("select grid fits 8 cards in 1280", 8 * 130 + 7 * 14 <= 1280);
 check("3 stages", STAGES.length === 3);
 for (const st of STAGES) {

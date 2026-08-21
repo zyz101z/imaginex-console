@@ -328,7 +328,9 @@ const ROSTER = [
     special: { type: "projectile", name: "Spray Blast", dmg: 12, kbBase: 240,
                cooldown: 0.75, projectileSpeed: 600, gravityY: 120,
                projColor: 0xa25bff, projW: 24, projH: 20, spin: true },
-    // Sprite sheet pending (ChatGPT pipeline) — rectangle fallback until then
+    // Repacked from ChatGPT output (poses re-slotted to 560px, real alpha —
+    // triggers the preKeyed skip in buildSpriteSheets)
+    sprite: { sheet: "sprites/wilson.png", frameW: 560, frameH: 724, displayH: 200, feetY: 0.87 },
     blurb: "Zombie skater. Tags you with paint."
   },
   { id: "bigfoot", name: "Bigfoot", color: 0x6b4a2e, accent: 0xd9b38c,
@@ -336,7 +338,8 @@ const ROSTER = [
              attackDmg: 13, attackKbBase: 300, attackRange: 85, attackCooldown: 0.48 },
     special: { type: "lunge", name: "Photo Blur", dmg: 18, kbBase: 340,
                duration: 0.38, cooldown: 1.10, dashSpeed: 780, blur: true },
-    // Sprite sheet pending (ChatGPT pipeline) — rectangle fallback until then
+    // Repacked from ChatGPT output; biggest displayH in the roster on purpose
+    sprite: { sheet: "sprites/bigfoot.png", frameW: 560, frameH: 724, displayH: 255, feetY: 0.88 },
     blurb: "Blurry in photos. Heavy in fists."
   },
 ];
@@ -634,6 +637,17 @@ class BattleScene extends Phaser.Scene {
       cctx.drawImage(raw, 0, 0);
       const imgData = cctx.getImageData(0, 0, canvas.width, canvas.height);
       const px = imgData.data;
+      // Pre-keyed detection: if the top row is already transparent, this PNG has
+      // real alpha (Wilson/Bigfoot sheets) — chroma-keying would match the black
+      // behind the transparency and DELETE the black pixel-art outlines. Skip it.
+      const W2 = canvas.width, H2 = canvas.height;
+      let clearCount = 0;
+      for (let i = 0; i < 32; i++) {
+        const x = Math.floor((W2 - 1) * i / 31);
+        if (px[x * 4 + 3] < 10) clearCount++;
+      }
+      const preKeyed = clearCount >= 29;
+      if (!preKeyed) {
       // Chroma-key strategy: sample MANY pixels along the top row of the image
       // (almost always above the characters' heads = pure background) and cluster
       // them. The top 1-2 clusters are real background colors. This handles:
@@ -641,7 +655,6 @@ class BattleScene extends Phaser.Scene {
       //   - checkerboard "transparent" backgrounds (two-tone, Steve)
       //   - and refuses to mistake corner-character-pixels for bg (Jimmy's KO
       //     body in the bottom-right corner was being keyed as black before).
-      const W2 = canvas.width, H2 = canvas.height;
       const SAMPLES = 32;
       const distSq = (a, b) => {
         const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
@@ -676,6 +689,7 @@ class BattleScene extends Phaser.Scene {
           if (dr * dr + dg * dg + db * db < TH) { px[i + 3] = 0; break; }
         }
       }
+      }  // end !preKeyed
       // Optional frame-edge trim: forces a transparent gutter on each frame slot
       // to kill content that bleeds in from adjacent frames (Chad's racket
       // overhead in frame 2 was showing up in front of frame 1's walking face).
