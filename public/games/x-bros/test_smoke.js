@@ -65,7 +65,9 @@ check("Wilson sprite config (560x724)", wilson.sprite && wilson.sprite.frameW ==
 check("Bigfoot sprite config (560x724)", bigfoot.sprite && bigfoot.sprite.frameW === 560 && bigfoot.sprite.frameH === 724);
 check("all 8 fighters have sprite sheets", ROSTER.every(c => c.sprite && c.sprite.sheet));
 check("select grid fits 8 cards in 1280", 8 * 130 + 7 * 14 <= 1280);
-check("3 stages", STAGES.length === 3);
+check("5 stages", STAGES.length === 5);
+check("stage ids unique", new Set(STAGES.map(s => s.id)).size === STAGES.length);
+check("platforms stay on-screen", STAGES.every(s => s.platforms.every(p => p.x - p.w / 2 > 0 && p.x + p.w / 2 < 1280)));
 for (const st of STAGES) {
   check(`stage ${st.id} has palette`, [st.bgTop, st.bgBot, st.mtn, st.floor, st.plat].every(c => typeof c === "number"));
   check(`stage ${st.id} platforms array`, Array.isArray(st.platforms));

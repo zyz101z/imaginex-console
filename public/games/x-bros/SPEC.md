@@ -1,8 +1,8 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.6
-**Last updated:** 2026-08-20 (v0.6: Wilson + Bigfoot fighters, Meshy-painted stage backdrops)
+**Version:** 0.7
+**Last updated:** 2026-08-20 (v0.7 "polish pass": local 2P versus, juice pack, 5 stages, title art, CPU tilts)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -43,7 +43,7 @@ Wilson and Bigfoot sheets landed 2026-08-20: ChatGPT output arrived as 2172×724
 | M | Mute / unmute sound |
 | Esc | Back to character select / title |
 
-P2 is always CPU.
+**Local 2-player (v0.7):** press **T** on the select screen to toggle VS CPU / 2 PLAYERS. In 2P mode P1 picks first (gold cursor), then P2 picks (red cursor; Esc backs out one step); mirror matches allowed. P2 plays on **WASD** (W jump, S down) + **F** attack / **G** special / **H** shield — same hold-to-smash and tilt rules as P1. Difficulty selector is hidden in 2P.
 
 ## Scenes
 
@@ -60,6 +60,10 @@ Three layouts in the `STAGES` table. **The main floor footprint is identical in 
 | **Sky Plains** | blue night (original) | 1 center platform | `bg/bg_plains.png` — moonlit floating islands |
 | **Twin Peaks** | purple dusk | 2 side platforms | `bg/bg_peaks.png` — aurora twin mountains |
 | **Sunset Flats** | orange sunset / green floor | none (pure ground game) | `bg/bg_sunset.png` — blazing sunset plains |
+| **Neon Rooftop** (v0.7) | cyberpunk teal/pink | 2 low sides + 1 high center | `bg/bg_rooftop.png` — neon city skyline |
+| **Crystal Cavern** (v0.7) | dark teal + gem glow | 1 wide high platform | `bg/bg_cavern.png` — glowing crystal cave |
+
+The title screen also uses a Meshy painting (`bg/bg_title.png` — floodlit floating arena with fireworks) behind the logo under a 0.42 scrim.
 
 Backdrops are Meshy text-to-image paintings (nano-banana-pro, 16:9, 1376×768; 9 credits each, generated 2026-08-20). The stage is picked in `BattleScene.init` so `preload` fetches only that stage's PNG; a 0.18-alpha black scrim sits over the painting for fighter/HUD readability. If the PNG fails to load, `create()` falls back to the original procedural gradient + mountains.
 
@@ -139,7 +143,16 @@ Key tactical behaviors implemented in `CpuController.poll`:
 - Whiff punish: when opponent's `attackCooldownUntil > now` (they just swung and missed), the bot lunges in.
 - Air chase: jumps onto platforms above; uses air-jumps to chase and to recover from off-stage falls.
 - Special-move usage in `CpuController.poll` chooses lunge / projectile / grab based on horizontal range to opponent.
-- **Defense (v0.5):** one dice-roll per opponent swing (keyed on `opponent.attackUntil`): roll away, shield for 0.5 s, or do nothing per `rollChance`/`shieldChance`. Rolls emit shield-input + direction on a single frame; the Fighter's C-combo logic turns it into a roll. CPU does not yet use tilts/smashes.
+- **Defense (v0.5):** one dice-roll per opponent swing (keyed on `opponent.attackUntil`): roll away, shield for 0.5 s, or do nothing per `rollChance`/`shieldChance`. Rolls emit shield-input + direction on a single frame; the Fighter's C-combo logic turns it into a roll.
+- **Tilts (v0.7):** `upWindow` (opponent 60–170 px above, within 0.8× range) makes the CPU throw the up-strike; `spikeWindow` (CPU airborne, opponent 60–170 px below within 95 px) triggers the air spike. Both extend the in-range box vertically and set the `up`/`down` input flags only on attack frames (so `up` never causes a stray jump — jumps are edge-triggered separately). CPU still doesn't charge smashes.
+
+### Juice pack (v0.7)
+- **Hitstop:** `BattleScene.hitstop(ms)` freezes physics + fighter ticks (HUD/tweens keep running): 50 ms normal hits, 75 ms heavy (≥12 dmg), 80 ms specials, 110 ms smash. Grabs skip hitstop (the pull tween would desync).
+- **Particles:** `spawnBurst` (tween-driven square bursts) on every hit/special/shield-break/KO; `spawnDust` on jumps and hard landings (prev-frame fall speed > 420).
+- **Damage numbers:** `spawnDamageNumber` — rising digits over the victim, big/red at ≥14 dmg.
+- **KO spectacle:** double burst in the victim's colors at the screen-edge exit point, white screen flash, slammed-in "KO!" text, big shake.
+- **Intro:** "READY… GO!" (1.3 s, inputs locked via `introUntil` feeding `zeroInput`).
+- **HUD:** stock pips (colored squares, one per life) replace the "x2" text; damage % throbs above 100%.
 
 ### Safety net
 Every frame, `Fighter.tick` checks: if body bottom is > 6 px below floor surface AND the fighter is horizontally over the stage AND not at death-zone depth, it snaps them up and zeros vertical velocity. Catches rare physics edge cases (e.g., sprite-body offset arithmetic mis-aligning during grab-pull tweens).
@@ -252,7 +265,8 @@ public/games/x-bros/
 
 ## Open items (next session)
 
-- Playtest Wilson/Bigfoot sprite scale + feel (displayH 200/255, feetY 0.87/0.88 — tuned by measurement, not yet play-verified)
+- Playtest v0.7: 2P controls comfort (WASD+FGH), hitstop durations, Wilson/Bigfoot sprite scale (displayH 200/255)
+- CPU charged smashes; items/power-ups; per-stage music variations
 - Local 2-player (WASD second keyboard player) — currently CPU-only
 - CPU use of tilts / smashes (it only jabs + specials + defends)
 - Per-character sprite tuning still needs play-test for Chad (displayH=280)

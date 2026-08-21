@@ -379,15 +379,32 @@ const STAGES = [
     bgTop: 0x5c2a1a, bgBot: 0x1a0a08, mtn: 0x6e3a24, haze: 0x2a120a,
     floor: 0x2e4a2a, floorEdge: 0x4a7040, plat: 0x4a7040, platEdge: 0x6a9a58,
     platforms: [] },
+  { id: "rooftop", name: "NEON ROOFTOP", bg: "bg/bg_rooftop.png",
+    bgTop: 0x0a2a30, bgBot: 0x04121a, mtn: 0x123842, haze: 0x081e26,
+    floor: 0x24343c, floorEdge: 0x3a565e, plat: 0x3a565e, platEdge: 0x22e0e8,
+    platforms: [{ x: W / 2 - 380, y: 470, w: 230 }, { x: W / 2 + 380, y: 470, w: 230 },
+                { x: W / 2, y: 380, w: 260 }] },
+  { id: "cavern", name: "CRYSTAL CAVERN", bg: "bg/bg_cavern.png",
+    bgTop: 0x10303a, bgBot: 0x061418, mtn: 0x1a4450, haze: 0x0a2028,
+    floor: 0x1e3a34, floorEdge: 0x2fa08a, plat: 0x2a5a50, platEdge: 0x7ce8ff,
+    platforms: [{ x: W / 2, y: 430, w: 480 }] },
 ];
 
 // ---- Title scene -------------------------------------------------------------
 
 class TitleScene extends Phaser.Scene {
   constructor() { super("title"); }
+  preload() {
+    if (!this.textures.exists("bg_title")) this.load.image("bg_title", "bg/bg_title.png");
+  }
   create() {
     this.cameras.main.setBackgroundColor("#08101e");
     const cx = W / 2;
+    // Meshy-painted championship arena behind the logo (scrim keeps text readable)
+    if (this.textures.exists("bg_title")) {
+      this.add.image(cx, H / 2, "bg_title").setDisplaySize(W, H);
+      this.add.rectangle(cx, H / 2, W, H, 0x050a14, 0.42);
+    }
     this.add.text(cx, 200, "X-BROS", {
       fontFamily: "Press Start 2P", fontSize: "120px", color: "#9ad6ff"
     }).setOrigin(0.5).setShadow(0, 8, "#0b2a55", 0, true, true);
@@ -441,10 +458,10 @@ class SelectScene extends Phaser.Scene {
     this.add.text(cx, 60, "PICK YOUR FIGHTER", {
       fontFamily: "Press Start 2P", fontSize: "32px", color: "#9ad6ff"
     }).setOrigin(0.5);
-    this.add.text(cx, 110, "Arrows: choose   Up/Down: difficulty   Z or Enter: fight   Esc: title", {
-      fontFamily: "Press Start 2P", fontSize: "11px", color: "#aabbdd"
+    this.add.text(cx, 110, "Arrows: choose   Up/Down: difficulty   T: vs CPU / 2P   Z or Enter: fight   Esc: back", {
+      fontFamily: "Press Start 2P", fontSize: "10px", color: "#aabbdd"
     }).setOrigin(0.5);
-    this.add.text(cx, 132, "Fight: Arrows + Z attack (hold=SMASH, +Up/Down=tilts) + X special + C shield/roll   M mute", {
+    this.add.text(cx, 132, "P1: Arrows + Z atk (hold=SMASH, +Up/Dn=tilts) X special C shield/roll   P2: WASD + F/G/H   M mute", {
       fontFamily: "Press Start 2P", fontSize: "9px", color: "#7788aa"
     }).setOrigin(0.5);
 
@@ -492,12 +509,18 @@ class SelectScene extends Phaser.Scene {
       align: "center"
     }).setOrigin(0.5, 0);
 
-    // Difficulty selector
+    // Mode + difficulty selector
+    this.mode = "cpu";       // "cpu" | "2p"
+    this.pickPhase = 1;      // 2p: 1 = P1 picking, 2 = P2 picking
+    this.p1Pick = 0;
+    this.modeLabel = this.add.text(cx, 585, "", {
+      fontFamily: "Press Start 2P", fontSize: "13px", color: "#9ad6ff"
+    }).setOrigin(0.5);
     this.difficulty = "Normal";
-    this.difficultyLabel = this.add.text(cx, 615, "", {
+    this.difficultyLabel = this.add.text(cx, 618, "", {
       fontFamily: "Press Start 2P", fontSize: "20px", color: "#ffffff"
     }).setOrigin(0.5);
-    this.add.text(cx, 645, "[Up / Down]", {
+    this.add.text(cx, 648, "[Up / Down]  [T: mode]", {
       fontFamily: "Press Start 2P", fontSize: "10px", color: "#778899"
     }).setOrigin(0.5);
 
@@ -515,7 +538,18 @@ class SelectScene extends Phaser.Scene {
     // so a held Enter from the title screen can't skip straight past us.
     this.enterArmed = false;
     this.confirmArmed = false;
-    k.on("keydown-ESC", () => this.scene.start("title"));
+    this.keyMode = k.addKey("T");
+    k.on("keydown-ESC", () => {
+      if (this.mode === "2p" && this.pickPhase === 2) {
+        // Back out of P2's pick, not all the way to the title
+        this.pickPhase = 1;
+        this.p1Index = this.p1Pick;
+        this.cursor.setStrokeStyle(4, 0xffe066);
+        this.refresh();
+      } else {
+        this.scene.start("title");
+      }
+    });
   }
 
   refresh() {
@@ -523,7 +557,7 @@ class SelectScene extends Phaser.Scene {
     this.cursor.x = card.x;
     this.cursor.y = card.y;
     const c = ROSTER[this.p1Index];
-    this.charName.setText(c.name);
+    this.charName.setText((this.mode === "2p" ? (this.pickPhase === 2 ? "P2: " : "P1: ") : "") + c.name);
     this.charBlurb.setText(c.blurb);
     const s = c.stats;
     this.statText.setText(
@@ -531,11 +565,19 @@ class SelectScene extends Phaser.Scene {
       `Damage ${s.attackDmg}   Reach ${s.attackRange}   Cooldown ${s.attackCooldown}s\n` +
       `Special [X]: ${c.special ? c.special.name : "—"}`
     );
-    this.difficultyLabel.setText(`CPU: ${this.difficulty.toUpperCase()}`);
-    this.difficultyLabel.setColor(
-      this.difficulty === "Easy" ? "#7be680" :
-      this.difficulty === "Hard" ? "#ff7a7a" : "#ffe066"
-    );
+    this.modeLabel.setText(this.mode === "2p"
+      ? (this.pickPhase === 2 ? "MODE: 2 PLAYERS — P2 PICK!" : "MODE: 2 PLAYERS")
+      : "MODE: VS CPU");
+    if (this.mode === "2p") {
+      this.difficultyLabel.setText("P2: WASD + F/G/H");
+      this.difficultyLabel.setColor("#9ad6ff");
+    } else {
+      this.difficultyLabel.setText(`CPU: ${this.difficulty.toUpperCase()}`);
+      this.difficultyLabel.setColor(
+        this.difficulty === "Easy" ? "#7be680" :
+        this.difficulty === "Hard" ? "#ff7a7a" : "#ffe066"
+      );
+    }
   }
 
   update() {
@@ -548,12 +590,18 @@ class SelectScene extends Phaser.Scene {
       this.p1Index = (this.p1Index + 1) % ROSTER.length;
       changed = true;
     }
-    if (Phaser.Input.Keyboard.JustDown(this.keyUp)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keyUp) && this.mode === "cpu") {
       this.difficulty = nextDiff(this.difficulty, +1);
       changed = true;
     }
-    if (Phaser.Input.Keyboard.JustDown(this.keyDown)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keyDown) && this.mode === "cpu") {
       this.difficulty = nextDiff(this.difficulty, -1);
+      changed = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keyMode)) {
+      this.mode = this.mode === "cpu" ? "2p" : "cpu";
+      this.pickPhase = 1;
+      this.cursor.setStrokeStyle(4, 0xffe066);
       changed = true;
     }
     if (changed) {
@@ -568,13 +616,31 @@ class SelectScene extends Phaser.Scene {
     const enterPressed = Phaser.Input.Keyboard.JustDown(this.keyEnter);
     if ((confirmPressed && this.confirmArmed) || (enterPressed && this.enterArmed)) {
       SFX.play("confirm");
-      // Pick a CPU character at random, but never the same as P1
-      const otherIdx = pickOtherIndex(this.p1Index);
-      this.scene.start("battle", {
-        p1: ROSTER[this.p1Index],
-        p2: ROSTER[otherIdx],
-        difficulty: this.difficulty,
-      });
+      if (this.mode === "2p" && this.pickPhase === 1) {
+        // P1 locked in — same cursor now picks for P2 (red ring)
+        this.p1Pick = this.p1Index;
+        this.pickPhase = 2;
+        this.cursor.setStrokeStyle(4, 0xff6666);
+        this.confirmArmed = false;
+        this.enterArmed = false;
+        this.refresh();
+      } else if (this.mode === "2p") {
+        this.scene.start("battle", {
+          p1: ROSTER[this.p1Pick],
+          p2: ROSTER[this.p1Index],   // mirror matches allowed
+          difficulty: this.difficulty,
+          mode: "2p",
+        });
+      } else {
+        // Pick a CPU character at random, but never the same as P1
+        const otherIdx = pickOtherIndex(this.p1Index);
+        this.scene.start("battle", {
+          p1: ROSTER[this.p1Index],
+          p2: ROSTER[otherIdx],
+          difficulty: this.difficulty,
+          mode: "cpu",
+        });
+      }
     }
   }
 }
@@ -601,6 +667,7 @@ class BattleScene extends Phaser.Scene {
     this.p1Char = data.p1 || ROSTER[0];
     this.p2Char = data.p2 || ROSTER[1];
     this.difficulty = data.difficulty || "Normal";
+    this.mode = data.mode || "cpu";        // "cpu" | "2p"
     // Pick the stage here (before preload) so we only fetch this stage's backdrop
     this.stageDef = STAGES[Math.floor(Math.random() * STAGES.length)];
   }
@@ -760,10 +827,12 @@ class BattleScene extends Phaser.Scene {
     }).setOrigin(0.5).setAlpha(0.95);
     this.tweens.add({ targets: banner, alpha: 0, delay: 1300, duration: 600, onComplete: () => banner.destroy() });
 
-    // Difficulty label (top center)
-    this.add.text(W / 2, 24, `CPU: ${this.difficulty.toUpperCase()}`, {
+    // Mode / difficulty label (top center)
+    this.add.text(W / 2, 24,
+      this.mode === "2p" ? "2 PLAYER VS" : `CPU: ${this.difficulty.toUpperCase()}`, {
       fontFamily: "Press Start 2P", fontSize: "14px",
-      color: this.difficulty === "Easy" ? "#7be680" :
+      color: this.mode === "2p" ? "#9ad6ff" :
+             this.difficulty === "Easy" ? "#7be680" :
              this.difficulty === "Hard" ? "#ff7a7a" : "#ffe066"
     }).setOrigin(0.5);
 
@@ -775,7 +844,7 @@ class BattleScene extends Phaser.Scene {
 
     this.hud = new HUD(this, this.p1, this.p2);
 
-    // Inputs — P1 is human keyboard, P2 is CPU
+    // Inputs — P1 is arrows+ZXC; P2 is WASD+FGH in 2-player mode, CPU otherwise
     const k = this.input.keyboard;
     this.p1Keys = {
       left: k.addKey("LEFT"), right: k.addKey("RIGHT"), up: k.addKey("UP"),
@@ -783,9 +852,32 @@ class BattleScene extends Phaser.Scene {
       shield: k.addKey("C")
     };
     this.p1Controller = new HumanController(this.p1Keys);
-    this.p2Controller = new CpuController(this.p2, this.p1, DIFFICULTY[this.difficulty]);
+    if (this.mode === "2p") {
+      this.p2Keys = {
+        left: k.addKey("A"), right: k.addKey("D"), up: k.addKey("W"),
+        down: k.addKey("S"), attack: k.addKey("F"), special: k.addKey("G"),
+        shield: k.addKey("H")
+      };
+      this.p2Controller = new HumanController(this.p2Keys);
+    } else {
+      this.p2Controller = new CpuController(this.p2, this.p1, DIFFICULTY[this.difficulty]);
+    }
 
     this.gameOver = false;
+    this.hitstopUntil = 0;
+
+    // READY... GO! intro — inputs held until GO
+    this.introUntil = this.time.now + 1300;
+    const ready = this.add.text(W / 2, H / 2 - 60, "READY...", {
+      fontFamily: "Press Start 2P", fontSize: "44px", color: "#ffe066",
+      stroke: "#000000", strokeThickness: 8
+    }).setOrigin(0.5).setScale(0.2);
+    this.tweens.add({ targets: ready, scale: 1, duration: 180, ease: "Back.easeOut" });
+    this.time.delayedCall(800, () => {
+      ready.setText("GO!").setColor("#7be680").setScale(0.2);
+      this.tweens.add({ targets: ready, scale: 1.3, duration: 150, ease: "Back.easeOut" });
+      this.tweens.add({ targets: ready, alpha: 0, delay: 350, duration: 250, onComplete: () => ready.destroy() });
+    });
 
     SFX.play("matchStart");
     SFX.startMusic();
@@ -802,11 +894,24 @@ class BattleScene extends Phaser.Scene {
     });
   }
 
+  // Freeze the action for a few frames — the classic fighting-game hit pause.
+  hitstop(ms) {
+    this.hitstopUntil = Math.max(this.hitstopUntil, this.time.now + ms);
+  }
+
   update(time, delta) {
     const dt = delta / 1000;
+    // Hitstop: pause physics + fighter logic, keep HUD/tweens alive
+    if (time < this.hitstopUntil) {
+      this.physics.world.isPaused = true;
+      this.hud.tick();
+      return;
+    }
+    if (this.physics.world.isPaused) this.physics.world.isPaused = false;
     if (!this.gameOver) {
-      const p1Input = this.p1Controller.poll(dt);
-      const p2Input = this.p2Controller.poll(dt);
+      const intro = time < this.introUntil;
+      const p1Input = intro ? zeroInput() : this.p1Controller.poll(dt);
+      const p2Input = intro ? zeroInput() : this.p2Controller.poll(dt);
       this.p1.tick(dt, p1Input, this.p2);
       this.p2.tick(dt, p2Input, this.p1);
 
@@ -948,7 +1053,11 @@ class CpuController {
     //   - normal: random chance to swing while in range
     //   - combo:  opponent in hitstun → much higher chance + shorter cooldown
     //   - whiff punish: opponent just attacked and is now in their cooldown → lunge in
-    const inRange = absDx < ATTACK_RANGE && Math.abs(dy) < 80;
+    // Tilt windows: opponent floating above us → up-strike; we're airborne with
+    // the opponent below → spike. Both extend the base in-range box vertically.
+    const upWindow = absDx < ATTACK_RANGE * 0.8 && dy < -60 && dy > -170;
+    const spikeWindow = !onGround && absDx < 95 && dy > 60 && dy < 170;
+    const inRange = (absDx < ATTACK_RANGE && Math.abs(dy) < 80) || upWindow || spikeWindow;
     const opponentStunned = t < (this.opponent.hitstunUntil || 0);
     const opponentSwinging = t < (this.opponent.attackUntil || 0);
     const opponentRecovering = !opponentSwinging && t < (this.opponent.attackCooldownUntil || 0);
@@ -1004,9 +1113,13 @@ class CpuController {
     const willFace = wantFace !== 0 ? wantFace : this.self.facing;
     const willFaceTowardThem = Math.sign(dx) === willFace;
 
-    if (inRange && willFaceTowardThem && !this.defAction && t >= this.attackCooldown
+    let atkUp = false, atkDown = false;
+    if (inRange && (willFaceTowardThem || upWindow || spikeWindow) && !this.defAction
+        && t >= this.attackCooldown
         && t >= this.reactionAt && Math.random() < chance) {
       wantsAttack = true;
+      atkUp = upWindow;                     // Z+Up variant
+      atkDown = spikeWindow && !upWindow;   // Z+Down airborne = spike
       this.attackCooldown = t + cdMin + Math.random() * cdRng;
     }
 
@@ -1053,7 +1166,9 @@ class CpuController {
     this.attackHeld = wantsAttack;
     this.specialHeld = wantsSpecial;
 
-    return { left, right, up: wantsJump, down: false,
+    return { left, right,
+             up: wantsJump || (wantsAttack && atkUp),      // held-up flag picks the variant
+             down: wantsAttack && atkDown,
              jumpPressed, attackPressed, specialPressed, face: wantFace,
              shield: wantsShield, attackDown: false, attackReleased: false };
   }
@@ -1080,6 +1195,54 @@ function flashFighter(fighter, color, ms) {
     const orig = sprite.fillColor;
     sprite.setFillStyle(color);
     fighter.scene.time.delayedCall(ms, () => { if (sprite) sprite.setFillStyle(orig); });
+  }
+}
+
+// ---- Juice helpers -----------------------------------------------------------
+
+// Burst of small squares flying outward from a point; pure tweens, no physics.
+function spawnBurst(scene, x, y, color, n = 8, speed = 180, size = 7, dur = 380) {
+  for (let i = 0; i < n; i++) {
+    const ang = (Math.PI * 2 * i) / n + Math.random() * 0.8;
+    const dist = speed * (0.55 + Math.random() * 0.45);
+    const p = scene.add.rectangle(x, y, size, size, color).setAngle(Math.random() * 90);
+    scene.tweens.add({
+      targets: p,
+      x: x + Math.cos(ang) * dist,
+      y: y + Math.sin(ang) * dist * 0.8,
+      alpha: 0, scale: 0.2, angle: p.angle + 180,
+      duration: dur * (0.7 + Math.random() * 0.6),
+      ease: "Quad.easeOut",
+      onComplete: () => p.destroy(),
+    });
+  }
+}
+
+// Rising damage number over the victim. Bigger hits get bigger, redder text.
+function spawnDamageNumber(scene, x, y, dmg) {
+  const big = dmg >= 14;
+  const txt = scene.add.text(x + (Math.random() * 30 - 15), y - 50, Math.floor(dmg).toString(), {
+    fontFamily: "Press Start 2P", fontSize: big ? "26px" : "17px",
+    color: big ? "#ff5544" : "#ffee88", stroke: "#000000", strokeThickness: 5
+  }).setOrigin(0.5).setScale(0.3);
+  scene.tweens.add({ targets: txt, scale: 1, duration: 90, ease: "Back.easeOut" });
+  scene.tweens.add({
+    targets: txt, y: txt.y - 46, alpha: 0, duration: 650, delay: 120,
+    onComplete: () => txt.destroy(),
+  });
+}
+
+// Dust puff at a fighter's feet (jump / hard landing).
+function spawnDust(scene, x, y, n = 5) {
+  for (let i = 0; i < n; i++) {
+    const p = scene.add.rectangle(x + (Math.random() * 36 - 18), y - 2, 6, 6, 0xccccbb, 0.7);
+    scene.tweens.add({
+      targets: p,
+      x: p.x + (Math.random() * 50 - 25), y: p.y - 8 - Math.random() * 14,
+      alpha: 0, scale: 1.8,
+      duration: 300 + Math.random() * 150,
+      onComplete: () => p.destroy(),
+    });
   }
 }
 
@@ -1188,6 +1351,12 @@ class Fighter {
 
     if (onGround) this.airJumps = this.airJumpsMax;
 
+    // Landing dust: touched down this frame after a real fall
+    if (onGround && !this.wasOnGround && (this.prevVy || 0) > 420) {
+      spawnDust(this.scene, this.sprite.x, body.y + body.height, 6);
+    }
+    this.wasOnGround = onGround;
+
     // Drive active specials (lunge/grab) and in-flight projectiles regardless of input
     if (inSpecial) this.tickActiveSpecial(t, opponent);
     else if (this.activeSpecial) this.endActiveSpecial();
@@ -1232,6 +1401,7 @@ class Fighter {
           if (input.jumpPressed) {
             if (onGround) {
               body.setVelocityY(s.jumpVel);
+              spawnDust(this.scene, this.sprite.x, body.y + body.height, 4);
               if (this.label === "P1") SFX.play("jump");
             } else if (this.airJumps > 0) {
               body.setVelocityY(s.doubleJumpVel);
@@ -1347,6 +1517,7 @@ class Fighter {
     }
     this.prevBodyBottom = body ? body.y + body.height : null;
     this.prevX = this.sprite.x;
+    this.prevVy = body ? body.velocity.y : 0;
 
     if (this.sprite.x < DEATH_LEFT || this.sprite.x > DEATH_RIGHT || this.sprite.y > DEATH_BOTTOM) {
       this.loseStock();
@@ -1423,6 +1594,7 @@ class Fighter {
     this.hitstunUntil = t + 1.6;   // long punish window — don't just mash C
     SFX.play("shieldBreak");
     flashFighter(this, 0xffff66, 300);
+    spawnBurst(this.scene, this.sprite.x, this.sprite.y - 10, 0x66bbff, 12, 240);
     this.floatText("SHIELD BREAK!", "#ff6666");
     this.scene.cameras.main.shake(220, 0.008);
   }
@@ -1614,6 +1786,9 @@ class Fighter {
     opponent.airJumps = Math.max(opponent.airJumps, 1);
     flashFighter(opponent, 0xffffff, 80);
     this.scene.cameras.main.shake(160, 0.007);
+    this.scene.hitstop(80);
+    spawnBurst(this.scene, opponent.sprite.x, opponent.sprite.y - 10, 0xff8844, 10, 200);
+    spawnDamageNumber(this.scene, opponent.sprite.x, opponent.sprite.y, sp.dmg);
     SFX.play("hit");
   }
 
@@ -1646,8 +1821,10 @@ class Fighter {
       },
     });
 
-    // Hit flash on victim
+    // Hit flash on victim (no hitstop here — the pull tween would drift out of sync)
     flashFighter(opponent, 0xff99cc, 120);
+    spawnBurst(this.scene, opponent.sprite.x, opponent.sprite.y - 10, 0xff99cc, 7, 150);
+    spawnDamageNumber(this.scene, opponent.sprite.x, opponent.sprite.y, sp.dmg);
     SFX.play("grabHit");
 
     // Visual: shrink the grab hitbox to "retract"
@@ -1706,6 +1883,12 @@ class Fighter {
 
     flashFighter(opponent, 0xffffff, 80);
     this.scene.cameras.main.shake(variant === "smash" ? 200 : 120, variant === "smash" ? 0.009 : 0.005);
+    // Juice: hit pause + spark burst + damage number (all scale with the hit)
+    this.scene.hitstop(variant === "smash" ? 110 : dmg >= 12 ? 75 : 50);
+    const hx = (this.sprite.x + opponent.sprite.x) / 2, hy = opponent.sprite.y - 10;
+    spawnBurst(this.scene, hx, hy, variant === "smash" ? 0xffcc44 : 0xffeebb,
+               variant === "smash" ? 14 : 8, variant === "smash" ? 260 : 170);
+    spawnDamageNumber(this.scene, opponent.sprite.x, opponent.sprite.y, dmg);
     SFX.play(variant === "smash" ? "smashHit" :
              (variant === "spike" || this.dashHit) ? "dashHit" : "hit");
     if (label) this.floatText(label, variant === "smash" ? "#ff9933" :
@@ -1716,6 +1899,20 @@ class Fighter {
     this.stocks -= 1;
     this.damage = 0;
     SFX.play("ko");
+    // KO spectacle at the point where they left the screen
+    const kx = Math.max(30, Math.min(W - 30, this.sprite.x));
+    const ky = Math.max(30, Math.min(H - 30, this.sprite.y));
+    spawnBurst(this.scene, kx, ky, this.character.color, 18, 340, 10, 550);
+    spawnBurst(this.scene, kx, ky, 0xffffff, 10, 240, 6, 450);
+    const flash = this.scene.add.rectangle(W / 2, H / 2, W, H, 0xffffff, 0.45);
+    this.scene.tweens.add({ targets: flash, alpha: 0, duration: 260, onComplete: () => flash.destroy() });
+    const koTxt = this.scene.add.text(kx, ky, "KO!", {
+      fontFamily: "Press Start 2P", fontSize: "52px", color: "#ff5544",
+      stroke: "#000000", strokeThickness: 8
+    }).setOrigin(0.5).setScale(2.4).setAlpha(0.9);
+    this.scene.tweens.add({ targets: koTxt, scale: 1, duration: 160, ease: "Back.easeOut" });
+    this.scene.tweens.add({ targets: koTxt, alpha: 0, delay: 550, duration: 300, onComplete: () => koTxt.destroy() });
+    this.scene.cameras.main.shake(280, 0.012);
     // Reset all defense/charge state so nothing carries across the respawn
     this.stopShield();
     this.cancelCharge();
@@ -1812,27 +2009,30 @@ class HUD {
     const dmg = this.scene.add.text(x - 50, y - 18, "0%", {
       fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffe066"
     }).setOrigin(0, 0);
-    const stocks = this.scene.add.text(x + 80, y + 30, "", {
-      fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffffff"
-    }).setOrigin(1, 0.5);
+    // Stock pips: one colored square per remaining life
+    const pips = [];
+    for (let i = 0; i < 3; i++) {
+      pips.push(this.scene.add.rectangle(x + 40 + i * 20, y + 30, 13, 13, fighter.character.color)
+        .setStrokeStyle(2, fighter.character.accent));
+    }
     // Shield meter (thin blue bar under the damage %)
     const shieldBg = this.scene.add.rectangle(x - 50, y + 30, 100, 8, 0x1a2a3a).setOrigin(0, 0.5)
       .setStrokeStyle(1, 0x3a5a7a);
     const shieldFill = this.scene.add.rectangle(x - 49, y + 30, 98, 6, 0x66bbff).setOrigin(0, 0.5);
-    return { bg, swatch, name, dmg, stocks, shieldFill };
+    return { bg, swatch, name, dmg, pips, shieldFill };
   }
 
   tick() {
-    this.p1Card.dmg.setText(Math.floor(this.p1.damage) + "%");
-    this.p2Card.dmg.setText(Math.floor(this.p2.damage) + "%");
-    this.p1Card.dmg.setColor(this.dmgColor(this.p1.damage));
-    this.p2Card.dmg.setColor(this.dmgColor(this.p2.damage));
-    this.p1Card.stocks.setText("x" + this.p1.stocks);
-    this.p2Card.stocks.setText("x" + this.p2.stocks);
-    this.p1Card.shieldFill.width = 98 * Math.max(0, this.p1.shieldHP) / 100;
-    this.p2Card.shieldFill.width = 98 * Math.max(0, this.p2.shieldHP) / 100;
-    this.p1Card.shieldFill.fillColor = this.p1.shieldHP < 30 ? 0xff8866 : 0x66bbff;
-    this.p2Card.shieldFill.fillColor = this.p2.shieldHP < 30 ? 0xff8866 : 0x66bbff;
+    const t = this.scene.time.now / 1000;
+    for (const [card, f] of [[this.p1Card, this.p1], [this.p2Card, this.p2]]) {
+      card.dmg.setText(Math.floor(f.damage) + "%");
+      card.dmg.setColor(this.dmgColor(f.damage));
+      // Danger pulse: above 100% the damage readout throbs
+      card.dmg.setScale(f.damage > 100 ? 1 + 0.07 * Math.sin(t * 10) : 1);
+      card.pips.forEach((p, i) => p.setVisible(i < f.stocks));
+      card.shieldFill.width = 98 * Math.max(0, f.shieldHP) / 100;
+      card.shieldFill.fillColor = f.shieldHP < 30 ? 0xff8866 : 0x66bbff;
+    }
   }
 
   dmgColor(d) {
