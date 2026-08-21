@@ -325,7 +325,7 @@ const ROSTER = [
     special: { type: "projectile", name: "Tennis Serve", dmg: 9, kbBase: 200,
                cooldown: 0.60, projectileSpeed: 820, gravityY: 0,
                projColor: 0xffd84a, projW: 18, projH: 18, spin: false },
-    sprite: { sheet: "sprites/chad.png", frameW: 288, frameH: 910, displayH: 280, feetY: 0.66, frameTrim: 28 },
+    sprite: { sheet: "sprites/chad.png", frameW: 288, frameH: 910, displayH: 280, feetY: 0.66, frameTrim: 28, portraitY: 0.03 },
     blurb: "Fast flat tennis ball. Spammy."
   },
   { id: "jimmy", name: "Jimmy", color: 0x2c7fc7, accent: 0xe36c1c,
@@ -346,7 +346,7 @@ const ROSTER = [
                projColor: 0xa25bff, projW: 24, projH: 20, spin: true },
     // Repacked from ChatGPT output (poses re-slotted to 560px, real alpha —
     // triggers the preKeyed skip in buildSpriteSheets)
-    sprite: { sheet: "sprites/wilson.png", frameW: 560, frameH: 724, displayH: 200, feetY: 0.87 },
+    sprite: { sheet: "sprites/wilson.png", frameW: 560, frameH: 724, displayH: 200, feetY: 0.87, portraitY: 0.20 },
     blurb: "Zombie skater. Tags you with paint."
   },
   { id: "bigfoot", name: "Bigfoot", color: 0x6b4a2e, accent: 0xd9b38c,
@@ -355,7 +355,7 @@ const ROSTER = [
     special: { type: "lunge", name: "Photo Blur", dmg: 18, kbBase: 340,
                duration: 0.38, cooldown: 1.10, dashSpeed: 780, blur: true },
     // Repacked from ChatGPT output; biggest displayH in the roster on purpose
-    sprite: { sheet: "sprites/bigfoot.png", frameW: 560, frameH: 724, displayH: 255, feetY: 0.88 },
+    sprite: { sheet: "sprites/bigfoot.png", frameW: 560, frameH: 724, displayH: 255, feetY: 0.88, portraitY: 0.24 },
     blurb: "Blurry in photos. Heavy in fists."
   },
 ];
@@ -2304,7 +2304,24 @@ class HUD {
 
   makeCard(x, y, fighter) {
     const bg = this.scene.add.rectangle(x, y, 200, 110, 0x000000, 0.55).setStrokeStyle(3, fighter.character.accent);
-    const swatch = this.scene.add.rectangle(x - 75, y - 22, 36, 36, fighter.character.color).setStrokeStyle(2, 0xffffff);
+    // Portrait: head-crop of the idle frame; colored square only as a no-art fallback
+    const c = fighter.character;
+    if (c.sprite && this.scene.textures.exists(c.id)) {
+      const sp = c.sprite;
+      this.scene.add.rectangle(x - 75, y - 22, 44, 44, c.color, 0.30).setStrokeStyle(2, 0xffffff);
+      const scale = 44 / sp.frameW;
+      // Square crop (frameW × frameW) from near the top of the frame = head+torso.
+      // portraitY (fraction of frameH) nudges the window down for tall/padded frames.
+      const cropY = Math.min(sp.frameH - sp.frameW, Math.floor(sp.frameH * (sp.portraitY || 0)));
+      const port = this.scene.add.sprite(x - 75, y - 22, c.id, 0).setScale(scale);
+      port.setCrop(0, cropY, sp.frameW, sp.frameW);
+      // setCrop keeps the visible region at its in-frame position — shift the
+      // sprite so the crop's center lands on the tile center.
+      const cropCenterY = cropY + sp.frameW / 2;
+      port.y = (y - 22) - (cropCenterY - sp.frameH / 2) * scale;
+    } else {
+      this.scene.add.rectangle(x - 75, y - 22, 36, 36, c.color).setStrokeStyle(2, 0xffffff);
+    }
     const name = this.scene.add.text(x - 50, y - 38, fighter.character.name, {
       fontFamily: "Press Start 2P", fontSize: "12px", color: "#ffffff"
     }).setOrigin(0, 0);
@@ -2321,7 +2338,7 @@ class HUD {
     const shieldBg = this.scene.add.rectangle(x - 50, y + 30, 100, 8, 0x1a2a3a).setOrigin(0, 0.5)
       .setStrokeStyle(1, 0x3a5a7a);
     const shieldFill = this.scene.add.rectangle(x - 49, y + 30, 98, 6, 0x66bbff).setOrigin(0, 0.5);
-    return { bg, swatch, name, dmg, pips, shieldFill };
+    return { bg, name, dmg, pips, shieldFill };
   }
 
   tick() {
