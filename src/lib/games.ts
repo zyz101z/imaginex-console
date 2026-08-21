@@ -13,16 +13,16 @@ export interface Game {
 
 export const games: Game[] = [
   {
-    id: "wilson",
-    title: "Wilson's Spray World",
+    id: "bloot",
+    title: "Bloot",
     description:
-      "Wilson's a zombie skater kid with a spray can. Roll up to a wall, paint what it asks for — skulls, cats, his signature drip-smiley tag — and stack coins for wild fills. Unlock neon paint, fat caps, and fresh tag colors. Never fail a wall, just get fresher.",
-    genre: "Creative / Arcade",
-    cover: "/games/wilson/cover.png",
-    url: "/games/wilson/index.html",
-    color: "#a25bff",
-    cartridgeColor: "#140f1e",
-    cartridgeLabelColor: "#c89bff",
+      "A fast-paced mountain racing adventure! Race through treacherous peaks and prove you're the fastest on the mountain!",
+    genre: "Racing / Adventure",
+    cover: "/games/bloot/cover.png",
+    url: "/games/bloot/index.html",
+    color: "#f44336",
+    cartridgeColor: "#b71c1c",
+    cartridgeLabelColor: "#ff8a65",
     status: "available",
   },
   {
@@ -36,19 +36,6 @@ export const games: Game[] = [
     color: "#4fc3f7",
     cartridgeColor: "#1a237e",
     cartridgeLabelColor: "#4fc3f7",
-    status: "available",
-  },
-  {
-    id: "bloot",
-    title: "Bloot",
-    description:
-      "A fast-paced mountain racing adventure! Race through treacherous peaks and prove you're the fastest on the mountain!",
-    genre: "Racing / Adventure",
-    cover: "/games/bloot/cover.png",
-    url: "/games/bloot/index.html",
-    color: "#f44336",
-    cartridgeColor: "#b71c1c",
-    cartridgeLabelColor: "#ff8a65",
     status: "available",
   },
   {
@@ -104,6 +91,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "gridiron-gm",
+    title: "Gridiron GM",
+    description:
+      "Run a pro football franchise: sim games drive by drive, call the gameplan, work the draft, swing trades, sign extensions, hire coaches, and chase the Gridiron Bowl through weather, injuries and a living league of news, awards and rivals.",
+    genre: "Sports / Management",
+    cover: "/games/gridiron-gm/cover.jpg",
+    url: "/games/gridiron-gm/index.html",
+    color: "#8bc34a",
+    cartridgeColor: "#14320f",
+    cartridgeLabelColor: "#ffd54f",
+    status: "available",
+  },
+  {
     id: "freight-nation",
     title: "Freight Nation",
     description:
@@ -117,16 +117,16 @@ export const games: Game[] = [
     status: "available",
   },
   {
-    id: "gridiron-gm",
-    title: "Gridiron GM",
+    id: "wilson",
+    title: "Wilson's Spray World",
     description:
-      "Run a pro football franchise: sim games drive by drive, call the gameplan, work the draft, swing trades, sign extensions, hire coaches, and chase the Gridiron Bowl through weather, injuries and a living league of news, awards and rivals.",
-    genre: "Sports / Management",
-    cover: "/games/gridiron-gm/cover.jpg",
-    url: "/games/gridiron-gm/index.html",
-    color: "#8bc34a",
-    cartridgeColor: "#14320f",
-    cartridgeLabelColor: "#ffd54f",
+      "Wilson's a zombie skater kid with a spray can. Roll up to a wall, paint what it asks for — skulls, cats, his signature drip-smiley tag — and stack coins for wild fills. Unlock neon paint, fat caps, and fresh tag colors. Never fail a wall, just get fresher.",
+    genre: "Creative / Arcade",
+    cover: "/games/wilson/cover.png",
+    url: "/games/wilson/index.html",
+    color: "#a25bff",
+    cartridgeColor: "#140f1e",
+    cartridgeLabelColor: "#c89bff",
     status: "available",
   },
   {
