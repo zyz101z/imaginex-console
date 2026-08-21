@@ -43,6 +43,11 @@ class SoundManager {
     this.ctx = null;
     this.master = null;
     this.muted = false;
+    // Procedural BGM state
+    this.musicTimer = null;
+    this.musicGain = null;
+    this.musicStep = 0;
+    this.nextNoteTime = 0;
   }
   ensure() {
     if (this.ctx) return;
@@ -62,10 +67,12 @@ class SoundManager {
   }
   toggleMute() { this.setMuted(!this.muted); return this.muted; }
 
-  // Helper: oscillator with optional pitch sweep
-  tone({ type = "square", freqStart, freqEnd, dur = 0.1, volume = 0.3, delay = 0 }) {
+  // Helper: oscillator with optional pitch sweep.
+  // `at` (absolute ctx time) + `dest` (alternate output node) are used by the BGM
+  // scheduler; SFX callers leave both unset.
+  tone({ type = "square", freqStart, freqEnd, dur = 0.1, volume = 0.3, delay = 0, at = null, dest = null }) {
     if (!this.ctx || this.muted) return;
-    const t = this.ctx.currentTime + delay;
+    const t = (at != null ? at : this.ctx.currentTime) + delay;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -76,15 +83,15 @@ class SoundManager {
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.linearRampToValueAtTime(volume, t + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain).connect(dest || this.master);
     osc.start(t);
     osc.stop(t + dur + 0.05);
   }
 
   // Helper: filtered noise burst
-  noise({ dur = 0.1, volume = 0.25, filterFreq = 2000, filterQ = 1, type = "bandpass", delay = 0 }) {
+  noise({ dur = 0.1, volume = 0.25, filterFreq = 2000, filterQ = 1, type = "bandpass", delay = 0, at = null, dest = null }) {
     if (!this.ctx || this.muted) return;
-    const t = this.ctx.currentTime + delay;
+    const t = (at != null ? at : this.ctx.currentTime) + delay;
     const len = Math.ceil(dur * this.ctx.sampleRate);
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -99,9 +106,62 @@ class SoundManager {
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.linearRampToValueAtTime(volume, t + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(filter).connect(gain).connect(this.master);
+    src.connect(filter).connect(gain).connect(dest || this.master);
     src.start(t);
     src.stop(t + dur + 0.05);
+  }
+
+  // ---- Procedural chiptune BGM ----------------------------------------------
+  // A 4-bar loop in A minor scheduled with a 350ms lookahead. All routed through
+  // musicGain -> master so the M mute still silences everything at once.
+  startMusic() {
+    this.ensure();
+    this.resume();
+    if (!this.ctx || this.musicTimer) return;
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0.55;   // music sits under the SFX
+    this.musicGain.connect(this.master);
+    this.musicStep = 0;
+    this.nextNoteTime = this.ctx.currentTime + 0.06;
+    this.musicTimer = setInterval(() => this.scheduleMusic(), 90);
+  }
+
+  stopMusic() {
+    if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; }
+    if (this.musicGain) { this.musicGain.disconnect(); this.musicGain = null; }
+  }
+
+  scheduleMusic() {
+    if (!this.ctx || !this.musicGain) return;
+    const SPB = 60 / 138 / 2;  // one 8th note at 138 BPM
+    while (this.nextNoteTime < this.ctx.currentTime + 0.35) {
+      this.playMusicStep(this.musicStep, this.nextNoteTime);
+      this.musicStep = (this.musicStep + 1) % 64;
+      this.nextNoteTime += SPB;
+    }
+  }
+
+  playMusicStep(step, t) {
+    const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+    const g = this.musicGain;
+    const SPB = 60 / 138 / 2;
+    // Bass: 2-bar riff, repeats (A - C - G - F walk)
+    const BASS = [45, 45, 57, 45, 48, 48, 45, 45,   43, 43, 55, 43, 41, 41, 43, 44];
+    const b = BASS[step % BASS.length];
+    this.tone({ type: "triangle", freqStart: midi(b), dur: SPB * 0.92, volume: 0.26, at: t, dest: g });
+    // Lead: 4-bar melody (0 = rest), A minor pentatonic
+    const LEAD = [
+      69, 0, 72, 0, 74, 0, 72, 74,   76, 0, 74, 72, 69, 0, 0, 0,
+      67, 0, 69, 0, 72, 0, 69, 72,   74, 0, 72, 69, 67, 0, 0, 0,
+      69, 0, 72, 0, 74, 0, 76, 0,    79, 0, 76, 74, 76, 0, 0, 0,
+      81, 0, 79, 76, 74, 0, 72, 74,  69, 0, 0, 0, 0, 0, 64, 67,
+    ];
+    const l = LEAD[step];
+    if (l) this.tone({ type: "square", freqStart: midi(l), dur: SPB * 0.85, volume: 0.085, at: t, dest: g });
+    // Drums: kick on the beat, snare on 2 & 4, hats on off-8ths
+    if (step % 8 === 0) this.tone({ type: "sine", freqStart: 130, freqEnd: 45, dur: 0.09, volume: 0.34, at: t, dest: g });
+    if (step % 8 === 4) this.noise({ dur: 0.07, volume: 0.13, filterFreq: 1900, filterQ: 0.9, at: t, dest: g });
+    if (step % 2 === 1) this.noise({ dur: 0.03, volume: 0.05, filterFreq: 7000, filterQ: 1, type: "highpass", at: t, dest: g });
   }
 
   play(name) {
@@ -157,6 +217,27 @@ class SoundManager {
         this.tone({ type: "square", freqStart: 90, freqEnd: 60, dur: 0.18, volume: 0.4 });
         this.noise({ dur: 0.08, volume: 0.18, filterFreq: 600, filterQ: 1, delay: 0.04 });
         break;
+      case "shieldOn":
+        this.tone({ type: "sine", freqStart: 300, freqEnd: 520, dur: 0.07, volume: 0.16 }); break;
+      case "shieldHit":
+        this.tone({ type: "triangle", freqStart: 520, freqEnd: 260, dur: 0.09, volume: 0.3 });
+        this.noise({ dur: 0.04, volume: 0.12, filterFreq: 2400, filterQ: 2 });
+        break;
+      case "shieldBreak":
+        this.tone({ type: "square", freqStart: 900, freqEnd: 90, dur: 0.5, volume: 0.42 });
+        this.noise({ dur: 0.3, volume: 0.22, filterFreq: 1200, filterQ: 0.8, delay: 0.03 });
+        break;
+      case "roll":
+        this.noise({ dur: 0.12, volume: 0.15, filterFreq: 900, filterQ: 0.7 });
+        this.tone({ type: "sine", freqStart: 220, freqEnd: 90, dur: 0.12, volume: 0.14 });
+        break;
+      case "chargeFull":
+        this.tone({ type: "square", freqStart: 660, freqEnd: 880, dur: 0.09, volume: 0.2 }); break;
+      case "smashHit":
+        this.tone({ type: "sine", freqStart: 130, freqEnd: 38, dur: 0.24, volume: 0.65 });
+        this.noise({ dur: 0.1, volume: 0.34, filterFreq: 1000, filterQ: 1 });
+        this.tone({ type: "square", freqStart: 880, freqEnd: 180, dur: 0.14, volume: 0.2 });
+        break;
     }
   }
 }
@@ -171,6 +252,7 @@ const GRAVITY = 1700;
 const ATTACK_KB_SCALE = 9;     // extra knockback per damage% on victim
 const HITSTUN_BASE = 0.18;
 const ATTACK_DURATION = 0.18;  // hitbox active window — fixed across roster
+const CHARGE_MIN = 0.45;       // seconds of holding Z (past the jab) before a smash starts charging
 
 // Roster — each character has a stat profile. Tweak these to balance.
 //   weight: divides incoming knockback. Heavier = harder to launch.
@@ -248,16 +330,36 @@ const DIFFICULTY = {
   Easy:   { attackChance: 0.16, attackCdMin: 0.45, attackCdRange: 0.25,
             comboAttackChance: 0.45, comboCdMin: 0.30, comboCdRange: 0.20,
             airChase: false, reactionDelay: 0.18, crowd: false, faceLock: false,
-            whiffPunishChance: 0.0, rangeBuffer: 32 },
+            whiffPunishChance: 0.0, rangeBuffer: 32,
+            shieldChance: 0.05, rollChance: 0.03 },
   Normal: { attackChance: 0.20, attackCdMin: 0.36, attackCdRange: 0.22,
             comboAttackChance: 0.55, comboCdMin: 0.26, comboCdRange: 0.16,
             airChase: true,  reactionDelay: 0.18, crowd: false, faceLock: true,
-            whiffPunishChance: 0.25, rangeBuffer: 24 },
+            whiffPunishChance: 0.25, rangeBuffer: 24,
+            shieldChance: 0.22, rollChance: 0.12 },
   Hard:   { attackChance: 0.85, attackCdMin: 0.14, attackCdRange: 0.08,
             comboAttackChance: 0.99, comboCdMin: 0.08, comboCdRange: 0.06,
             airChase: true,  reactionDelay: 0.0,  crowd: true,  faceLock: true,
-            whiffPunishChance: 0.95, rangeBuffer: 8 },
+            whiffPunishChance: 0.95, rangeBuffer: 8,
+            shieldChance: 0.45, rollChance: 0.28 },
 };
+
+// Stages — the main floor footprint is IDENTICAL in every stage (the grab clamp
+// and floor safety-net both assume it), so variety comes from platforms + palette.
+const STAGES = [
+  { id: "plains", name: "SKY PLAINS",
+    bgTop: 0x1a2a4a, bgBot: 0x081828, mtn: 0x223759, haze: 0x12203a,
+    floor: 0x432d20, floorEdge: 0x6b4632, plat: 0x6b4632, platEdge: 0x9b6c4a,
+    platforms: [{ x: W / 2, y: 440, w: 360 }] },
+  { id: "peaks", name: "TWIN PEAKS",
+    bgTop: 0x2a1a3e, bgBot: 0x120a24, mtn: 0x3d2a5c, haze: 0x1d1436,
+    floor: 0x3a3a4c, floorEdge: 0x5e5e7a, plat: 0x5e5e7a, platEdge: 0x8888aa,
+    platforms: [{ x: W / 2 - 330, y: 450, w: 260 }, { x: W / 2 + 330, y: 450, w: 260 }] },
+  { id: "sunset", name: "SUNSET FLATS",
+    bgTop: 0x5c2a1a, bgBot: 0x1a0a08, mtn: 0x6e3a24, haze: 0x2a120a,
+    floor: 0x2e4a2a, floorEdge: 0x4a7040, plat: 0x4a7040, platEdge: 0x6a9a58,
+    platforms: [] },
+];
 
 // ---- Title scene -------------------------------------------------------------
 
@@ -322,8 +424,8 @@ class SelectScene extends Phaser.Scene {
     this.add.text(cx, 110, "Arrows: choose   Up/Down: difficulty   Z or Enter: fight   Esc: title", {
       fontFamily: "Press Start 2P", fontSize: "11px", color: "#aabbdd"
     }).setOrigin(0.5);
-    this.add.text(cx, 132, "In-fight controls:  Arrows + Z (attack) + X (special)   M to mute", {
-      fontFamily: "Press Start 2P", fontSize: "10px", color: "#7788aa"
+    this.add.text(cx, 132, "Fight: Arrows + Z attack (hold=SMASH, +Up/Down=tilts) + X special + C shield/roll   M mute", {
+      fontFamily: "Press Start 2P", fontSize: "9px", color: "#7788aa"
     }).setOrigin(0.5);
 
     // Roster grid (single row, 6 cards)
@@ -578,29 +680,41 @@ class BattleScene extends Phaser.Scene {
 
   create() {
     this.buildSpriteSheets();
+    // Pick a random stage layout + palette for this match
+    const st = this.stageDef = STAGES[Math.floor(Math.random() * STAGES.length)];
+
     // Backdrop
     const bg = this.add.graphics();
-    bg.fillGradientStyle(0x1a2a4a, 0x1a2a4a, 0x081828, 0x081828, 1);
+    bg.fillGradientStyle(st.bgTop, st.bgTop, st.bgBot, st.bgBot, 1);
     bg.fillRect(0, 0, W, H);
 
     // Distant mountains for depth
     const mtn = this.add.graphics();
-    mtn.fillStyle(0x223759, 1);
+    mtn.fillStyle(st.mtn, 1);
     mtn.fillTriangle(0, 600, 320, 280, 640, 600);
     mtn.fillTriangle(420, 600, 800, 320, 1180, 600);
     mtn.fillTriangle(900, 600, 1200, 360, 1500, 600);
-    mtn.fillStyle(0x12203a, 0.55);
+    mtn.fillStyle(st.haze, 0.55);
     mtn.fillRect(0, 600, W, 200);
 
-    // Stage: main floor + one floating platform
+    // Stage: main floor (same footprint everywhere) + per-stage platforms
     this.stage = this.physics.add.staticGroup();
-    const floor = this.add.rectangle(W / 2, GROUND_Y + 40, W - 100, 80, 0x432d20).setStrokeStyle(3, 0x6b4632);
+    const floor = this.add.rectangle(W / 2, GROUND_Y + 40, W - 100, 80, st.floor).setStrokeStyle(3, st.floorEdge);
     this.physics.add.existing(floor, true);
     this.stage.add(floor);
 
-    const platform = this.add.rectangle(W / 2, 440, 360, 24, 0x6b4632).setStrokeStyle(3, 0x9b6c4a);
-    this.physics.add.existing(platform, true);
-    this.stage.add(platform);
+    for (const p of st.platforms) {
+      const platform = this.add.rectangle(p.x, p.y, p.w, 24, st.plat).setStrokeStyle(3, st.platEdge);
+      this.physics.add.existing(platform, true);
+      this.stage.add(platform);
+    }
+
+    // Stage-name banner, fades out after a beat
+    const banner = this.add.text(W / 2, 130, st.name, {
+      fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffffff",
+      stroke: "#000000", strokeThickness: 6
+    }).setOrigin(0.5).setAlpha(0.95);
+    this.tweens.add({ targets: banner, alpha: 0, delay: 1300, duration: 600, onComplete: () => banner.destroy() });
 
     // Difficulty label (top center)
     this.add.text(W / 2, 24, `CPU: ${this.difficulty.toUpperCase()}`, {
@@ -621,7 +735,8 @@ class BattleScene extends Phaser.Scene {
     const k = this.input.keyboard;
     this.p1Keys = {
       left: k.addKey("LEFT"), right: k.addKey("RIGHT"), up: k.addKey("UP"),
-      down: k.addKey("DOWN"), attack: k.addKey("Z"), special: k.addKey("X")
+      down: k.addKey("DOWN"), attack: k.addKey("Z"), special: k.addKey("X"),
+      shield: k.addKey("C")
     };
     this.p1Controller = new HumanController(this.p1Keys);
     this.p2Controller = new CpuController(this.p2, this.p1, DIFFICULTY[this.difficulty]);
@@ -629,6 +744,9 @@ class BattleScene extends Phaser.Scene {
     this.gameOver = false;
 
     SFX.play("matchStart");
+    SFX.startMusic();
+    // Covers ESC-to-roster AND endMatch restart (shutdown fires before create re-runs)
+    this.events.once("shutdown", () => SFX.stopMusic());
 
     k.on("keydown-ESC", () => this.scene.start("select"));
     k.on("keydown-M", () => {
@@ -655,6 +773,7 @@ class BattleScene extends Phaser.Scene {
 
   endMatch() {
     this.gameOver = true;
+    SFX.stopMusic();
     // Clean up in-flight projectiles — tickProjectiles stops running now, so
     // anything mid-air would freeze over the overlay with its spin tween live.
     for (const f of [this.p1, this.p2]) {
@@ -701,7 +820,10 @@ class HumanController {
       down:  this.keys.down.isDown,
       jumpPressed:    Phaser.Input.Keyboard.JustDown(this.keys.up),
       attackPressed:  attackPressed && this.attackArmed,
+      attackDown:     this.keys.attack.isDown && this.attackArmed,
+      attackReleased: Phaser.Input.Keyboard.JustUp(this.keys.attack),
       specialPressed: Phaser.Input.Keyboard.JustDown(this.keys.special),
+      shield: this.keys.shield.isDown,
       face: 0,
     };
   }
@@ -719,6 +841,10 @@ class CpuController {
     this.nextWiggleAt = 0;
     this.wiggleDir = 0;
     this.reactionAt = 0;          // earliest time we can react to a new in-range opportunity
+    // Defensive state: one dice-roll per opponent swing (keyed by attackUntil),
+    // resolved into a short shield-hold or a roll away.
+    this.lastSwingSeen = 0;
+    this.defAction = null;        // {type:'shield'|'roll', until, dir}
   }
 
   poll(dt) {
@@ -783,6 +909,32 @@ class CpuController {
     const opponentSwinging = t < (this.opponent.attackUntil || 0);
     const opponentRecovering = !opponentSwinging && t < (this.opponent.attackCooldownUntil || 0);
 
+    // ---- Defensive reaction ---------------------------------------------------
+    // One dice-roll per opponent swing (keyed by its attackUntil timestamp):
+    // either roll away, hold shield for half a second, or do nothing.
+    let wantsShield = false;
+    if (opponentSwinging && this.opponent.attackUntil !== this.lastSwingSeen) {
+      this.lastSwingSeen = this.opponent.attackUntil;
+      if (onGround && absDx < ATTACK_RANGE + 90 && !this.defAction) {
+        const r = Math.random();
+        if (r < cfg.rollChance) {
+          this.defAction = { type: "roll", until: t + 0.1, dir: -Math.sign(dx) || 1 };
+        } else if (r < cfg.rollChance + cfg.shieldChance) {
+          this.defAction = { type: "shield", until: t + 0.5 };
+        }
+      }
+    }
+    if (this.defAction && t > this.defAction.until) this.defAction = null;
+    if (this.defAction) {
+      wantsShield = true;
+      if (this.defAction.type === "shield") {
+        left = right = false;             // stand and block
+      } else {
+        left = this.defAction.dir < 0;    // shield+direction on the press frame = roll
+        right = this.defAction.dir > 0;
+      }
+    }
+
     // We force-face the opponent when in (or near) attack range so wiggling/standing
     // never ends with us pointed the wrong way. Without this, the bot wastes 50%
     // of its tick budget facing away from you.
@@ -808,7 +960,7 @@ class CpuController {
     const willFace = wantFace !== 0 ? wantFace : this.self.facing;
     const willFaceTowardThem = Math.sign(dx) === willFace;
 
-    if (inRange && willFaceTowardThem && t >= this.attackCooldown
+    if (inRange && willFaceTowardThem && !this.defAction && t >= this.attackCooldown
         && t >= this.reactionAt && Math.random() < chance) {
       wantsAttack = true;
       this.attackCooldown = t + cdMin + Math.random() * cdRng;
@@ -858,13 +1010,15 @@ class CpuController {
     this.specialHeld = wantsSpecial;
 
     return { left, right, up: wantsJump, down: false,
-             jumpPressed, attackPressed, specialPressed, face: wantFace };
+             jumpPressed, attackPressed, specialPressed, face: wantFace,
+             shield: wantsShield, attackDown: false, attackReleased: false };
   }
 }
 
 function zeroInput() {
   return { left: false, right: false, up: false, down: false,
-           jumpPressed: false, attackPressed: false, specialPressed: false, face: 0 };
+           jumpPressed: false, attackPressed: false, specialPressed: false, face: 0,
+           shield: false, attackDown: false, attackReleased: false };
 }
 
 function inHitstunSelf(fighter, t) {
@@ -908,6 +1062,20 @@ class Fighter {
     this.activeSpecial = null;    // {type, endTime, hitbox?, consumed} while a lunge/grab is live
     this.projectiles = [];        // Projectile entities currently in flight
     this.pulledUntil = 0;         // when > now, our motion is overridden by a grab
+    // Defense state (shield / roll / airdodge)
+    this.shielding = false;
+    this.shieldHP = 100;          // drains while held + on blocked hits; regens otherwise
+    this.shieldGfx = null;        // lazy-created bubble ellipse
+    this.invulnUntil = 0;         // roll/airdodge i-frames
+    this.rollUntil = 0;
+    this.rollDir = 0;
+    this.rollCooldownUntil = 0;
+    this.prevShieldDown = false;
+    // Charged smash state: tap Z = instant jab (unchanged); KEEP HOLDING Z past
+    // the jab and a smash starts charging; release to unleash it.
+    this.chargeStart = null;
+    this.charging = false;
+    this.chargeGfx = null;
     // Previous-frame body bottom + x for the floor-tunneling safety net, so it
     // only fires when we genuinely cross through the floor (not when re-entering
     // the stage x-range from below after being knocked off).
@@ -981,33 +1149,104 @@ class Fighter {
     else if (this.activeSpecial) this.endActiveSpecial();
     this.tickProjectiles(dt, opponent);
 
+    // Shield press edge detection (C key / CPU defense flag)
+    const shieldDown = !!input.shield;
+    const shieldPressed = shieldDown && !this.prevShieldDown;
+    this.prevShieldDown = shieldDown;
+
+    // Getting hit (or starting a special) drops shield + charge
+    if (inHitstun || inSpecial) {
+      if (this.shielding) this.stopShield();
+      this.cancelCharge();
+    }
+
+    const rolling = t < this.rollUntil;
+
     // (Grab pull is driven by a tween started in applyGrab; hitstun pins input here.)
     if (!inHitstun && !inSpecial) {
-      let vx = 0;
-      if (input.left)  { vx -= s.walkSpeed; this.facing = -1; }
-      if (input.right) { vx += s.walkSpeed; this.facing = 1; }
-      if (input.face === -1 || input.face === 1) this.facing = input.face;
-      if (attacking) vx *= 0.3;
-      body.setVelocityX(vx);
+      if (rolling) {
+        // Roll motion overrides everything for its duration
+        body.setVelocityX(this.rollDir * 560);
+      } else if (this.shielding) {
+        body.setVelocityX(0);
+        if (!shieldDown || !onGround) this.stopShield();
+      } else {
+        let vx = 0;
+        if (input.left)  { vx -= s.walkSpeed; this.facing = -1; }
+        if (input.right) { vx += s.walkSpeed; this.facing = 1; }
+        if (input.face === -1 || input.face === 1) this.facing = input.face;
+        if (attacking) vx *= 0.3;
+        body.setVelocityX(vx);
 
-      if (input.jumpPressed) {
-        if (onGround) {
-          body.setVelocityY(s.jumpVel);
-          if (this.label === "P1") SFX.play("jump");
-        } else if (this.airJumps > 0) {
-          body.setVelocityY(s.doubleJumpVel);
-          this.airJumps -= 1;
-          if (this.label === "P1") SFX.play("doubleJump");
+        if (shieldPressed && t >= this.rollCooldownUntil && this.chargeStart == null) {
+          // C + direction on ground = roll; C in air = airdodge; C neutral = shield
+          const dir = input.left ? -1 : input.right ? 1 : 0;
+          if (onGround && dir !== 0) this.startRoll(dir, t);
+          else if (!onGround)        this.startAirdodge(t);
+          else                       this.startShield(t);
+        } else {
+          if (input.jumpPressed) {
+            if (onGround) {
+              body.setVelocityY(s.jumpVel);
+              if (this.label === "P1") SFX.play("jump");
+            } else if (this.airJumps > 0) {
+              body.setVelocityY(s.doubleJumpVel);
+              this.airJumps -= 1;
+              if (this.label === "P1") SFX.play("doubleJump");
+            }
+          }
+
+          if (input.attackPressed && t >= this.attackCooldownUntil) {
+            // Direction held at press picks the attack variant:
+            //   Up = rising strike, Down on ground = low sweep, Down in air = SPIKE
+            const variant = input.up ? "up" : input.down ? (onGround ? "downTilt" : "spike") : "jab";
+            this.startAttack(opponent, variant, 1.0);
+            SFX.play("attack");
+            if (variant === "jab" && onGround) this.chargeStart = t;
+          }
+          if (input.specialPressed && t >= this.specialCooldownUntil) {
+            this.cancelCharge();
+            this.startSpecial(opponent);
+          }
+        }
+
+        // Charged smash: kept holding Z past the jab? Charge builds; release fires.
+        if (this.chargeStart != null) {
+          if (!input.attackDown) {
+            const held = t - this.chargeStart;
+            const wasCharging = this.charging;
+            this.cancelCharge();
+            if (wasCharging && t >= this.attackUntil && onGround) {
+              const mult = 1.35 + Math.min(1, (held - CHARGE_MIN) / 0.9) * 0.45;
+              this.startAttack(opponent, "smash", mult);
+              SFX.play("attack");
+            }
+          } else if (!this.charging && t - this.chargeStart > CHARGE_MIN && onGround) {
+            this.charging = true;
+            SFX.play("chargeFull");
+            this.showChargeGlow();
+          }
         }
       }
+    }
 
-      if (input.attackPressed && t >= this.attackCooldownUntil) {
-        this.startAttack(opponent);
-        SFX.play("attack");
-      }
-      if (input.specialPressed && t >= this.specialCooldownUntil) {
-        this.startSpecial(opponent);
-      }
+    // Shield HP drain/regen + bubble / charge-glow tracking
+    if (this.shielding) {
+      this.shieldHP -= 16 * dt;
+      if (this.shieldHP <= 0) this.shieldBreak();
+    } else {
+      this.shieldHP = Math.min(100, this.shieldHP + 22 * dt);
+    }
+    if (this.shieldGfx && this.shieldGfx.visible) {
+      this.shieldGfx.x = this.sprite.x;
+      this.shieldGfx.y = this.sprite.y - 6;
+      const sc = 0.45 + 0.55 * Math.max(0, this.shieldHP) / 100;
+      this.shieldGfx.setScale(sc);
+    }
+    if (this.chargeGfx && this.chargeGfx.visible) {
+      this.chargeGfx.x = this.sprite.x;
+      this.chargeGfx.y = this.sprite.y;
+      this.chargeGfx.alpha = 0.28 + 0.18 * Math.sin(t * 22);
     }
 
     // Hitbox lifetime + hit detection
@@ -1018,12 +1257,12 @@ class Fighter {
     if (this.activeHitbox && !this.activeHitbox.consumed) {
       const hb = this.activeHitbox;
       hb.gfx.x = this.sprite.x + this.facing * hb.offset;
-      hb.gfx.y = this.sprite.y;
+      hb.gfx.y = this.sprite.y + (hb.offsetY || 0);
       const dx = Math.abs(hb.gfx.x - opponent.sprite.x);
       const dy = Math.abs(hb.gfx.y - opponent.sprite.y);
       if (dx < (hb.gfx.width / 2 + opponent.hitW / 2) &&
           dy < (hb.gfx.height / 2 + opponent.hitH / 2)) {
-        this.applyHit(opponent);
+        this.applyHit(opponent, hb);
         hb.consumed = true;
       }
     }
@@ -1070,23 +1309,40 @@ class Fighter {
     }
   }
 
-  startAttack(opponent) {
+  startAttack(opponent, variant = "jab", chargeMult = 1) {
     const t = this.scene.time.now / 1000;
     const s = this.stats;
+    // Variant profiles: hitbox geometry + damage/knockback/cooldown multipliers.
+    //   jab      — the classic forward swing (tap Z)
+    //   up       — rising strike above the head (Z + Up held); anti-air launcher
+    //   downTilt — fast low sweep on the ground (Z + Down); pops up, combo starter
+    //   spike    — downward air strike (Z + Down airborne); METEORS airborne victims
+    //   smash    — charged release (hold Z past the jab); big damage + knockback
+    const V = {
+      jab:      { dmgMult: 1.0,  kbMult: 1.0,  cdMult: 1.0,  w: s.attackRange,      h: 50,
+                  dx: s.attackRange / 2 + 18,        dy: 0,                       color: 0xffeebb },
+      up:       { dmgMult: 1.0,  kbMult: 1.0,  cdMult: 1.15, w: 84,                h: 74,
+                  dx: 18,                            dy: -(this.hitH / 2 + 26),   color: 0xbbe0ff },
+      downTilt: { dmgMult: 0.7,  kbMult: 0.75, cdMult: 0.7,  w: s.attackRange * 0.95, h: 30,
+                  dx: s.attackRange / 2 + 10,        dy: 30,                      color: 0xd0ffb0 },
+      spike:    { dmgMult: 1.1,  kbMult: 1.0,  cdMult: 1.25, w: 74,                h: 60,
+                  dx: 10,                            dy: this.hitH / 2 + 20,      color: 0xffb0d0 },
+      smash:    { dmgMult: 1.0,  kbMult: 1.0,  cdMult: 1.6,  w: s.attackRange + 24, h: 62,
+                  dx: (s.attackRange + 24) / 2 + 18, dy: 0,                       color: 0xffcc66 },
+    }[variant];
     this.attackUntil = t + ATTACK_DURATION;
-    this.attackCooldownUntil = t + s.attackCooldown;
+    this.attackCooldownUntil = t + s.attackCooldown * V.cdMult;
     // Dash-attack bonus: if we were running near top speed when we swing, the
-    // hit deals +25% damage and knockback. This is the main reason walkSpeed matters.
-    this.dashHit = Math.abs(this.sprite.body.velocity.x) > s.walkSpeed * 0.6;
+    // hit deals +25% damage and knockback. Jab-only — smash/tilts have their own identity.
+    this.dashHit = variant === "jab" && Math.abs(this.sprite.body.velocity.x) > s.walkSpeed * 0.6;
 
-    // Hitbox sized from the character's reach
-    const hbW = s.attackRange, hbH = 50;
-    const offset = hbW / 2 + 18;
-    const hbX = this.sprite.x + this.facing * offset;
-    const hbY = this.sprite.y;
-    const gfx = this.scene.add.rectangle(hbX, hbY, hbW, hbH, 0xffeebb, 0.55).setStrokeStyle(2, 0xffaa33);
+    const hbX = this.sprite.x + this.facing * V.dx;
+    const hbY = this.sprite.y + V.dy;
+    const gfx = this.scene.add.rectangle(hbX, hbY, V.w, V.h, V.color, 0.55).setStrokeStyle(2, 0xffaa33);
     if (this.useSprite) gfx.setVisible(false);  // sprite has its own swing pose
-    this.activeHitbox = { gfx, expires: t + ATTACK_DURATION, consumed: false, offset };
+    this.activeHitbox = { gfx, expires: t + ATTACK_DURATION, consumed: false,
+                          offset: V.dx, offsetY: V.dy, variant, chargeMult,
+                          dmgMult: V.dmgMult, kbMult: V.kbMult };
 
     // Brief squash recoil — only for rectangle fighters. For sprites, the
     // absolute scaleX/Y values would multiply the source body size and punch
@@ -1096,6 +1352,96 @@ class Fighter {
         targets: this.sprite, scaleX: 1.15, scaleY: 0.92, duration: 60, yoyo: true
       });
     }
+  }
+
+  // ---- Defense (shield / roll / airdodge) ------------------------------------
+
+  startShield(t) {
+    if (this.shieldHP <= 8) return;  // too cracked to raise
+    this.shielding = true;
+    SFX.play("shieldOn");
+    if (!this.shieldGfx) {
+      this.shieldGfx = this.scene.add.ellipse(this.sprite.x, this.sprite.y - 6, 116, 136, 0x66bbff, 0.32)
+        .setStrokeStyle(2, 0xaaddff);
+    }
+    this.shieldGfx.setVisible(true);
+  }
+
+  stopShield() {
+    this.shielding = false;
+    if (this.shieldGfx) this.shieldGfx.setVisible(false);
+  }
+
+  shieldBreak() {
+    const t = this.scene.time.now / 1000;
+    this.stopShield();
+    this.shieldHP = 50;
+    this.hitstunUntil = t + 1.6;   // long punish window — don't just mash C
+    SFX.play("shieldBreak");
+    flashFighter(this, 0xffff66, 300);
+    this.floatText("SHIELD BREAK!", "#ff6666");
+    this.scene.cameras.main.shake(220, 0.008);
+  }
+
+  startRoll(dir, t) {
+    this.rollUntil = t + 0.32;
+    this.rollDir = dir;
+    this.invulnUntil = t + 0.30;
+    this.rollCooldownUntil = t + 0.9;
+    this.sprite.alpha = 0.45;
+    this.scene.time.delayedCall(320, () => { if (this.sprite) this.sprite.alpha = 1; });
+    SFX.play("roll");
+  }
+
+  startAirdodge(t) {
+    this.invulnUntil = t + 0.30;
+    this.rollCooldownUntil = t + 0.9;
+    this.sprite.alpha = 0.45;
+    this.scene.time.delayedCall(300, () => { if (this.sprite) this.sprite.alpha = 1; });
+    SFX.play("roll");
+  }
+
+  cancelCharge() {
+    this.chargeStart = null;
+    this.charging = false;
+    if (this.chargeGfx) this.chargeGfx.setVisible(false);
+  }
+
+  showChargeGlow() {
+    if (!this.chargeGfx) {
+      this.chargeGfx = this.scene.add.ellipse(this.sprite.x, this.sprite.y, 130, 130, 0xffcc44, 0.3);
+    }
+    this.chargeGfx.setVisible(true);
+  }
+
+  // Returns true if the incoming hit was dodged or shielded (attacker should bail).
+  // kind "grab" pierces shields (the classic rock-paper-scissors) but not i-frames.
+  tryDefend(attacker, dmg, kind) {
+    const t = this.scene.time.now / 1000;
+    if (t < this.invulnUntil) {
+      this.floatText("DODGE!", "#88ddff");
+      return true;
+    }
+    if (this.shielding && kind !== "grab") {
+      this.shieldHP -= dmg * 2.4;
+      const dir = Math.sign(this.sprite.x - attacker.sprite.x) || 1;
+      this.sprite.body.setVelocityX(dir * 160);
+      SFX.play("shieldHit");
+      if (this.shieldHP <= 0) this.shieldBreak();
+      return true;
+    }
+    return false;
+  }
+
+  floatText(msg, color) {
+    const txt = this.scene.add.text(this.sprite.x, this.sprite.y - 70, msg, {
+      fontFamily: "Press Start 2P", fontSize: "16px", color,
+      stroke: "#000000", strokeThickness: 4
+    }).setOrigin(0.5);
+    this.scene.tweens.add({
+      targets: txt, y: txt.y - 36, alpha: 0, duration: 600,
+      onComplete: () => txt.destroy()
+    });
   }
 
   // ---- Specials --------------------------------------------------------------
@@ -1207,6 +1553,7 @@ class Fighter {
   }
 
   applySpecialHit(opponent, sp) {
+    if (opponent.tryDefend(this, sp.dmg, "special")) return;
     const t = this.scene.time.now / 1000;
     opponent.damage += sp.dmg;
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
@@ -1221,6 +1568,10 @@ class Fighter {
   }
 
   applyGrab(opponent, sp) {
+    // Grabs pierce shields (kind "grab") but can still be dodged with i-frames.
+    if (opponent.tryDefend(this, sp.dmg, "grab")) return;
+    // A shield can't stop the tongue — drop it so the pull looks right.
+    if (opponent.shielding) opponent.stopShield();
     const t = this.scene.time.now / 1000;
     opponent.damage += sp.dmg;
     // Pin opponent in hitstun through the pull window + a beat after
@@ -1270,41 +1621,57 @@ class Fighter {
 
   // ---- Standard light-attack hit --------------------------------------------
 
-  applyHit(opponent) {
+  applyHit(opponent, hb) {
     const s = this.stats;
+    const variant = hb ? hb.variant : "jab";
+    const chargeMult = hb ? hb.chargeMult : 1;
     const dashMult = this.dashHit ? 1.25 : 1.0;
-    const dmg = s.attackDmg * dashMult;
+    const dmg = s.attackDmg * (hb ? hb.dmgMult : 1) * chargeMult * dashMult;
+    if (opponent.tryDefend(this, dmg, "attack")) return;
     opponent.damage += dmg;
     const t = this.scene.time.now / 1000;
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
     // Knockback scales with victim's accumulated damage, divided by victim's weight.
-    const rawKb = (s.attackKbBase + opponent.damage * ATTACK_KB_SCALE) * dashMult;
+    const rawKb = (s.attackKbBase + opponent.damage * ATTACK_KB_SCALE)
+                  * (hb ? hb.kbMult : 1) * chargeMult * dashMult;
     const kb = rawKb / opponent.stats.weight;
-    opponent.sprite.body.setVelocity(dir * kb, -kb * 0.55);
+    // Launch vector depends on the attack variant
+    let vx = dir * kb, vy = -kb * 0.55;
+    let label = this.dashHit ? "DASH!" : null;
+    if (variant === "up") {
+      vx = dir * kb * 0.3; vy = -kb * 1.05;             // straight-up launcher
+    } else if (variant === "downTilt") {
+      vx = dir * kb * 0.4; vy = -kb * 0.75;             // pop-up combo starter
+    } else if (variant === "spike") {
+      const ob = opponent.sprite.body;
+      const airborne = !(ob.blocked.down || ob.touching.down);
+      if (airborne) { vx = dir * kb * 0.2; vy = kb * 0.9; label = "SPIKE!"; }  // METEOR
+      else          { vx = dir * kb * 0.5; vy = -kb * 0.6; }
+    } else if (variant === "smash") {
+      label = "SMASH!";
+    }
+    opponent.sprite.body.setVelocity(vx, vy);
     opponent.hitstunUntil = t + (HITSTUN_BASE + opponent.damage * 0.003) / opponent.stats.weight;
     opponent.airJumps = Math.max(opponent.airJumps, 1);
 
     flashFighter(opponent, 0xffffff, 80);
-    this.scene.cameras.main.shake(120, 0.005);
-    SFX.play(this.dashHit ? "dashHit" : "hit");
-
-    // Visual feedback for dash hits — make the bonus visible to the player
-    if (this.dashHit) {
-      const txt = this.scene.add.text(this.sprite.x, this.sprite.y - 70, "DASH!", {
-        fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffe066",
-        stroke: "#000000", strokeThickness: 4
-      }).setOrigin(0.5);
-      this.scene.tweens.add({
-        targets: txt, y: txt.y - 36, alpha: 0, duration: 600,
-        onComplete: () => txt.destroy()
-      });
-    }
+    this.scene.cameras.main.shake(variant === "smash" ? 200 : 120, variant === "smash" ? 0.009 : 0.005);
+    SFX.play(variant === "smash" ? "smashHit" :
+             (variant === "spike" || this.dashHit) ? "dashHit" : "hit");
+    if (label) this.floatText(label, variant === "smash" ? "#ff9933" :
+                                     variant === "spike" ? "#ff88bb" : "#ffe066");
   }
 
   loseStock() {
     this.stocks -= 1;
     this.damage = 0;
     SFX.play("ko");
+    // Reset all defense/charge state so nothing carries across the respawn
+    this.stopShield();
+    this.cancelCharge();
+    this.shieldHP = 100;
+    this.invulnUntil = 0;
+    this.rollUntil = 0;
     if (this.stocks > 0) {
       this.sprite.body.setVelocity(0, 0);
       this.sprite.x = this.label === "P1" ? 360 : W - 360;
@@ -1398,7 +1765,11 @@ class HUD {
     const stocks = this.scene.add.text(x + 80, y + 30, "", {
       fontFamily: "Press Start 2P", fontSize: "16px", color: "#ffffff"
     }).setOrigin(1, 0.5);
-    return { bg, swatch, name, dmg, stocks };
+    // Shield meter (thin blue bar under the damage %)
+    const shieldBg = this.scene.add.rectangle(x - 50, y + 30, 100, 8, 0x1a2a3a).setOrigin(0, 0.5)
+      .setStrokeStyle(1, 0x3a5a7a);
+    const shieldFill = this.scene.add.rectangle(x - 49, y + 30, 98, 6, 0x66bbff).setOrigin(0, 0.5);
+    return { bg, swatch, name, dmg, stocks, shieldFill };
   }
 
   tick() {
@@ -1408,6 +1779,10 @@ class HUD {
     this.p2Card.dmg.setColor(this.dmgColor(this.p2.damage));
     this.p1Card.stocks.setText("x" + this.p1.stocks);
     this.p2Card.stocks.setText("x" + this.p2.stocks);
+    this.p1Card.shieldFill.width = 98 * Math.max(0, this.p1.shieldHP) / 100;
+    this.p2Card.shieldFill.width = 98 * Math.max(0, this.p2.shieldHP) / 100;
+    this.p1Card.shieldFill.fillColor = this.p1.shieldHP < 30 ? 0xff8866 : 0x66bbff;
+    this.p2Card.shieldFill.fillColor = this.p2.shieldHP < 30 ? 0xff8866 : 0x66bbff;
   }
 
   dmgColor(d) {

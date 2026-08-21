@@ -1,8 +1,8 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.4
-**Last updated:** 2026-05-10
+**Version:** 0.5
+**Last updated:** 2026-08-20
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -27,7 +27,14 @@ X-Bros — "ImagineX Smash" — is a Smash Bros-style 2D platform fighter starri
 |---|---|
 | Arrow Left / Right | Move |
 | Arrow Up | Jump (light fighters get a second air-jump) |
-| Z | Light attack |
+| Z (tap) | Light attack (jab) |
+| Z + Up held | Rising strike (anti-air launcher; works in air too) |
+| Z + Down held (ground) | Low sweep — fast, pops opponent up (combo starter) |
+| Z + Down held (air) | **Spike** — meteors an airborne opponent straight down |
+| Z held past the jab, then release | **Charged smash** (charges after 0.45 s; glow pulses; 1.35–1.8× dmg/kb) |
+| C (neutral, ground) | **Shield** — hold to block (grabs pierce it) |
+| C + Left/Right (ground) | **Roll** — 0.32 s dash with 0.30 s i-frames, 0.9 s cooldown |
+| C (air) | **Airdodge** — 0.30 s i-frames |
 | X | Special move |
 | M | Mute / unmute sound |
 | Esc | Back to character select / title |
@@ -38,7 +45,17 @@ P2 is always CPU.
 
 1. **Title** — animated logo + roster preview. Enter to continue.
 2. **Select** — character + difficulty picker. Arrows pick fighter, Up/Down change CPU difficulty (Easy / Normal / Hard). Z or Enter starts the match. CPU character is chosen at random (never duplicates P1).
-3. **Battle** — 16:9, 1280×720 internal canvas, 3 stocks each, side+bottom death zones.
+3. **Battle** — 16:9, 1280×720 internal canvas, 3 stocks each, side+bottom death zones. Stage chosen at random from `STAGES` each match (name banner fades in/out at start).
+
+## Stages
+
+Three layouts in the `STAGES` table. **The main floor footprint is identical in every stage** — the grab-destination clamp and the floor safety-net both assume it — so variety comes from platforms + palette only.
+
+| Stage | Palette | Platforms |
+|---|---|---|
+| **Sky Plains** | blue night (original) | 1 center platform |
+| **Twin Peaks** | purple dusk | 2 side platforms |
+| **Sunset Flats** | orange sunset / green floor | none (pure ground game) |
 
 ## Mechanics
 
@@ -60,7 +77,27 @@ Stored in `ROSTER` table in `index.html`. Tunable knobs per character:
 - `airJumpsMax` (optional) — extra air-jumps; defaults to 1. Froggo and Jimmy have 2.
 
 ### Dash-attack bonus
-If a fighter swings while moving at ≥ 60 % of their `walkSpeed`, the hit deals **+25 % damage and knockback** and shows a yellow "DASH!" cue. Main reason `walkSpeed` matters in combat.
+If a fighter swings while moving at ≥ 60 % of their `walkSpeed`, the hit deals **+25 % damage and knockback** and shows a yellow "DASH!" cue. Main reason `walkSpeed` matters in combat. **Jab only** — tilts and smashes have their own identity.
+
+### Attack variants (v0.5)
+All variants share `ATTACK_DURATION` and the character's base stats; the `V` table in `Fighter.startAttack` holds per-variant hitbox geometry + dmg/kb/cooldown multipliers:
+
+| Variant | Trigger | Dmg × | KB × | CD × | Launch vector |
+|---|---|---|---|---|---|
+| jab | tap Z | 1.0 | 1.0 | 1.0 | standard `(dir·kb, −0.55kb)` |
+| up | Z + Up held | 1.0 | 1.0 | 1.15 | `(0.3, −1.05)` — straight-up launcher |
+| downTilt | Z + Down, grounded | 0.7 | 0.75 | 0.7 | `(0.4, −0.75)` — pop-up starter |
+| spike | Z + Down, airborne | 1.1 | 1.0 | 1.25 | vs airborne victim `(0.2, **+0.9**)` = meteor + "SPIKE!"; vs grounded `(0.5, −0.6)` |
+| smash | hold Z ≥ 0.45 s past the jab, release | 1.35–1.8× (charge) | same | 1.6 | standard + "SMASH!" + bigger shake |
+
+Charge design note: the tap-jab still fires instantly on press (feel unchanged); the charge timer starts at the jab and only *becomes* a smash if Z is still held 0.45 s later (glow + chime). Release fires the smash even if the jab cooldown hasn't fully elapsed — it's a deliberate commitment.
+
+### Shield / roll / airdodge (v0.5)
+- **Shield** (C on ground, neutral): bubble ellipse; blocks attacks, specials, and projectiles; **grabs pierce it** (rock-paper-scissors: attack < shield < grab < attack).
+- Shield HP 0–100: drains 16/s while held, +`dmg × 2.4` per blocked hit, regens 22/s when down. Can't raise below 8 HP.
+- **Shield break** (HP ≤ 0): 1.6 s stun, "SHIELD BREAK!" cue, HP resets to 50. HUD shows a thin blue shield bar (turns orange < 30).
+- **Roll** (C + direction, ground): 0.32 s dash at 560 px/s with 0.30 s i-frames; **airdodge** (C in air): 0.30 s i-frames in place. Both share a 0.9 s cooldown and a 0.45-alpha ghost look. Dodged hits show "DODGE!".
+- Getting hit or starting a special drops shield + cancels charge; all defense state resets on stock loss.
 
 ### Special moves
 Press X. Each character's special is one of three types defined in `character.special`:
@@ -86,6 +123,8 @@ Three difficulty presets in `DIFFICULTY`:
 | `crowd` (no back-off when too close) | false | false | true |
 | `faceLock` (force-face the opponent in range) | false | true | true |
 | `rangeBuffer` (extra distance kept beyond attackRange) | 32 | 24 | 8 |
+| `shieldChance` (per opponent swing) | 0.05 | 0.22 | 0.45 |
+| `rollChance` (per opponent swing) | 0.03 | 0.12 | 0.28 |
 
 Key tactical behaviors implemented in `CpuController.poll`:
 - Paces toward opponent until in attack range. With `crowd: false` it backs off if it overshoots; with `crowd: true` (Hard only) it stays in your face.
@@ -94,6 +133,7 @@ Key tactical behaviors implemented in `CpuController.poll`:
 - Whiff punish: when opponent's `attackCooldownUntil > now` (they just swung and missed), the bot lunges in.
 - Air chase: jumps onto platforms above; uses air-jumps to chase and to recover from off-stage falls.
 - Special-move usage in `CpuController.poll` chooses lunge / projectile / grab based on horizontal range to opponent.
+- **Defense (v0.5):** one dice-roll per opponent swing (keyed on `opponent.attackUntil`): roll away, shield for 0.5 s, or do nothing per `rollChance`/`shieldChance`. Rolls emit shield-input + direction on a single frame; the Fighter's C-combo logic turns it into a roll. CPU does not yet use tilts/smashes.
 
 ### Safety net
 Every frame, `Fighter.tick` checks: if body bottom is > 6 px below floor surface AND the fighter is horizontally over the stage AND not at death-zone depth, it snaps them up and zeros vertical velocity. Catches rare physics edge cases (e.g., sprite-body offset arithmetic mis-aligning during grab-pull tweens).
@@ -117,8 +157,17 @@ No asset files — `SoundManager` builds tones on the fly with oscillators + env
 | Grab connect | low square + noise |
 | KO | square 480→80 + noise tail |
 | Victory | C-E-G triangle arpeggio |
+| Shield raise | sine 300→520 |
+| Shield hit | triangle 520→260 + noise tick |
+| Shield break | square 900→90 + noise tail |
+| Roll / airdodge | noise sweep + sine 220→90 |
+| Charge ready | square 660→880 chime |
+| Smash hit | deep sine 130→38 + noise + square overtone (biggest hit sound) |
 
 M toggles mute (battle scene only). Hint shown on select screen.
+
+### BGM (v0.5, procedural chiptune)
+`SoundManager.startMusic()` runs a 64-step (4-bar) loop in A minor at 138 BPM via a 90 ms `setInterval` scheduler with 350 ms lookahead: triangle bass riff (16-step), square-lead pentatonic melody (64-step), kick on beats, snare on 2 & 4, highpass-noise hats on off-8ths. Routed through a dedicated `musicGain` (0.55) into the master so **M mutes music + SFX together**. Starts in `BattleScene.create`, stops on `endMatch` and on scene `shutdown` (covers ESC and restart).
 
 ## Art pipeline
 
@@ -169,8 +218,7 @@ For sprite fighters (`useSprite = true`):
 ## Cartridge / launcher
 
 - Cartridge color: `#9ad6ff` (light cyan, matches title text)
-- Status in `src/lib/games.ts`: currently `coming_soon`. Flip to `available` once a `cover.png` exists.
-- No cover image yet — TODO.
+- Status in `src/lib/games.ts`: currently `coming_soon`. `cover.png` exists (added 2026-06-09) — flip to `available` after user playtest.
 
 ## File layout
 
@@ -189,9 +237,16 @@ public/games/x-bros/
 
 ## Open items (next session)
 
-- Cover art → flip launcher status to `available`
-- Shield + dodge (defensive button)
-- More attack inputs (up / down / dash tilts, smash attacks)
-- Music (currently silent except SFX)
-- Stage variety (currently one stage)
-- Per-character sprite tuning still needs play-test for Chad (recently bumped to displayH=280)
+- User playtest of v0.5 (shield/roll feel, smash charge timing, music volume, stage palettes) → flip launcher status to `available`
+- Local 2-player (WASD second keyboard player) — currently CPU-only
+- CPU use of tilts / smashes (it only jabs + specials + defends)
+- Per-character sprite tuning still needs play-test for Chad (displayH=280)
+
+## Done in v0.5 (2026-08-20)
+
+- Shield (C) with HP drain/regen, shield-break stun, HUD shield bar; roll + airdodge with i-frames
+- Attack variants: up strike, down tilt, air spike (meteor), charged smash (hold Z past the jab)
+- Procedural chiptune BGM (A-minor 4-bar loop, mute-integrated)
+- 3 stages with palettes (Sky Plains / Twin Peaks / Sunset Flats), random pick + name banner
+- CPU defends (per-swing shield/roll dice by difficulty)
+- Headless smoke test: 37 checks (script eval, music loop, CPU defense, data tables)

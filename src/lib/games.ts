@@ -140,6 +140,6 @@ export const games: Game[] = [
     color: "#9ad6ff",
     cartridgeColor: "#10254a",
     cartridgeLabelColor: "#ffe066",
-    status: "coming_soon",
+    status: "available",
   },
 ];
