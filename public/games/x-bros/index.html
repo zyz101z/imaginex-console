@@ -403,39 +403,14 @@ class TitleScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor("#08101e");
     const cx = W / 2;
-    // Full-bleed key art: the whole cast painted charging off the sky arena
-    // (Meshy image-to-image over a collage of the real sprite sheets, so every
-    // fighter keeps their in-game identity). Logo overlays it, box-art style.
+    // Full-bleed key art with the LOGO BAKED INTO THE PAINTING: Meshy painted the
+    // "X-BROS / IMAGINEX SMASH" lettering (comic gold, fire sparks) on a green
+    // screen; a Python compositor keyed it out and blended it into the art with
+    // a drop shadow. No engine-drawn title text — it's all one image now.
+    // (Static on purpose: any zoom/drift would crop the baked-in logo.)
     if (this.textures.exists("bg_title")) {
-      const art = this.add.image(cx, H / 2, "bg_title").setDisplaySize(W * 1.03, H * 1.03);
-      // Slow Ken Burns drift keeps the screen alive without pasted-on elements
-      this.tweens.add({
-        targets: art, displayWidth: W * 1.08, displayHeight: H * 1.08,
-        duration: 9000, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
-      });
+      this.add.image(cx, H / 2, "bg_title").setDisplaySize(W, H);
     }
-
-    // Big box-art logo: gold gradient fill, deep stroke, layered drop shadow.
-    // Overlapping the key art is intentional — that's how covers do it.
-    const logoStyle = {
-      fontFamily: "Press Start 2P", fontSize: "148px", color: "#ffffff",
-      stroke: "#2a1545", strokeThickness: 16
-    };
-    const logoShadow = this.add.text(cx + 6, 138 + 10, "X-BROS", logoStyle)
-      .setOrigin(0.5).setTint(0x000000).setAlpha(0.45);
-    const logo = this.add.text(cx, 138, "X-BROS", logoStyle).setOrigin(0.5);
-    // Sunset-gold gradient over the glyphs (canvas gradient on the text fill)
-    const grad = logo.context.createLinearGradient(0, 0, 0, logo.height);
-    grad.addColorStop(0, "#fff6d0");
-    grad.addColorStop(0.45, "#ffd94a");
-    grad.addColorStop(1, "#ff8f2e");
-    logo.setFill(grad);
-    this.tweens.add({ targets: [logo, logoShadow], scale: 1.02, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-
-    this.add.text(cx, 252, "IMAGINEX SMASH", {
-      fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffffff",
-      stroke: "#2a1545", strokeThickness: 8
-    }).setOrigin(0.5).setShadow(0, 4, "#000000", 6, true, true);
 
     // Bottom pill so the prompt reads over the busy art
     this.add.rectangle(cx, 686, 420, 44, 0x0a1220, 0.65).setStrokeStyle(2, 0x3a5a8a);
