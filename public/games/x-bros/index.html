@@ -961,7 +961,15 @@ class BattleScene extends Phaser.Scene {
     // Fanfare only when the human wins; CPU wins and draws stay quiet.
     if (!draw && winner === this.p1) SFX.play("victory");
     const cx = W / 2;
-    this.add.rectangle(cx, H / 2, W, 220, 0x000000, 0.7);
+    this.add.rectangle(cx, H / 2, W, 300, 0x000000, 0.72);
+    // Winner portrait (idle frame) sliding in beside the text
+    if (!draw && winner.useSprite && this.textures.exists(winner.character.id)) {
+      const sp = winner.character.sprite;
+      const port = this.add.sprite(cx - 380, H / 2, winner.character.id, 0);
+      const aspect = sp.frameW / sp.frameH;
+      port.setDisplaySize(170 * aspect, 170).setAlpha(0);
+      this.tweens.add({ targets: port, alpha: 1, x: cx - 340, duration: 250, ease: "Quad.easeOut" });
+    }
     this.add.text(cx, H / 2 - 40, draw ? "DRAW!" : `${winner.character.name.toUpperCase()} WINS!`, {
       fontFamily: "Press Start 2P", fontSize: "44px", color: "#ffe066"
     }).setOrigin(0.5);
