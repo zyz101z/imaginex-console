@@ -461,7 +461,7 @@ class SelectScene extends Phaser.Scene {
     this.add.text(cx, 110, "Arrows: choose   Up/Down: difficulty   T: vs CPU / 2P   Z or Enter: fight   Esc: back", {
       fontFamily: "Press Start 2P", fontSize: "10px", color: "#aabbdd"
     }).setOrigin(0.5);
-    this.add.text(cx, 132, "P1: Arrows + Z atk (hold=SMASH, +Up/Dn=tilts) X special C shield/roll   P2: WASD + F/G/H   M mute", {
+    this.add.text(cx, 132, "P1: Arrows + Z atk (hold=SMASH, +Up/Dn=tilts) X special C shield/roll   P2: WASD + F/G/H   M mute  P pause", {
       fontFamily: "Press Start 2P", fontSize: "9px", color: "#7788aa"
     }).setOrigin(0.5);
 
@@ -885,6 +885,28 @@ class BattleScene extends Phaser.Scene {
     this.events.once("shutdown", () => SFX.stopMusic());
 
     k.on("keydown-ESC", () => this.scene.start("select"));
+    // P pauses (handy mid-match in a living room)
+    this.userPaused = false;
+    this.pauseOverlay = null;
+    k.on("keydown-P", () => {
+      if (this.gameOver) return;
+      this.userPaused = !this.userPaused;
+      if (this.userPaused) {
+        this.pauseOverlay = this.add.container(0, 0, [
+          this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.55),
+          this.add.text(W / 2, H / 2 - 20, "PAUSED", {
+            fontFamily: "Press Start 2P", fontSize: "44px", color: "#ffe066",
+            stroke: "#000000", strokeThickness: 8
+          }).setOrigin(0.5),
+          this.add.text(W / 2, H / 2 + 40, "P = resume    ESC = quit to roster", {
+            fontFamily: "Press Start 2P", fontSize: "13px", color: "#ffffff"
+          }).setOrigin(0.5),
+        ]);
+      } else if (this.pauseOverlay) {
+        this.pauseOverlay.destroy();
+        this.pauseOverlay = null;
+      }
+    });
     k.on("keydown-M", () => {
       const muted = SFX.toggleMute();
       const txt = this.add.text(W / 2, 60, muted ? "SOUND OFF" : "SOUND ON", {
@@ -901,6 +923,11 @@ class BattleScene extends Phaser.Scene {
 
   update(time, delta) {
     const dt = delta / 1000;
+    // User pause (P)
+    if (this.userPaused) {
+      this.physics.world.isPaused = true;
+      return;
+    }
     // Hitstop: pause physics + fighter logic, keep HUD/tweens alive
     if (time < this.hitstopUntil) {
       this.physics.world.isPaused = true;
@@ -942,7 +969,7 @@ class BattleScene extends Phaser.Scene {
       fontFamily: "Press Start 2P", fontSize: "14px", color: "#ffffff"
     }).setOrigin(0.5);
     this.input.keyboard.once("keydown-ENTER", () =>
-      this.scene.restart({ p1: this.p1Char, p2: this.p2Char, difficulty: this.difficulty })
+      this.scene.restart({ p1: this.p1Char, p2: this.p2Char, difficulty: this.difficulty, mode: this.mode })
     );
   }
 }
