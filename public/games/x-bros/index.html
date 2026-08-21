@@ -415,15 +415,27 @@ class TitleScene extends Phaser.Scene {
       });
     }
 
-    const logo = this.add.text(cx, 92, "X-BROS", {
-      fontFamily: "Press Start 2P", fontSize: "84px", color: "#ffffff",
-      stroke: "#12244a", strokeThickness: 12
-    }).setOrigin(0.5).setShadow(0, 6, "#000000", 8, true, true);
-    this.tweens.add({ targets: logo, scale: 1.025, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.add.text(cx, 163, "ImagineX Smash", {
-      fontFamily: "Press Start 2P", fontSize: "17px", color: "#ffe066",
-      stroke: "#12244a", strokeThickness: 6
-    }).setOrigin(0.5);
+    // Big box-art logo: gold gradient fill, deep stroke, layered drop shadow.
+    // Overlapping the key art is intentional — that's how covers do it.
+    const logoStyle = {
+      fontFamily: "Press Start 2P", fontSize: "148px", color: "#ffffff",
+      stroke: "#2a1545", strokeThickness: 16
+    };
+    const logoShadow = this.add.text(cx + 6, 138 + 10, "X-BROS", logoStyle)
+      .setOrigin(0.5).setTint(0x000000).setAlpha(0.45);
+    const logo = this.add.text(cx, 138, "X-BROS", logoStyle).setOrigin(0.5);
+    // Sunset-gold gradient over the glyphs (canvas gradient on the text fill)
+    const grad = logo.context.createLinearGradient(0, 0, 0, logo.height);
+    grad.addColorStop(0, "#fff6d0");
+    grad.addColorStop(0.45, "#ffd94a");
+    grad.addColorStop(1, "#ff8f2e");
+    logo.setFill(grad);
+    this.tweens.add({ targets: [logo, logoShadow], scale: 1.02, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+
+    this.add.text(cx, 252, "IMAGINEX SMASH", {
+      fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffffff",
+      stroke: "#2a1545", strokeThickness: 8
+    }).setOrigin(0.5).setShadow(0, 4, "#000000", 6, true, true);
 
     // Bottom pill so the prompt reads over the busy art
     this.add.rectangle(cx, 686, 420, 44, 0x0a1220, 0.65).setStrokeStyle(2, 0x3a5a8a);
