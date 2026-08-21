@@ -114,9 +114,10 @@ class SoundManager {
   // ---- Procedural chiptune BGM ----------------------------------------------
   // A 4-bar loop in A minor scheduled with a 350ms lookahead. All routed through
   // musicGain -> master so the M mute still silences everything at once.
-  startMusic() {
+  startMusic(bpm = 138) {
     this.ensure();
     this.resume();
+    this.bpm = bpm;   // per-stage tempo
     if (!this.ctx || this.musicTimer) return;
     this.musicGain = this.ctx.createGain();
     this.musicGain.gain.value = 0.55;   // music sits under the SFX
@@ -133,7 +134,7 @@ class SoundManager {
 
   scheduleMusic() {
     if (!this.ctx || !this.musicGain) return;
-    const SPB = 60 / 138 / 2;  // one 8th note at 138 BPM
+    const SPB = 60 / (this.bpm || 138) / 2;  // one 8th note
     while (this.nextNoteTime < this.ctx.currentTime + 0.35) {
       this.playMusicStep(this.musicStep, this.nextNoteTime);
       this.musicStep = (this.musicStep + 1) % 64;
@@ -144,7 +145,7 @@ class SoundManager {
   playMusicStep(step, t) {
     const midi = m => 440 * Math.pow(2, (m - 69) / 12);
     const g = this.musicGain;
-    const SPB = 60 / 138 / 2;
+    const SPB = 60 / (this.bpm || 138) / 2;
     // Bass: 2-bar riff, repeats (A - C - G - F walk)
     const BASS = [45, 45, 57, 45, 48, 48, 45, 45,   43, 43, 55, 43, 41, 41, 43, 44];
     const b = BASS[step % BASS.length];
@@ -367,24 +368,26 @@ const DIFFICULTY = {
 // Stages — the main floor footprint is IDENTICAL in every stage (the grab clamp
 // and floor safety-net both assume it), so variety comes from platforms + palette.
 const STAGES = [
-  { id: "plains", name: "SKY PLAINS", bg: "bg/bg_plains.png",
+  { id: "plains", name: "SKY PLAINS", bg: "bg/bg_plains.png", theme: "earth", bpm: 132,
+    grass: 0x5fae52,
     bgTop: 0x1a2a4a, bgBot: 0x081828, mtn: 0x223759, haze: 0x12203a,
     floor: 0x432d20, floorEdge: 0x6b4632, plat: 0x6b4632, platEdge: 0x9b6c4a,
     platforms: [{ x: W / 2, y: 440, w: 360 }] },
-  { id: "peaks", name: "TWIN PEAKS", bg: "bg/bg_peaks.png",
+  { id: "peaks", name: "TWIN PEAKS", bg: "bg/bg_peaks.png", theme: "stone", bpm: 126,
     bgTop: 0x2a1a3e, bgBot: 0x120a24, mtn: 0x3d2a5c, haze: 0x1d1436,
     floor: 0x3a3a4c, floorEdge: 0x5e5e7a, plat: 0x5e5e7a, platEdge: 0x8888aa,
     platforms: [{ x: W / 2 - 330, y: 450, w: 260 }, { x: W / 2 + 330, y: 450, w: 260 }] },
-  { id: "sunset", name: "SUNSET FLATS", bg: "bg/bg_sunset.png",
+  { id: "sunset", name: "SUNSET FLATS", bg: "bg/bg_sunset.png", theme: "earth", bpm: 120,
+    grass: 0x7dae4a,
     bgTop: 0x5c2a1a, bgBot: 0x1a0a08, mtn: 0x6e3a24, haze: 0x2a120a,
-    floor: 0x2e4a2a, floorEdge: 0x4a7040, plat: 0x4a7040, platEdge: 0x6a9a58,
+    floor: 0x4a3524, floorEdge: 0x6e5236, plat: 0x4a7040, platEdge: 0x6a9a58,
     platforms: [] },
-  { id: "rooftop", name: "NEON ROOFTOP", bg: "bg/bg_rooftop.png",
+  { id: "rooftop", name: "NEON ROOFTOP", bg: "bg/bg_rooftop.png", theme: "metal", bpm: 150,
     bgTop: 0x0a2a30, bgBot: 0x04121a, mtn: 0x123842, haze: 0x081e26,
-    floor: 0x24343c, floorEdge: 0x3a565e, plat: 0x3a565e, platEdge: 0x22e0e8,
+    floor: 0x24343c, floorEdge: 0x3a565e, plat: 0x2c3e46, platEdge: 0x22e0e8,
     platforms: [{ x: W / 2 - 380, y: 470, w: 230 }, { x: W / 2 + 380, y: 470, w: 230 },
                 { x: W / 2, y: 380, w: 260 }] },
-  { id: "cavern", name: "CRYSTAL CAVERN", bg: "bg/bg_cavern.png",
+  { id: "cavern", name: "CRYSTAL CAVERN", bg: "bg/bg_cavern.png", theme: "crystal", bpm: 112,
     bgTop: 0x10303a, bgBot: 0x061418, mtn: 0x1a4450, haze: 0x0a2028,
     floor: 0x1e3a34, floorEdge: 0x2fa08a, plat: 0x2a5a50, platEdge: 0x7ce8ff,
     platforms: [{ x: W / 2, y: 430, w: 480 }] },
@@ -396,35 +399,54 @@ class TitleScene extends Phaser.Scene {
   constructor() { super("title"); }
   preload() {
     if (!this.textures.exists("bg_title")) this.load.image("bg_title", "bg/bg_title.png");
+    // Load the real cast so the title lineup shows actual fighters, not swatches
+    for (const c of ROSTER) {
+      if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
+        this.load.image(c.id + "_raw", c.sprite.sheet);
+      }
+    }
   }
   create() {
+    BattleScene.prototype.buildSpriteSheets.call(this);
     this.cameras.main.setBackgroundColor("#08101e");
     const cx = W / 2;
-    // Meshy-painted championship arena behind the logo (scrim keeps text readable)
+    // Meshy sunset-cliff painting; light scrim only — the art carries the screen
     if (this.textures.exists("bg_title")) {
       this.add.image(cx, H / 2, "bg_title").setDisplaySize(W, H);
-      this.add.rectangle(cx, H / 2, W, H, 0x050a14, 0.42);
+      this.add.rectangle(cx, H / 2, W, H, 0x050a14, 0.22);
     }
-    this.add.text(cx, 200, "X-BROS", {
-      fontFamily: "Press Start 2P", fontSize: "120px", color: "#9ad6ff"
-    }).setOrigin(0.5).setShadow(0, 8, "#0b2a55", 0, true, true);
-    this.add.text(cx, 310, "ImagineX Smash", {
-      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffe066"
-    }).setOrigin(0.5);
 
-    // Roster preview row
-    const slotW = 110, gap = 24, total = ROSTER.length * slotW + (ROSTER.length - 1) * gap;
-    let x0 = cx - total / 2 + slotW / 2;
+    // The whole cast standing on the cliff ledge, gently bobbing
+    const baseline = 655;
+    const margin = 95, span = (W - margin * 2) / (ROSTER.length - 1);
     ROSTER.forEach((c, i) => {
-      const x = x0 + i * (slotW + gap);
-      this.add.rectangle(x, 440, slotW, 130, c.color).setStrokeStyle(3, c.accent);
-      this.add.text(x, 520, c.name, {
-        fontFamily: "Press Start 2P", fontSize: "10px", color: "#ffffff", align: "center", wordWrap: { width: slotW + 20 }
-      }).setOrigin(0.5, 0);
+      if (!c.sprite || !this.textures.exists(c.id)) return;
+      const sp = c.sprite;
+      const dispH = (sp.displayH || 130) * 0.82;
+      const aspect = sp.frameW / sp.frameH;
+      const x = margin + i * span;
+      const feet = sp.feetY != null ? sp.feetY : 0.96;
+      const y = baseline - dispH * feet + dispH / 2;
+      const spr = this.add.sprite(x, y, c.id, 0).setDisplaySize(dispH * aspect, dispH);
+      if (x > W / 2) spr.setFlipX(true);   // right half faces center
+      this.tweens.add({
+        targets: spr, y: y - 5, duration: 900 + (i % 3) * 140,
+        yoyo: true, repeat: -1, ease: "Sine.easeInOut", delay: i * 130,
+      });
     });
 
-    const press = this.add.text(cx, 640, "PRESS ENTER", {
-      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffffff"
+    const logo = this.add.text(cx, 175, "X-BROS", {
+      fontFamily: "Press Start 2P", fontSize: "120px", color: "#9ad6ff"
+    }).setOrigin(0.5).setShadow(0, 8, "#0b2a55", 0, true, true);
+    this.tweens.add({ targets: logo, scale: 1.02, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.add.text(cx, 285, "ImagineX Smash", {
+      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffe066",
+      stroke: "#000000", strokeThickness: 6
+    }).setOrigin(0.5);
+
+    const press = this.add.text(cx, 415, "PRESS ENTER", {
+      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffffff",
+      stroke: "#000000", strokeThickness: 6
     }).setOrigin(0.5);
     this.tweens.add({ targets: press, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
 
@@ -443,6 +465,7 @@ class SelectScene extends Phaser.Scene {
   preload() {
     // Same sprite loading as BattleScene so portraits can show real art.
     // We only load the raw image here; chroma-keying happens once in create.
+    if (!this.textures.exists("bg_title")) this.load.image("bg_title", "bg/bg_title.png");
     for (const c of ROSTER) {
       if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
         this.load.image(c.id + "_raw", c.sprite.sheet);
@@ -455,6 +478,11 @@ class SelectScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#0a1428");
     const cx = W / 2;
+    // Dimmed title painting keeps the menus in one visual world
+    if (this.textures.exists("bg_title")) {
+      this.add.image(cx, H / 2, "bg_title").setDisplaySize(W, H);
+      this.add.rectangle(cx, H / 2, W, H, 0x0a1428, 0.72);
+    }
     this.add.text(cx, 60, "PICK YOUR FIGHTER", {
       fontFamily: "Press Start 2P", fontSize: "32px", color: "#9ad6ff"
     }).setOrigin(0.5);
@@ -808,16 +836,19 @@ class BattleScene extends Phaser.Scene {
       mtn.fillRect(0, 600, W, 200);
     }
 
-    // Stage: main floor (same footprint everywhere) + per-stage platforms
+    // Stage: main floor (same footprint everywhere) + per-stage platforms.
+    // Physics rectangles are invisible; the themed decor is drawn on top.
     this.stage = this.physics.add.staticGroup();
-    const floor = this.add.rectangle(W / 2, GROUND_Y + 40, W - 100, 80, st.floor).setStrokeStyle(3, st.floorEdge);
+    const floor = this.add.rectangle(W / 2, GROUND_Y + 40, W - 100, 80, st.floor).setVisible(false);
     this.physics.add.existing(floor, true);
     this.stage.add(floor);
+    this.drawSlab(st, W / 2, GROUND_Y + 40, W - 100, 80, st.floor, st.floorEdge);
 
     for (const p of st.platforms) {
-      const platform = this.add.rectangle(p.x, p.y, p.w, 24, st.plat).setStrokeStyle(3, st.platEdge);
+      const platform = this.add.rectangle(p.x, p.y, p.w, 24, st.plat).setVisible(false);
       this.physics.add.existing(platform, true);
       this.stage.add(platform);
+      this.drawSlab(st, p.x, p.y, p.w, 24, st.plat, st.platEdge);
     }
 
     // Stage-name banner, fades out after a beat
@@ -843,6 +874,11 @@ class BattleScene extends Phaser.Scene {
     this.physics.add.collider(this.p2.sprite, this.stage);
 
     this.hud = new HUD(this, this.p1, this.p2);
+
+    // Off-screen indicators: a colored arrow at the top edge tracks a launched fighter
+    this.offArrows = [this.p1, this.p2].map(f =>
+      this.add.triangle(0, 18, 0, 22, 11, 0, 22, 22, f.character.color, 0.95)
+        .setStrokeStyle(2, 0xffffff).setVisible(false));
 
     // Inputs — P1 is arrows+ZXC; P2 is WASD+FGH in 2-player mode, CPU otherwise
     const k = this.input.keyboard;
@@ -880,7 +916,7 @@ class BattleScene extends Phaser.Scene {
     });
 
     SFX.play("matchStart");
-    SFX.startMusic();
+    SFX.startMusic(st.bpm);
     // Covers ESC-to-roster AND endMatch restart (shutdown fires before create re-runs)
     this.events.once("shutdown", () => SFX.stopMusic());
 
@@ -916,6 +952,78 @@ class BattleScene extends Phaser.Scene {
     });
   }
 
+  // Themed slab renderer — floors and platforms share it. Deterministic detail
+  // placement (multiplicative hashing, no RNG) so nothing shimmers between draws.
+  drawSlab(st, x, y, w, h, bodyColor, edgeColor) {
+    const g = this.add.graphics();
+    const left = x - w / 2, top = y - h / 2;
+    // Body with a darker lower half for depth
+    g.fillStyle(bodyColor, 1);
+    g.fillRect(left, top, w, h);
+    g.fillStyle(0x000000, 0.25);
+    g.fillRect(left, top + h * 0.55, w, h * 0.45);
+    // Bright top lip
+    g.fillStyle(edgeColor, 1);
+    g.fillRect(left, top, w, 5);
+    // Rough side edges
+    g.fillStyle(0x000000, 0.3);
+    g.fillRect(left, top + 5, 4, h - 5);
+    g.fillRect(left + w - 4, top + 5, 4, h - 5);
+
+    if (st.theme === "earth") {
+      // Grass blanket + tufts along the lip, dirt speckles in the body
+      const grass = st.grass || 0x5fae52;
+      g.fillStyle(grass, 1);
+      g.fillRect(left, top, w, 8);
+      for (let gx = left + 4; gx < left + w - 10; gx += 22) {
+        const th = 6 + (Math.floor(gx * 7.13) % 7);
+        g.fillTriangle(gx, top + 1, gx + 5, top - th, gx + 10, top + 1);
+      }
+      g.fillStyle(0x000000, 0.18);
+      for (let i = 0; i < w / 26; i++) {
+        const sx = left + 10 + ((i * 137) % Math.max(20, w - 24));
+        const sy = top + 14 + ((i * 71) % Math.max(6, h - 22));
+        g.fillRect(sx, sy, 6, 3);
+      }
+    } else if (st.theme === "stone") {
+      // Block seams + cracks
+      g.lineStyle(2, 0x000000, 0.28);
+      for (let gx = left + 46; gx < left + w - 20; gx += 92) {
+        g.lineBetween(gx, top + 5, gx, top + h - 2);
+      }
+      if (h > 40) g.lineBetween(left + 4, top + h * 0.55, left + w - 4, top + h * 0.55);
+      g.lineStyle(2, 0xffffff, 0.10);
+      for (let i = 0; i < w / 90; i++) {
+        const sx = left + 30 + ((i * 211) % Math.max(30, w - 60));
+        g.lineBetween(sx, top + 8, sx + 16, top + Math.min(h - 4, 26));
+      }
+    } else if (st.theme === "metal") {
+      // Neon edge glow above + below, rivets, panel seams
+      g.fillStyle(edgeColor, 0.20);
+      g.fillRect(left - 4, top - 4, w + 8, 4);
+      g.fillRect(left - 4, top + h, w + 8, 5);
+      g.fillStyle(edgeColor, 1);
+      for (let gx = left + 12; gx < left + w - 10; gx += 36) {
+        g.fillRect(gx, top + Math.min(h - 8, 12), 4, 4);
+      }
+      g.lineStyle(2, 0x000000, 0.3);
+      for (let gx = left + 60; gx < left + w - 30; gx += 120) {
+        g.lineBetween(gx, top + 5, gx, top + h - 2);
+      }
+    } else if (st.theme === "crystal") {
+      // Soft aura + glowing crystal clusters growing off the top
+      g.fillStyle(edgeColor, 0.12);
+      g.fillRect(left - 6, top - 8, w + 12, h + 14);
+      g.fillStyle(edgeColor, 0.9);
+      for (let gx = left + 14; gx < left + w - 24; gx += Math.max(58, w / 7)) {
+        const ch = 10 + (Math.floor(gx * 3.7) % 12);
+        g.fillTriangle(gx, top + 2, gx + 7, top - ch, gx + 14, top + 2);
+        g.fillTriangle(gx + 9, top + 2, gx + 14, top - ch * 0.6, gx + 19, top + 2);
+      }
+    }
+    return g;
+  }
+
   // Freeze the action for a few frames — the classic fighting-game hit pause.
   hitstop(ms) {
     this.hitstopUntil = Math.max(this.hitstopUntil, this.time.now + ms);
@@ -941,6 +1049,13 @@ class BattleScene extends Phaser.Scene {
       const p2Input = intro ? zeroInput() : this.p2Controller.poll(dt);
       this.p1.tick(dt, p1Input, this.p2);
       this.p2.tick(dt, p2Input, this.p1);
+
+      // Track fighters launched above the screen
+      [this.p1, this.p2].forEach((f, i) => {
+        const show = f.stocks > 0 && f.sprite.y < -30;
+        this.offArrows[i].setVisible(show);
+        if (show) this.offArrows[i].x = Math.max(20, Math.min(W - 20, f.sprite.x)) - 11;
+      });
 
       if (this.p1.stocks <= 0 || this.p2.stocks <= 0) this.endMatch();
     }
@@ -973,7 +1088,12 @@ class BattleScene extends Phaser.Scene {
     this.add.text(cx, H / 2 - 40, draw ? "DRAW!" : `${winner.character.name.toUpperCase()} WINS!`, {
       fontFamily: "Press Start 2P", fontSize: "44px", color: "#ffe066"
     }).setOrigin(0.5);
-    this.add.text(cx, H / 2 + 30, "ENTER = rematch    ESC = roster", {
+    this.add.text(cx, H / 2 + 18,
+      `${this.p1.character.name} dealt ${Math.floor(this.p1.damageDealt)}%   •   ` +
+      `${this.p2.character.name} dealt ${Math.floor(this.p2.damageDealt)}%`, {
+      fontFamily: "Press Start 2P", fontSize: "12px", color: "#aabbdd"
+    }).setOrigin(0.5);
+    this.add.text(cx, H / 2 + 58, "ENTER = rematch    ESC = roster", {
       fontFamily: "Press Start 2P", fontSize: "14px", color: "#ffffff"
     }).setOrigin(0.5);
     this.input.keyboard.once("keydown-ENTER", () =>
@@ -1029,6 +1149,7 @@ class CpuController {
     // resolved into a short shield-hold or a roll away.
     this.lastSwingSeen = 0;
     this.defAction = null;        // {type:'shield'|'roll', until, dir}
+    this.chargePlan = null;       // when set: hold Z until this time, then release a smash
   }
 
   poll(dt) {
@@ -1148,8 +1269,27 @@ class CpuController {
     const willFace = wantFace !== 0 ? wantFace : this.self.facing;
     const willFaceTowardThem = Math.sign(dx) === willFace;
 
-    let atkUp = false, atkDown = false;
-    if (inRange && (willFaceTowardThem || upWindow || spikeWindow) && !this.defAction
+    let atkUp = false, atkDown = false, holdAttack = false;
+
+    // Charged smash: when the opponent is deep in hitstun, occasionally commit —
+    // stand still holding Z (telegraphed!), then release the smash.
+    if (!this.chargePlan && opponentStunned && this.opponent.damage > 45 && onGround
+        && absDx < ATTACK_RANGE && Math.abs(dy) < 60 && willFaceTowardThem
+        && t >= this.attackCooldown && Math.random() < cfg.comboAttackChance * 0.10) {
+      this.chargePlan = t + 0.75;
+      this.chargeStarted = false;
+      this.attackCooldown = t + 1.1;   // no regular swings until this resolves
+    }
+    if (this.chargePlan) {
+      if (t < this.chargePlan) {
+        left = right = false;               // plant feet
+        wantsAttack = !this.chargeStarted;  // press on the first frame (the jab that seeds the charge)
+        this.chargeStarted = true;
+        holdAttack = true;
+      } else {
+        this.chargePlan = null;             // release frame → Fighter fires the smash
+      }
+    } else if (inRange && (willFaceTowardThem || upWindow || spikeWindow) && !this.defAction
         && t >= this.attackCooldown
         && t >= this.reactionAt && Math.random() < chance) {
       wantsAttack = true;
@@ -1205,7 +1345,7 @@ class CpuController {
              up: wantsJump || (wantsAttack && atkUp),      // held-up flag picks the variant
              down: wantsAttack && atkDown,
              jumpPressed, attackPressed, specialPressed, face: wantFace,
-             shield: wantsShield, attackDown: false, attackReleased: false };
+             shield: wantsShield, attackDown: holdAttack, attackReleased: false };
   }
 }
 
@@ -1290,6 +1430,7 @@ class Fighter {
     this.stats = character.stats;
     this.label = label;
     this.damage = 0;
+    this.damageDealt = 0;   // running total for the victory-screen stat line
     this.stocks = 3;
     this.facing = label === "P1" ? 1 : -1;
     this.airJumpsMax = character.stats.airJumpsMax || 1;  // multi-jumpers (Froggo, Jimmy) override
@@ -1441,6 +1582,12 @@ class Fighter {
             } else if (this.airJumps > 0) {
               body.setVelocityY(s.doubleJumpVel);
               this.airJumps -= 1;
+              // Flip animation on the air jump (visual only — arcade bodies ignore angle)
+              this.sprite.setAngle(0);
+              this.scene.tweens.add({
+                targets: this.sprite, angle: this.facing * 360, duration: 320,
+                ease: "Quad.easeOut", onComplete: () => { if (this.sprite) this.sprite.setAngle(0); }
+              });
               if (this.label === "P1") SFX.play("doubleJump");
             }
           }
@@ -1522,7 +1669,8 @@ class Fighter {
       if (inHitstun)       frame = 4;
       else if (attacking || inSpecial) frame = 3;
       else if (!onGround)  frame = 2;
-      else if (Math.abs(body.velocity.x) > 50) frame = 1;
+      // Two-frame walk cycle (walk/idle alternating at ~7fps) — cheap but sells motion
+      else if (Math.abs(body.velocity.x) > 50) frame = Math.floor(t * 7) % 2 === 0 ? 1 : 0;
       this.sprite.setFrame(frame);
       this.sprite.setFlipX(this.facing === -1);
     } else {
@@ -1813,6 +1961,7 @@ class Fighter {
     if (opponent.tryDefend(this, sp.dmg, "special")) return;
     const t = this.scene.time.now / 1000;
     opponent.damage += sp.dmg;
+    this.damageDealt += sp.dmg;
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
     const rawKb = sp.kbBase + opponent.damage * ATTACK_KB_SCALE;
     const kb = rawKb / opponent.stats.weight;
@@ -1834,6 +1983,7 @@ class Fighter {
     if (opponent.shielding) opponent.stopShield();
     const t = this.scene.time.now / 1000;
     opponent.damage += sp.dmg;
+    this.damageDealt += sp.dmg;
     // Pin opponent in hitstun through the pull window + a beat after
     opponent.hitstunUntil = Math.max(opponent.hitstunUntil, t + sp.pullTime + 0.20);
 
@@ -1891,6 +2041,7 @@ class Fighter {
     const dmg = s.attackDmg * (hb ? hb.dmgMult : 1) * chargeMult * dashMult;
     if (opponent.tryDefend(this, dmg, "attack")) return;
     opponent.damage += dmg;
+    this.damageDealt += dmg;
     const t = this.scene.time.now / 1000;
     const dir = Math.sign(opponent.sprite.x - this.sprite.x) || this.facing;
     // Knockback scales with victim's accumulated damage, divided by victim's weight.
@@ -1991,6 +2142,7 @@ class Projectile {
     if (sp.spin) this.spinTween = scene.tweens.add({
       targets: this.gfx, angle: 360, duration: 400, repeat: -1
     });
+    this.trailAt = 0;
   }
 
   // Returns true when the projectile is done and should be removed.
@@ -1999,6 +2151,17 @@ class Projectile {
     this.vy += (this.sp.gravityY || 0) * dt;
     this.gfx.x += this.vx * dt;
     this.gfx.y += this.vy * dt;
+
+    // Fading trail every ~50ms
+    const now = this.scene.time.now;
+    if (now > this.trailAt) {
+      this.trailAt = now + 50;
+      const tr = this.scene.add.rectangle(this.gfx.x, this.gfx.y,
+        this.sp.projW * 0.6, this.sp.projH * 0.6, this.sp.projColor, 0.45);
+      this.scene.tweens.add({
+        targets: tr, alpha: 0, scale: 0.3, duration: 260, onComplete: () => tr.destroy()
+      });
+    }
 
     // Hit test against the opponent
     const dx = Math.abs(this.gfx.x - opponent.sprite.x);

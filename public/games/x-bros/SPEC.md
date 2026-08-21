@@ -1,8 +1,8 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.7
-**Last updated:** 2026-08-20 (v0.7 "polish pass": local 2P versus, juice pack, 5 stages, title art, CPU tilts)
+**Version:** 0.8
+**Last updated:** 2026-08-20 (v0.8 "second polish pass": title-screen rebuild with real cast lineup, themed platform art, CPU charged smashes, per-stage music tempo, animation pass)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
@@ -63,7 +63,16 @@ Three layouts in the `STAGES` table. **The main floor footprint is identical in 
 | **Neon Rooftop** (v0.7) | cyberpunk teal/pink | 2 low sides + 1 high center | `bg/bg_rooftop.png` — neon city skyline |
 | **Crystal Cavern** (v0.7) | dark teal + gem glow | 1 wide high platform | `bg/bg_cavern.png` — glowing crystal cave |
 
-The title screen also uses a Meshy painting (`bg/bg_title.png` — floodlit floating arena with fireworks) behind the logo under a 0.42 scrim.
+**Title screen (rebuilt v0.8 after user feedback — fireworks art + color-block roster rejected):** `bg/bg_title.png` is now a golden-hour cliff vista (Meshy; picked from 2 candidates, the stormy-arena alternate is in scratchpad meshy_output). The whole cast stands on the painted cliff ledge as REAL idle-frame sprites (0.82× battle size, feet planted via each char's `feetY`, right half flipped to face center, staggered bob tweens). Logo breathes (scale 1↔1.02); no names/swatches anywhere. The select screen shows the same painting under a 0.72 scrim so the menus share one visual world.
+
+**Themed platforms (v0.8):** physics rects are invisible; `BattleScene.drawSlab(st, x, y, w, h, body, edge)` paints floors + platforms per `st.theme`:
+- `earth` (Plains/Sunset) — grass blanket + deterministic tufts, dirt speckles
+- `stone` (Peaks) — block seams, cracks, highlight scratches
+- `metal` (Rooftop) — neon glow above/below, rivets, panel seams
+- `crystal` (Cavern) — soft aura + glowing crystal clusters growing off the top
+Detail placement uses multiplicative hashing (no RNG) so redraws are stable. Stage entries carry `theme`, optional `grass`, and `bpm`.
+
+**Per-stage music tempo (v0.8):** `SFX.startMusic(bpm)` — Plains 132, Peaks 126, Sunset 120, Rooftop 150, Cavern 112.
 
 Backdrops are Meshy text-to-image paintings (nano-banana-pro, 16:9, 1376×768; 9 credits each, generated 2026-08-20). The stage is picked in `BattleScene.init` so `preload` fetches only that stage's PNG; a 0.18-alpha black scrim sits over the painting for fighter/HUD readability. If the PNG fails to load, `create()` falls back to the original procedural gradient + mountains.
 
@@ -144,6 +153,7 @@ Key tactical behaviors implemented in `CpuController.poll`:
 - Air chase: jumps onto platforms above; uses air-jumps to chase and to recover from off-stage falls.
 - Special-move usage in `CpuController.poll` chooses lunge / projectile / grab based on horizontal range to opponent.
 - **Defense (v0.5):** one dice-roll per opponent swing (keyed on `opponent.attackUntil`): roll away, shield for 0.5 s, or do nothing per `rollChance`/`shieldChance`. Rolls emit shield-input + direction on a single frame; the Fighter's C-combo logic turns it into a roll.
+- **Charged smash (v0.8):** when the opponent is stunned with >45% damage, in range and grounded, the CPU occasionally (`comboAttackChance × 0.10` per frame) commits to a `chargePlan`: plants feet, presses and HOLDS attack for 0.75 s (visibly telegraphed by the charge glow), then releases the smash. Regular swings are locked out until the plan resolves; the opponent can recover and punish mid-charge — that's intended counterplay.
 - **Tilts (v0.7):** `upWindow` (opponent 60–170 px above, within 0.8× range) makes the CPU throw the up-strike; `spikeWindow` (CPU airborne, opponent 60–170 px below within 95 px) triggers the air spike. Both extend the in-range box vertically and set the `up`/`down` input flags only on attack frames (so `up` never causes a stray jump — jumps are edge-triggered separately). CPU still doesn't charge smashes.
 
 ### Juice pack (v0.7)
@@ -153,6 +163,13 @@ Key tactical behaviors implemented in `CpuController.poll`:
 - **KO spectacle:** double burst in the victim's colors at the screen-edge exit point, white screen flash, slammed-in "KO!" text, big shake.
 - **Intro:** "READY… GO!" (1.3 s, inputs locked via `introUntil` feeding `zeroInput`).
 - **HUD:** stock pips (colored squares, one per life) replace the "x2" text; damage % throbs above 100%.
+
+### Animation & readability pass (v0.8)
+- **Walk cycle:** sprites alternate walk/idle frames at ~7 fps while moving (was a static walk pose).
+- **Air-jump flip:** 360° sprite spin on double jump (visual only — arcade bodies ignore angle).
+- **Projectile trails:** fading ghost squares every 50 ms behind tankards/balls/planes/spray.
+- **Off-screen arrows:** a colored triangle at the top edge tracks any fighter launched above the screen.
+- **Victory stats:** "X dealt N% • Y dealt M%" line under the win banner (via `fighter.damageDealt`).
 
 ### Safety net
 Every frame, `Fighter.tick` checks: if body bottom is > 6 px below floor surface AND the fighter is horizontally over the stage AND not at death-zone depth, it snaps them up and zeros vertical velocity. Catches rare physics edge cases (e.g., sprite-body offset arithmetic mis-aligning during grab-pull tweens).
@@ -265,8 +282,8 @@ public/games/x-bros/
 
 ## Open items (next session)
 
-- Playtest v0.7: 2P controls comfort (WASD+FGH), hitstop durations, Wilson/Bigfoot sprite scale (displayH 200/255)
-- CPU charged smashes; items/power-ups; per-stage music variations
+- Playtest v0.8: new title screen, platform art, 2P controls comfort, hitstop feel, CPU smash frequency
+- Items / power-ups; alternate music melodies per stage (tempo already varies); online play (Tank Wars has the relay pattern)
 - Local 2-player (WASD second keyboard player) — currently CPU-only
 - CPU use of tilts / smashes (it only jabs + specials + defends)
 - Per-character sprite tuning still needs play-test for Chad (displayH=280)

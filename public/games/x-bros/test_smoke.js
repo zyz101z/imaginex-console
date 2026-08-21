@@ -144,6 +144,20 @@ inp = cpu.poll(0.016);
 check("no defense without a swing", inp.shield === false);
 check("CPU input has attackDown field", inp.attackDown === false);
 
+// Charged-smash plan: stunned high-damage opponent in range + forced dice => CPU holds Z
+const cfgSmash = Object.assign({}, DIFFICULTY.Hard, { rollChance: 0, shieldChance: 0, comboAttackChance: 10 });
+const me2 = mockFighter(600, ROSTER[0]);
+const them2 = mockFighter(660, ROSTER[1]);
+them2.hitstunUntil = 10.5;   // stunned (scene time 10s)
+them2.damage = 60;
+me2.facing = 1;
+cpu = new CpuController(me2, them2, cfgSmash);
+inp = cpu.poll(0.016);
+check("CPU commits to charge (holds Z)", inp.attackDown === true && inp.attackPressed === true);
+check("CPU plants feet while charging", inp.left === false && inp.right === false);
+inp = cpu.poll(0.016);
+check("CPU keeps holding on later frames", inp.attackDown === true && inp.attackPressed === false);
+
 // Dead CPU returns zero input with new fields
 me.stocks = 0;
 inp = cpu.poll(0.016);
