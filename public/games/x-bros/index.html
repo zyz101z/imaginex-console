@@ -399,56 +399,38 @@ class TitleScene extends Phaser.Scene {
   constructor() { super("title"); }
   preload() {
     if (!this.textures.exists("bg_title")) this.load.image("bg_title", "bg/bg_title.png");
-    // Load the real cast so the title lineup shows actual fighters, not swatches
-    for (const c of ROSTER) {
-      if (c.sprite && c.sprite.sheet && !this.textures.exists(c.id + "_raw") && !this.textures.exists(c.id)) {
-        this.load.image(c.id + "_raw", c.sprite.sheet);
-      }
-    }
   }
   create() {
-    BattleScene.prototype.buildSpriteSheets.call(this);
     this.cameras.main.setBackgroundColor("#08101e");
     const cx = W / 2;
-    // Meshy sunset-cliff painting; light scrim only — the art carries the screen
+    // Full-bleed key art: the whole cast painted charging off the sky arena
+    // (Meshy image-to-image over a collage of the real sprite sheets, so every
+    // fighter keeps their in-game identity). Logo overlays it, box-art style.
     if (this.textures.exists("bg_title")) {
-      this.add.image(cx, H / 2, "bg_title").setDisplaySize(W, H);
-      this.add.rectangle(cx, H / 2, W, H, 0x050a14, 0.22);
+      const art = this.add.image(cx, H / 2, "bg_title").setDisplaySize(W * 1.03, H * 1.03);
+      // Slow Ken Burns drift keeps the screen alive without pasted-on elements
+      this.tweens.add({
+        targets: art, displayWidth: W * 1.08, displayHeight: H * 1.08,
+        duration: 9000, yoyo: true, repeat: -1, ease: "Sine.easeInOut",
+      });
     }
 
-    // The whole cast standing on the cliff ledge, gently bobbing
-    const baseline = 655;
-    const margin = 95, span = (W - margin * 2) / (ROSTER.length - 1);
-    ROSTER.forEach((c, i) => {
-      if (!c.sprite || !this.textures.exists(c.id)) return;
-      const sp = c.sprite;
-      const dispH = (sp.displayH || 130) * 0.82;
-      const aspect = sp.frameW / sp.frameH;
-      const x = margin + i * span;
-      const feet = sp.feetY != null ? sp.feetY : 0.96;
-      const y = baseline - dispH * feet + dispH / 2;
-      const spr = this.add.sprite(x, y, c.id, 0).setDisplaySize(dispH * aspect, dispH);
-      if (x > W / 2) spr.setFlipX(true);   // right half faces center
-      this.tweens.add({
-        targets: spr, y: y - 5, duration: 900 + (i % 3) * 140,
-        yoyo: true, repeat: -1, ease: "Sine.easeInOut", delay: i * 130,
-      });
-    });
-
-    const logo = this.add.text(cx, 175, "X-BROS", {
-      fontFamily: "Press Start 2P", fontSize: "120px", color: "#9ad6ff"
-    }).setOrigin(0.5).setShadow(0, 8, "#0b2a55", 0, true, true);
-    this.tweens.add({ targets: logo, scale: 1.02, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.add.text(cx, 285, "ImagineX Smash", {
-      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffe066",
-      stroke: "#000000", strokeThickness: 6
+    const logo = this.add.text(cx, 92, "X-BROS", {
+      fontFamily: "Press Start 2P", fontSize: "84px", color: "#ffffff",
+      stroke: "#12244a", strokeThickness: 12
+    }).setOrigin(0.5).setShadow(0, 6, "#000000", 8, true, true);
+    this.tweens.add({ targets: logo, scale: 1.025, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    this.add.text(cx, 163, "ImagineX Smash", {
+      fontFamily: "Press Start 2P", fontSize: "17px", color: "#ffe066",
+      stroke: "#12244a", strokeThickness: 6
     }).setOrigin(0.5);
 
-    const press = this.add.text(cx, 415, "PRESS ENTER", {
-      fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffffff",
-      stroke: "#000000", strokeThickness: 6
+    // Bottom pill so the prompt reads over the busy art
+    this.add.rectangle(cx, 686, 420, 44, 0x0a1220, 0.65).setStrokeStyle(2, 0x3a5a8a);
+    const press = this.add.text(cx, 686, "PRESS ENTER", {
+      fontFamily: "Press Start 2P", fontSize: "20px", color: "#ffffff"
     }).setOrigin(0.5);
-    this.tweens.add({ targets: press, alpha: 0.3, duration: 600, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: press, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
 
     this.input.keyboard.once("keydown-ENTER", () => {
       SFX.play("confirm");

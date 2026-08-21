@@ -1,7 +1,7 @@
 # X-Bros — Design Spec
 
 **Game ID:** `x-bros`
-**Version:** 0.8
+**Version:** 0.9
 **Last updated:** 2026-08-20 (v0.8 "second polish pass": title-screen rebuild with real cast lineup, themed platform art, CPU charged smashes, per-stage music tempo, animation pass)
 **Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
@@ -63,7 +63,7 @@ Three layouts in the `STAGES` table. **The main floor footprint is identical in 
 | **Neon Rooftop** (v0.7) | cyberpunk teal/pink | 2 low sides + 1 high center | `bg/bg_rooftop.png` — neon city skyline |
 | **Crystal Cavern** (v0.7) | dark teal + gem glow | 1 wide high platform | `bg/bg_cavern.png` — glowing crystal cave |
 
-**Title screen (rebuilt v0.8 after user feedback — fireworks art + color-block roster rejected):** `bg/bg_title.png` is now a golden-hour cliff vista (Meshy; picked from 2 candidates, the stormy-arena alternate is in scratchpad meshy_output). The whole cast stands on the painted cliff ledge as REAL idle-frame sprites (0.82× battle size, feet planted via each char's `feetY`, right half flipped to face center, staggered bob tweens). Logo breathes (scale 1↔1.02); no names/swatches anywhere. The select screen shows the same painting under a 0.72 scrim so the menus share one visual world.
+**Title screen (v0.9 — professional key art):** after the sprite-lineup version also fell flat, the title is now full-bleed painted **key art of the actual cast**: a 1600×900 collage of the real sprite sheets' idle frames (built with the pure-stdlib PNG tool, RGB sheets chroma-keyed the same way the game does) was fed to **Meshy image-to-image (nano-banana-pro)** with a per-character identity description; the winning "burst" composition (all 8 charging off a sunlit sky arena) was cover-cropped from 1024² to 1280×720. Likeness is excellent — every fighter reads as their in-game self. On screen: slow Ken Burns drift on the art, white logo with navy stroke overlapping the art box-art style, subtitle, and a PRESS ENTER pill over the busy footer. The rejected "wedge" composition + collage live in scratchpad `meshy_output/20260820_220253_xbros-keyart/`. The select screen shows the same art under a 0.72 scrim.
 
 **Themed platforms (v0.8):** physics rects are invisible; `BattleScene.drawSlab(st, x, y, w, h, body, edge)` paints floors + platforms per `st.theme`:
 - `earth` (Plains/Sunset) — grass blanket + deterministic tufts, dirt speckles
