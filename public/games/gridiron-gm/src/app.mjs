@@ -9,7 +9,7 @@ import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd } from "./sfx.
 import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, capRoom,
   cutPlayer, contractFor, CAP_LIMIT, ROSTER_MAX,
-  archiveSeasonStats, computeAwards, careerTotals,
+  archiveSeasonStats, computeAwards, computeAllPro, statLine, careerTotals,
   SCHEMES, genCoach, coachFit, coachMods, playerValue, PICK_VALUE,
   evalTrade, execTrade, freshPicks, legalAfterLoss, applyTraining, scoutProspect,
   genAIOffer, updateRecords, RECORD_KEYS } from "./gm.mjs";
@@ -226,7 +226,7 @@ function viewRoster() {
         ? `<button class="mini up" onclick="__gm.promote(${p.id})" title="Move up the depth chart">▲</button>` : "";
       const starter = i < STARTERS[pos];
       html += `<tr${p.real ? "" : ' class="genp"'}${starter ? ' style="background:#161c26"' : ""}>
-        <td>${up}</td><td>${p.name}</td><td>${p.age}</td><td>${p.ovr}</td>` +
+        <td>${up}</td><td>${pn(p)}</td><td>${p.age}</td><td>${p.ovr}</td>` +
         defs.map(k => {
           const v = attr(p, k);
           const focused = S.training.some(t => t.playerId === p.id && t.attr === k);
@@ -333,7 +333,7 @@ function viewLeaders() {
   const cat = (label, key, fmt) => {
     const top = [...all].sort((a, b) => b.stats[key] - a.stats[key]).slice(0, 5);
     let h = `<table><tr><th colspan=3>${label}</th></tr>`;
-    for (const p of top) h += `<tr><td>${chip(p.teamId)}</td><td>${p.name}</td><td>${fmt(p.stats)}</td></tr>`;
+    for (const p of top) h += `<tr><td>${chip(p.teamId)}</td><td>${pn(p)}</td><td>${fmt(p.stats)}</td></tr>`;
     return h + "</table>";
   };
   return `<h2>League Leaders <span style="margin-left:12px">${tabs}</span></h2><div class="divgrid">
@@ -343,6 +343,74 @@ function viewLeaders() {
     ${cat("Sacks", "sacks", s => s.sacks + " sacks")}
   </div>`;
 }
+
+// ---------------------------------------------------------------- player card
+// Click any underlined player name to open this. Live everywhere the roster,
+// leaders, free agency and awards render — one lookup, one card.
+function findPlayerById(id) {
+  for (const roster of Object.values(S.league)) {
+    for (const p of roster) if (p.id === id) return p;
+  }
+  if (S.fa && S.fa.pool) { const p = S.fa.pool.find(x => x.id === id); if (p) return p; }
+  return null;   // draft prospects excluded on purpose — the card would leak true ratings
+}
+function pcard(id) {
+  const p = findPlayerById(id);
+  if (p) showPlayerCard(p);
+}
+function pcardByName(name) {
+  for (const roster of Object.values(S.league)) {
+    for (const p of roster) if (p.name === name) return showPlayerCard(p);
+  }
+}
+function closePcard() {
+  const el = document.getElementById("pcard");
+  if (el) el.remove();
+}
+function showPlayerCard(p) {
+  closePcard();
+  const div = document.createElement("div");
+  div.id = "pcard";
+  const teamRow = p.teamId
+    ? `${logo(p.teamId, 22)} ${teamName(p.teamId)}`
+    : `<span class="dim">FREE AGENT</span>`;
+  const bars = (ATTR_DEFS[p.pos] || []).map(k => {
+    const v = attr(p, k);
+    const pct = Math.max(4, Math.round((v - 40) / 59 * 100));
+    const col = v >= 88 ? "#4de37f" : v >= 75 ? "#ffd166" : "#8fa5cf";
+    return `<div class="pcRow"><span class="pcAttr">${k}</span>
+      <span class="pcBarBg"><span class="pcBar" style="width:${pct}%;background:${col}"></span></span>
+      <b>${v}</b></div>`;
+  }).join("");
+  const contract = p.contract
+    ? `$${p.contract.salary}M × ${p.contract.years}y` : "no contract";
+  const seasonL = p.stats.gp > 0 ? `${statLine(p.pos, p.stats)} <span class="dim">(${p.stats.gp} gp)</span>` : `<span class="dim">no games yet</span>`;
+  const tot = careerTotals(p);
+  const careerL = p.career.length
+    ? `${statLine(p.pos, tot)} <span class="dim">(${p.career.length} season${p.career.length > 1 ? "s" : ""} + this one)</span>`
+    : `<span class="dim">rookie season</span>`;
+  const badges = [
+    p.allPro ? `<span class="pcBadge">★ ALL-PRO ×${p.allPro}</span>` : "",
+    p.rookie ? `<span class="pcBadge" style="border-color:#7fd8c8;color:#7fd8c8">ROOKIE</span>` : "",
+    p.injuredWeeks > 0 ? `<span class="pcBadge" style="border-color:#ff8f9f;color:#ff8f9f">INJURED ${p.injuredWeeks}w</span>` : "",
+  ].join(" ");
+  div.innerHTML = `<div class="pcBox">
+    <button class="pcClose" onclick="__gm.closePcard()">✕</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="font-size:34px;font-weight:900;color:#ffd166">${p.ovr}</div>
+      <div><b style="font-size:18px">${p.name}</b><br>
+        <span class="dim">${p.pos} · age ${p.age} · ${teamRow}</span></div>
+    </div>
+    ${badges ? `<div style="margin:4px 0 8px">${badges}</div>` : ""}
+    ${bars}
+    <div class="pcSec">CONTRACT</div><div>${contract}</div>
+    <div class="pcSec">THIS SEASON</div><div>${seasonL}</div>
+    <div class="pcSec">CAREER</div><div>${careerL}</div>
+  </div>`;
+  div.onclick = (e) => { if (e.target === div) closePcard(); };
+  document.body.appendChild(div);
+}
+const pn = (p) => `<span class="pn" onclick="__gm.pcard(${p.id})">${p.name}</span>`;
 
 function viewNews() {
   if (!S.news.length) return "<p class='dim'>No news yet — play some games.</p>";
@@ -369,9 +437,16 @@ function viewBracket() {
     const a = S.lastAwards;
     html += `<h3>Season ${S.lastAwardsSeason || S.seasonNum} Awards</h3><table>`;
     for (const [label, w] of [["MVP", a.mvp], ["Off. Player of the Year", a.opoy], ["Def. Player of the Year", a.dpoy], ["Rookie of the Year", a.roy]]) {
-      if (w) html += `<tr><td><b>${label}</b></td><td>${chip(w.teamId)} ${w.name} (${w.pos})</td><td class="dim">${w.line}</td></tr>`;
+      if (w) html += `<tr><td><b>${label}</b></td><td>${chip(w.teamId)} ${w.id ? `<span class="pn" onclick="__gm.pcard(${w.id})">${w.name}</span>` : w.name} (${w.pos})</td><td class="dim">${w.line}</td></tr>`;
     }
     html += "</table>";
+    if (S.lastAllPro && S.lastAllPro.length) {
+      html += `<h3>★ Gridiron All-Pro Team</h3><table>`;
+      for (const ap of S.lastAllPro) {
+        html += `<tr><td><b>${ap.pos}</b></td><td>${chip(ap.teamId)} <span class="pn" onclick="__gm.pcard(${ap.id})">${ap.name}</span></td><td class="dim">${ap.line}</td></tr>`;
+      }
+      html += "</table>";
+    }
   }
   if (S.records && S.records.player && Object.keys(S.records.player).length) {
     html += `<h3>📜 Record Book (single season)</h3><table>`;
@@ -480,7 +555,7 @@ function viewStreetFA() {
   html += `<table><tr class="hdr"><td>Pos</td><td>Player</td><td>Age</td><td>OVR</td><td>Asking</td><td></td></tr>`;
   for (const p of S.streetFA.slice(0, 30)) {
     const hi = (ATTR_DEFS[p.pos] || []).map(k => `${k} ${attr(p, k)}`).join(" · ");
-    html += `<tr><td>${p.pos}</td><td>${p.name}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
+    html += `<tr><td>${p.pos}</td><td>${pn(p)}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
       <td>$${p.asking.salary}M × 1y</td>
       <td><button class="mini" onclick="__gm.signStreet(${p.id})">SIGN</button></td></tr>`;
   }
@@ -501,7 +576,7 @@ function viewFreeAgency() {
   if (mine.length) {
     html += `<h3>Your expiring players (re-sign before they leave!)</h3><table>`;
     for (const p of mine.slice(0, 12)) {
-      html += `<tr><td>${p.pos}</td><td>${p.name}</td><td>${p.age}y</td><td><b>${p.ovr}</b></td>
+      html += `<tr><td>${p.pos}</td><td>${pn(p)}</td><td>${p.age}y</td><td><b>${p.ovr}</b></td>
         <td>$${p.asking.salary}M × ${p.asking.years}y</td>
         <td><button class="mini" onclick="__gm.userSignFA(${p.id})">RE-SIGN</button></td></tr>`;
     }
@@ -513,7 +588,7 @@ function viewFreeAgency() {
   <table><tr class="hdr"><td>Pos</td><td>Player</td><td>Age</td><td>OVR</td><td>Asking</td><td></td></tr>`;
   for (const p of marketShown.slice(0, 40)) {
     const hi = (ATTR_DEFS[p.pos] || []).map(k => `${k} ${attr(p, k)}`).join(" · ");
-    html += `<tr><td>${p.pos}</td><td>${p.name}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
+    html += `<tr><td>${p.pos}</td><td>${pn(p)}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
       <td>$${p.asking.salary}M × ${p.asking.years}y</td>
       <td><button class="mini" onclick="__gm.userSignFA(${p.id})">SIGN</button></td></tr>`;
   }
@@ -622,7 +697,7 @@ function viewFinances() {
         title="Extend before he hits free agency">EXTEND $${ask.salary}M×${ask.years}</button> `;
     }
     const expiring = p.contract.years === 1 ? ' <span class="loss small">expiring</span>' : "";
-    html += `<tr${p.real ? "" : ' class="genp"'}><td>${p.pos}</td><td>${p.name}${expiring}</td><td>${p.age}</td><td>${p.ovr}</td>
+    html += `<tr${p.real ? "" : ' class="genp"'}><td>${p.pos}</td><td>${pn(p)}${expiring}</td><td>${p.age}</td><td>${p.ovr}</td>
       <td>$${p.contract.salary}M</td><td>${p.contract.years}</td>
       <td>${ext}<button class="mini danger" onclick="__gm.userCut(${p.id})">CUT</button></td></tr>`;
   }
@@ -735,6 +810,7 @@ function runAwardsNight() {
     ["OFFENSIVE PLAYER OF THE YEAR", S.lastAwards.opoy],
     ["MOST VALUABLE PLAYER", S.lastAwards.mvp],
   ].filter(x => x[1]);
+  if (S.lastAllPro && S.lastAllPro.length) seq.push(["__ALLPRO__", null]);
   if (!seq.length) return;
   const div = document.createElement("div");
   div.id = "awardsNight";
@@ -744,6 +820,18 @@ function runAwardsNight() {
     if (i >= seq.length) { div.remove(); return; }
     const [label, w] = seq[i++];
     sfx.fanfare();
+    if (label === "__ALLPRO__") {
+      const mineCt = S.lastAllPro.filter(ap => ap.teamId === S.teamId).length;
+      div.innerHTML = `<div class="revealcard">
+        <div class="dim" style="letter-spacing:3px">AWARDS NIGHT — SEASON ${S.seasonNum}</div>
+        <h2 class="champ" style="margin:12px 0 6px">★ GRIDIRON ALL-PRO TEAM</h2>
+        <div style="text-align:left;display:inline-block;margin:6px 0">` +
+        S.lastAllPro.map(ap => `<div style="margin:3px 0"><b style="display:inline-block;width:34px">${ap.pos}</b> ${logo(ap.teamId, 18)} ${ap.name}${ap.teamId === S.teamId ? " ⭐" : ""}</div>`).join("") +
+        `</div>${mineCt ? `<p class="win" style="margin:8px 0">⭐ ${mineCt} OF YOURS MADE THE TEAM! ⭐</p>` : ""}
+        <button class="revealbtn">CLOSE THE CURTAIN 🏆</button></div>`;
+      div.querySelector(".revealbtn").onclick = show;
+      return;
+    }
     const mine = w.teamId === S.teamId;
     div.innerHTML = `<div class="revealcard">
       <div class="dim" style="letter-spacing:3px">AWARDS NIGHT — SEASON ${S.seasonNum}</div>
@@ -943,6 +1031,11 @@ function advance() {
         S.phase = "postseason";
         // regular season closed: awards + records lock BEFORE playoff stats accumulate
         S.lastAwards = computeAwards(S.league);
+        S.lastAllPro = computeAllPro(S.league);
+        for (const ap of S.lastAllPro) {
+          const p = findPlayerById(ap.id);
+          if (p) p.allPro = (p.allPro || 0) + 1;   // badge shows on the player card
+        }
         S.lastAwardsSeason = S.seasonNum;
         if (!S.records) S.records = {};
         const recNews = updateRecords(S.records, S.league, S.standings, S.seasonNum);
@@ -1289,7 +1382,7 @@ function leadersFilter(cf) { leadersConf = cf; render(); }
 function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
-  tradePartner, tradeToggle, tradeTogglePick, tradePropose };
+  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard };
 
 function startOffseasonPipeline() {
     const rng = weekRng();

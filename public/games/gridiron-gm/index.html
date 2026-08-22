@@ -46,6 +46,22 @@
   .pick { background: #171b22; border: 2px solid; border-radius: 8px; color: #e8eaf0;
     padding: 10px; cursor: pointer; text-align: left; font-size: 14px; }
   .pick:hover { background: #232a36; }
+  .pn { text-decoration: underline dotted #5f7099; text-underline-offset: 3px; cursor: pointer; }
+  .pn:hover { color: #ffd166; }
+  #pcard { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center;
+    justify-content: center; background: rgba(5, 8, 14, .62); }
+  .pcBox { position: relative; background: #0f141d; border: 2px solid #ffd166; border-radius: 12px;
+    padding: 20px 26px; width: min(400px, 92vw); box-shadow: 0 12px 60px rgba(0, 0, 0, .7); }
+  .pcClose { position: absolute; top: 8px; right: 10px; background: none; border: 0;
+    color: #9fb3d9; font-size: 18px; cursor: pointer; }
+  .pcClose:hover { color: #fff; }
+  .pcRow { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; }
+  .pcAttr { width: 84px; color: #9fb3d9; }
+  .pcBarBg { flex: 1; height: 8px; background: #1a2230; border-radius: 4px; overflow: hidden; }
+  .pcBar { display: block; height: 100%; border-radius: 4px; }
+  .pcSec { margin: 10px 0 2px; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #5f7099; }
+  .pcBadge { display: inline-block; border: 1px solid #ffd166; color: #ffd166; border-radius: 6px;
+    padding: 2px 8px; font-size: 11px; font-weight: 800; margin-right: 4px; }
   #pickReveal, #awardsNight { position: fixed; inset: 0; z-index: 30;
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(rgba(8, 10, 16, .72), rgba(8, 10, 16, .88)),

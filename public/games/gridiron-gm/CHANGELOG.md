@@ -1,5 +1,10 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-22 — Player cards + Gridiron All-Pro Team
+1. **Player cards everywhere**: click any dotted-underlined name (roster, leaders, FA market/street/expiring, awards, All-Pro) → `showPlayerCard` overlay: big ovr, team, attribute BARS (color-coded ≥88/≥75), contract, THIS SEASON + CAREER statlines (shared `statLine(pos, stats)` extracted from computeAwards — tolerant of missing keys for career totals), badges (★ ALL-PRO ×N / ROOKIE / INJURED Nw). Lookup via `findPlayerById` (league + FA pool; **draft prospects excluded on purpose** — the card would leak true ratings past scouting fog). `pn(p)` helper wraps names; `__gm.pcard/pcardByName/closePcard`.
+2. **★ GRIDIRON ALL-PRO TEAM** (`computeAllPro` in gm.mjs): 9 spots (QB/RB/WR/TE/DL/LB/CB/S/K) by award-family scoring, locked at week 18 with the awards; winners get persistent `p.allPro` count (card badge). Awards Night gains a finale slide (roster list + "N OF YOURS MADE THE TEAM!"); offseason awards view lists it with clickable names.
+- Batteries: sim 2,985 ✓ · gm **17,543** (6 new all-pro/statLine checks). Copies synced.
+
 ## 2026-08-22 — "Moments" pass (designer session): the game's payoff beats
 1. **Player of the Game** (`playerOfTheGame` in app.mjs): best statline on the WINNING side (whole game on tie), award-family weighting, min score 40 or no honor. Gold ⭐ line atop the drive log at FINAL.
 2. **Draft-pick reveal** (`showPickReveal`, user picks only): full-screen "THE PICK IS IN" card over the draft-stage art — round/pick, team, name, pos/age/scouted range/ceiling — with new `sfx.draftPick` (snare roll → horn + pop).

@@ -302,27 +302,46 @@ export function hofScore(p) {
 export const HOF_THRESHOLD = 320;
 
 // season awards from accumulated stats (call before stats reset)
+// one statline formatter for awards, All-Pro and the player card (season or career totals)
+export function statLine(pos, s) {
+  if (!s) return "";
+  if (pos === "QB") return `${s.passYd || 0} yds, ${s.passTD || 0} TD, ${s.ints || 0} INT`;
+  if (pos === "RB") return `${s.car || 0} car, ${s.rushYd || 0} yds, ${s.rushTD || 0} TD`;
+  if (["WR", "TE"].includes(pos)) return `${s.rec || 0} rec, ${s.recYd || 0} yds, ${s.recTD || 0} TD`;
+  if (pos === "K") return `${s.fgm || 0}/${s.fga || 0} FG`;
+  return `${s.tackles || 0} tkl, ${s.sacks || 0} sacks, ${s.defInts || 0} INT`;
+}
 export function computeAwards(league) {
   const all = Object.values(league).flat().filter(p => p.stats.gp > 0);
   const offScore = s => s.passYd * 1 + s.passTD * 40 - s.ints * 25 +
     (s.rushYd + s.recYd) * 1.2 + (s.rushTD + s.recTD) * 40;
   const defScore = s => s.sacks * 45 + s.defInts * 55 + s.tackles * 1.5;
-  const fmt = p => {
-    const s = p.stats;
-    if (p.pos === "QB") return `${s.passYd} yds, ${s.passTD} TD, ${s.ints} INT`;
-    if (p.pos === "RB") return `${s.car} car, ${s.rushYd} yds, ${s.rushTD} TD`;
-    if (["WR", "TE"].includes(p.pos)) return `${s.rec} rec, ${s.recYd} yds, ${s.recTD} TD`;
-    if (p.pos === "K") return `${s.fgm}/${s.fga} FG`;
-    return `${s.tackles} tkl, ${s.sacks} sacks, ${s.defInts} INT`;
-  };
+  const fmt = p => statLine(p.pos, p.stats);
   const top = (list, score) => list.reduce((b, p) => (!b || score(p.stats) > score(b.stats)) ? p : b, null);
   const mvp = top(all, offScore);
   const opoy = top(all.filter(p => p.pos !== "QB"), offScore);
   const dpoy = top(all.filter(p => ["DL", "LB", "CB", "S"].includes(p.pos)), defScore);
   const rookies = all.filter(p => p.rookie);
   const roy = rookies.length ? top(rookies, p2 => offScore(p2) + defScore(p2)) : null;
-  const pack = p => p && { name: p.name, teamId: p.teamId, pos: p.pos, line: fmt(p) };
+  const pack = p => p && { id: p.id, name: p.name, teamId: p.teamId, pos: p.pos, line: fmt(p) };
   return { mvp: pack(mvp), opoy: pack(opoy), dpoy: pack(dpoy), roy: pack(roy) };
+}
+
+// GRIDIRON ALL-PRO TEAM — the season's best at each spot (announced with the awards)
+export function computeAllPro(league) {
+  const all = Object.values(league).flat().filter(p => p.stats.gp > 0);
+  const off = s => s.passYd + s.passTD * 40 - s.ints * 25 + (s.rushYd + s.recYd) * 1.2 + (s.rushTD + s.recTD) * 40;
+  const def = s => s.sacks * 45 + s.defInts * 55 + s.tackles * 1.5;
+  const kick = s => s.fgm * 30 + (s.fga ? (s.fgm / s.fga) * 200 : 0);
+  const team = [];
+  for (const [pos, score] of [["QB", off], ["RB", off], ["WR", off], ["TE", off],
+                              ["DL", def], ["LB", def], ["CB", def], ["S", def], ["K", kick]]) {
+    const best = all.filter(p => p.pos === pos)
+      .reduce((b, p) => (!b || score(p.stats) > score(b.stats)) ? p : b, null);
+    if (best) team.push({ id: best.id, pos, name: best.name, teamId: best.teamId,
+                          line: statLine(best.pos, best.stats) });
+  }
+  return team;
 }
 
 // ---------------------------------------------------------------- coaches & team identity

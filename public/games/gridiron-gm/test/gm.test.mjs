@@ -189,5 +189,36 @@ check("all contracts valid", badC === 0, badC);
   band("authored player count", total, 700, 1000);
 }
 
+// ---- All-Pro team + shared statline (player card / awards) ----
+{
+  const { computeAllPro, statLine } = await import("../src/gm.mjs");
+  const rng2 = makeRng(777);
+  const lg = buildLeague(rng2);
+  // give a few players stats so selections are meaningful
+  let stamped = 0;
+  for (const roster of Object.values(lg)) {
+    for (const p of roster) {
+      if (stamped >= 200) break;
+      p.stats.gp = 10;
+      if (p.pos === "QB") { p.stats.passYd = 2000 + (p.ovr * 10); p.stats.passTD = 15; }
+      else if (p.pos === "RB") { p.stats.rushYd = 500 + p.ovr * 5; p.stats.car = 120; }
+      else if (["WR", "TE"].includes(p.pos)) { p.stats.recYd = 400 + p.ovr * 5; p.stats.rec = 40; }
+      else if (p.pos === "K") { p.stats.fgm = 20; p.stats.fga = 24; }
+      else { p.stats.tackles = 40; p.stats.sacks = p.pos === "DL" ? 8 : 2; }
+      stamped++;
+    }
+  }
+  const team = computeAllPro(lg);
+  check("all-pro: nine positions filled", team.length === 9, team.length);
+  check("all-pro: one per position", new Set(team.map(x => x.pos)).size === 9);
+  check("all-pro: entries carry id/name/team/line", team.every(x => x.id && x.name && x.teamId && x.line));
+  const qb = team.find(x => x.pos === "QB");
+  const bestQB = Object.values(lg).flat().filter(p => p.pos === "QB" && p.stats.gp > 0)
+    .reduce((b, p) => (!b || p.stats.passYd > b.stats.passYd) ? p : b, null);
+  check("all-pro: QB is the top passer", qb.id === bestQB.id);
+  check("statLine: QB format", statLine("QB", { passYd: 4000, passTD: 30, ints: 9 }) === "4000 yds, 30 TD, 9 INT");
+  check("statLine: career-totals tolerant of missing keys", statLine("RB", { rushYd: 900 }) === "0 car, 900 yds, 0 TD");
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail > 0 ? 1 : 0);
