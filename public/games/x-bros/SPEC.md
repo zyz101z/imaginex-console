@@ -3,7 +3,7 @@
 **Game ID:** `x-bros`
 **Version:** 1.0
 **Last updated:** 2026-08-21 (v1.0: ITEMS — Power Star / Taco / Bomb with Meshy-painted icons; per-stage melodies; subtitle removed from title art per user)
-**Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard only.
+**Platform:** ImagineX Console (web, iframe-embedded). Desktop keyboard + touch devices (2026-08-22: tap-to-start, tap menus, on-screen battle pad — arrows/▲ jump/A attack incl. hold-smash/S special/D shield, ⏸ pause, tap-to-rematch; P1 only, no down-tilts on touch).
 **Engine:** Phaser 3.80 (loaded from CDN inside the iframe).
 
 ## Premise
