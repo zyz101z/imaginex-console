@@ -46,6 +46,19 @@
   .pick { background: #171b22; border: 2px solid; border-radius: 8px; color: #e8eaf0;
     padding: 10px; cursor: pointer; text-align: left; font-size: 14px; }
   .pick:hover { background: #232a36; }
+  #pickReveal, #awardsNight { position: fixed; inset: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(rgba(8, 10, 16, .72), rgba(8, 10, 16, .88)),
+      url('img/draft.png') center/cover, #0a0c10; }
+  #awardsNight { background: linear-gradient(rgba(8, 10, 16, .55), rgba(8, 10, 16, .8)),
+      url('img/awards.png') center/cover, #0a0c10; }
+  .revealcard { background: rgba(13, 16, 24, .88); border: 2px solid #ffc62f; border-radius: 14px;
+    padding: 34px 48px; text-align: center; max-width: 620px; text-shadow: 0 2px 6px #000;
+    box-shadow: 0 12px 60px rgba(0, 0, 0, .7); }
+  .revealbtn { margin-top: 16px; background: #2e7d32; color: #fff; border: 0; border-radius: 8px;
+    padding: 12px 26px; font-size: 16px; font-weight: bold; cursor: pointer; }
+  .revealbtn:hover { filter: brightness(1.15); }
+  .potg { color: #ffc62f; font-weight: bold; }
   .draftbanner { border-radius: 10px; margin-bottom: 12px; overflow: hidden;
     background: linear-gradient(rgba(8, 10, 18, .5), rgba(8, 10, 18, .78)),
       url('img/draft.png') center 30%/cover, #171b22; border: 1px solid #2a3a55; }

@@ -273,8 +273,34 @@ function viewSchedule() {
       const wxHtml = wx
         ? `<br><span class="tt" title="Weather hits both offenses — but passing and kicking suffer most, and cold-city teams keep a run edge at home. Lean run in bad weather.">${wx.icon} Forecast: <b>${wx.desc}</b> — ${wx.type === "snow" ? "passing/kicking suffer badly; the ground game travels" : wx.type === "wind" ? "kicks and deep balls get shaky" : wx.type === "rain" ? "slick ball — turnovers up, passing down" : "tough on the passing game"}.</span>`
         : "";
+      // Narrative lines: division rivalry, revenge game, live streak (flavor only)
+      let nHtml = "";
+      if (TEAM_BY_ID[opp].conf === TEAM_BY_ID[S.teamId].conf && TEAM_BY_ID[opp].div === TEAM_BY_ID[S.teamId].div)
+        nHtml += `<br><span class="dim">🏈 DIVISION RIVALRY — these count double in the locker room.</span>`;
+      for (let w2 = 0; w2 < S.week; w2++) {
+        const pg = S.schedule[w2].find(x => (x.home === S.teamId && x.away === opp) || (x.away === S.teamId && x.home === opp));
+        if (pg && pg.played) {
+          const my = pg.home === S.teamId ? pg.scoreHome : pg.scoreAway;
+          const their = pg.home === S.teamId ? pg.scoreAway : pg.scoreHome;
+          if (their > my) nHtml += `<br><span class="loss">😤 REVENGE GAME: they took Week ${w2 + 1}, ${their}-${my}. Answer back.</span>`;
+        }
+      }
+      let streak = 0, kind = null;
+      for (let w2 = S.week - 1; w2 >= 0; w2--) {
+        const pg = S.schedule[w2].find(x => x.home === S.teamId || x.away === S.teamId);
+        if (!pg || !pg.played) continue;
+        const my = pg.home === S.teamId ? pg.scoreHome : pg.scoreAway;
+        const their = pg.home === S.teamId ? pg.scoreAway : pg.scoreHome;
+        const k = my > their ? "W" : "L";
+        if (!kind) { kind = k; streak = 1; }
+        else if (k === kind) streak++;
+        else break;
+      }
+      if (streak >= 3) nHtml += kind === "W"
+        ? `<br><span class="win">🔥 ${streak}-game win streak — keep it rolling.</span>`
+        : `<br><span class="loss">🧊 ${streak} straight losses — this one has to stop the bleeding.</span>`;
       html += `<div class="coachcard"><b>THIS WEEK:</b> ${g.home === S.teamId ? "vs" : "@"} ${logo(opp)} <b>${teamName(opp)}</b> (${rec(opp)}) — ${SCHEMES[oc.scheme].name} team<br>
-        <span class="dim">Their D: pass ${ou.defPass.toFixed(0)} / run ${ou.defRun.toFixed(0)} · Your O: pass ${mu.offPass.toFixed(0)} / run ${mu.offRun.toFixed(0)}</span>${mmHtml}${wxHtml}<br>
+        <span class="dim">Their D: pass ${ou.defPass.toFixed(0)} / run ${ou.defRun.toFixed(0)} · Your O: pass ${mu.offPass.toFixed(0)} / run ${mu.offRun.toFixed(0)}</span>${mmHtml}${wxHtml}${nHtml}<br>
         <span class="win">Gameplan hint: they're softer against the ${weakRun ? "RUN — lean your slider down" : "PASS — let it fly"}.</span></div>`;
     }
   }
@@ -697,7 +723,45 @@ const VIEWS = {
   news: viewNews, coach: viewCoach, trades: viewTrades,
 };
 let activeView = "schedule";
+
+// Awards Night: once per season, when the offseason begins, walk the four awards
+// on stage — ROY -> DPOY -> OPOY -> MVP, saving the big one for last.
+function runAwardsNight() {
+  S.awardsCeremonySeason = S.seasonNum;
+  save();
+  const seq = [
+    ["ROOKIE OF THE YEAR", S.lastAwards.roy],
+    ["DEFENSIVE PLAYER OF THE YEAR", S.lastAwards.dpoy],
+    ["OFFENSIVE PLAYER OF THE YEAR", S.lastAwards.opoy],
+    ["MOST VALUABLE PLAYER", S.lastAwards.mvp],
+  ].filter(x => x[1]);
+  if (!seq.length) return;
+  const div = document.createElement("div");
+  div.id = "awardsNight";
+  document.body.appendChild(div);
+  let i = 0;
+  const show = () => {
+    if (i >= seq.length) { div.remove(); return; }
+    const [label, w] = seq[i++];
+    sfx.fanfare();
+    const mine = w.teamId === S.teamId;
+    div.innerHTML = `<div class="revealcard">
+      <div class="dim" style="letter-spacing:3px">AWARDS NIGHT — SEASON ${S.seasonNum}</div>
+      <h2 class="champ" style="margin:12px 0 6px">${label}</h2>
+      <p style="font-size:26px;margin:10px 0">${logo(w.teamId, 36)} <b>${w.name}</b> <span class="dim">(${w.pos}, ${w.teamId})</span></p>
+      <p style="margin:4px 0">${w.line}</p>
+      ${mine ? '<p class="win" style="margin:8px 0">⭐ THAT\'S YOUR GUY! ⭐</p>' : ""}
+      <button class="revealbtn">${i >= seq.length ? "CLOSE THE CURTAIN 🏆" : "NEXT AWARD ▶"}</button></div>`;
+    div.querySelector(".revealbtn").onclick = show;
+  };
+  show();
+}
+
 function render() {
+  if (S && S.phase === "offseason" && S.lastAwards && S.awardsCeremonySeason !== S.seasonNum
+      && !document.getElementById("awardsNight")) {
+    runAwardsNight();
+  }
   if (S && S.phase === "fired") {
     $("#topbar").innerHTML = `<b>GRIDIRON GM</b>`;
     const candidates = [...TEAMS].map(t => {
@@ -718,6 +782,30 @@ function render() {
   document.querySelectorAll("nav button").forEach(b =>
     b.classList.toggle("active", b.dataset.view === activeView));
   $("#content").innerHTML = VIEWS[activeView]();
+}
+
+// Player of the Game: best statline on the winning side (whole game on a tie).
+// Same weighting family as computeAwards so "best" feels consistent.
+function playerOfTheGame(myGame, hs, as) {
+  const winner = hs > as ? myGame.home : as > hs ? myGame.away : null;
+  const pool = [];
+  for (const [team, side] of Object.entries(myGame.box)) {
+    if (winner && team !== winner) continue;
+    for (const e of side) pool.push({ team, ...e });
+  }
+  const sc = g => (g.passYd || 0) + (g.passTD || 0) * 40 - (g.ints || 0) * 25 +
+    ((g.rushYd || 0) + (g.recYd || 0)) * 1.2 + ((g.rushTD || 0) + (g.recTD || 0)) * 40 +
+    (g.sacks || 0) * 45 + (g.defInts || 0) * 55 + (g.fgm || 0) * 10;
+  const best = pool.reduce((b, p) => (!b || sc(p.g) > sc(b.g)) ? p : b, null);
+  if (!best || sc(best.g) < 40) return null;   // nobody popped — skip the honor
+  const g = best.g, parts = [];
+  if (g.passYd) parts.push(`${g.passYd} pass yds${g.passTD ? `, ${g.passTD} TD` : ""}`);
+  if (g.rushYd) parts.push(`${g.rushYd} rush yds${g.rushTD ? `, ${g.rushTD} TD` : ""}`);
+  if (g.recYd) parts.push(`${g.rec || 0} rec, ${g.recYd} yds${g.recTD ? `, ${g.recTD} TD` : ""}`);
+  if (g.sacks) parts.push(`${g.sacks} sacks`);
+  if (g.defInts) parts.push(`${g.defInts} INT`);
+  if (!parts.length && g.fgm) parts.push(`${g.fgm}/${g.fga || g.fgm} FG`);
+  return { ...best, line: parts.join(" · ") };
 }
 
 // ---------------------------------------------------------------- ticker
@@ -759,6 +847,14 @@ function runTicker(myGame, results, done) {
       $("#tickerSkip").textContent = "CONTINUE ▶";
       $("#tickerBox").classList.remove("hidden");
       scoreEl.innerHTML = `<span class="qpill">FINAL</span> &nbsp; ${logo(away, 34)} <b>${as}</b> <span class="dim">—</span> <b>${hs}</b> ${logo(home, 34)}`;
+      const potg = playerOfTheGame(myGame, hs, as);
+      if (potg) {
+        const pl = document.createElement("div");
+        pl.className = "tline potg";
+        pl.textContent = `⭐ PLAYER OF THE GAME: ${potg.name} (${potg.pos}, ${potg.team}) — ${potg.line}`;
+        drivesEl.prepend(pl);
+        drivesEl.scrollTop = 0;
+      }
       return;
     }
     const d = log[i++];
@@ -954,9 +1050,28 @@ function userDraftPick(i) {
   S.league[S.teamId].push(p);
   D.log.unshift({ round: slot.round, pick: (D.idx % 32) + 1, team: S.teamId, name: p.name, pos: p.pos,
     mine: true, via: slot.slotTeam !== S.teamId ? slot.slotTeam : null });
+  showPickReveal(p, slot, (D.idx % 32) + 1);
   D.idx += 1;
   advanceDraftAI();
   save(); render();
+}
+
+// Full-screen "THE PICK IS IN" card over the draft-stage art. User picks only —
+// AI picks would spam it. Purely presentational; the pick is already executed.
+function showPickReveal(p, slot, pickNo) {
+  sfx.draftPick();
+  const div = document.createElement("div");
+  div.id = "pickReveal";
+  const range = p.scoutLo === p.scoutHi ? `${p.scoutLo} ovr` : `${p.scoutLo}–${p.scoutHi} ovr`;
+  div.innerHTML = `<div class="revealcard">
+    <div class="dim" style="letter-spacing:3px">THE PICK IS IN</div>
+    <h2 style="margin:10px 0 4px">Round ${slot.round}, Pick ${pickNo}</h2>
+    <p style="margin:4px 0">${logo(S.teamId, 38)} <b>${teamName(S.teamId)}</b> select…</p>
+    <h1 style="margin:12px 0;font-size:40px">${p.name}</h1>
+    <p style="margin:4px 0"><b>${p.pos}</b> · age ${p.age} · scouted ${range}${p.ceiling ? ` · <span class="dim">${p.ceiling}</span>` : ""}</p>
+    <button class="revealbtn">WELCOME ABOARD ▶</button></div>`;
+  div.querySelector(".revealbtn").onclick = () => div.remove();
+  document.body.appendChild(div);
 }
 
 function userSignFA(playerId) {

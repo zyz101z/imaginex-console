@@ -164,6 +164,22 @@ export function startCrowd() { const c = ac(); if (c) loadCrowdSample(c); }
 export function stopCrowd() {}
 
 export const sfx = {
+  // draft pick: snare roll builds -> horn hit + crowd pop
+  draftPick() {
+    const c = ac(); if (!c || muted) return;
+    for (let i = 0; i < 8; i++) noise(c, { dur: 0.04, type: "highpass", freq: 2000, gain: 0.10 + i * 0.03, delay: i * 0.07 });
+    airHorn(c, { dur: 0.7, delay: 0.62, gain: 0.22 });
+    cheer(c, { intensity: 1.3, dur: 1.6, delay: 0.66 });
+  },
+  // awards fanfare: rising brass triad + shimmer + applause
+  fanfare() {
+    const c = ac(); if (!c || muted) return;
+    tone(c, { dur: 0.22, freq: 392, type: "sawtooth", gain: 0.22 });
+    tone(c, { dur: 0.22, freq: 494, type: "sawtooth", gain: 0.22, delay: 0.2 });
+    tone(c, { dur: 0.55, freq: 587, type: "sawtooth", gain: 0.28, delay: 0.4 });
+    tone(c, { dur: 0.55, freq: 784, type: "triangle", gain: 0.18, delay: 0.42 });
+    cheer(c, { intensity: 1.2, dur: 1.8, delay: 0.5 });
+  },
   // PUNT: much beefier tackle — double low hit + pads + crowd reaction murmur
   tackle() {
     const c = ac(); if (!c || muted) return;

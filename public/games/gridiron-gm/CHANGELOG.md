@@ -1,5 +1,12 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-22 — "Moments" pass (designer session): the game's payoff beats
+1. **Player of the Game** (`playerOfTheGame` in app.mjs): best statline on the WINNING side (whole game on tie), award-family weighting, min score 40 or no honor. Gold ⭐ line atop the drive log at FINAL.
+2. **Draft-pick reveal** (`showPickReveal`, user picks only): full-screen "THE PICK IS IN" card over the draft-stage art — round/pick, team, name, pos/age/scouted range/ceiling — with new `sfx.draftPick` (snare roll → horn + pop).
+3. **Awards Night ceremony** (`runAwardsNight`): once per season when the offseason begins (guard `S.awardsCeremonySeason`), steps ROY → DPOY → OPOY → MVP (MVP last) over new `img/awards.png` (spotlit golden podium, navy curtains) with `sfx.fanfare`; "⭐ THAT'S YOUR GUY!" when the winner is yours. Offseason view's awards table unchanged (the ceremony is additive).
+4. **THIS WEEK narrative lines**: 🏈 division rivalry tag, 😤 revenge game (they beat you earlier — week + score), 🔥/🧊 3+ game win/loss streaks. Flavor only, zero sim impact.
+- CSS: `#pickReveal`/`#awardsNight` overlays + `.revealcard`/`.revealbtn`/`.potg`. Batteries green (2,985 + 17,537); copies synced.
+
 ## 2026-08-21 — Draft night + Gridiron Bowl scenes (approved follow-up)
 - **Draft-day banner**: `viewDraft` header is now a `.draftbanner` div over `img/draft.png` (draft-night stage painting) with scrim + text-shadow — round/pick/on-the-clock line unchanged inside it.
 - **Gridiron Bowl scene**: playoff `myGame` carries `bowl: P.stage === 3`; ticker scene picker puts `img/stadium_bowl.png` (fireworks + gold confetti championship stadium) first, plus a "🏆 THE GRIDIRON BOWL — neutral site" line atop the drive log (the Bowl has no weather line otherwise).
