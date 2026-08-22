@@ -220,8 +220,14 @@ const TANKS = {
   tempest: { name: 'TEMPEST', cost: 6000, tag: 'TWIN cannons — every trigger pull fires two parallel shells.',
              speed: 152, fireCd: 0.5, twin: true, reqWave: 10,
              shell: { speed: 275, r: 3.5, life: 8, bounces: -1, maxLive: 6 } },
+  bulwark: { name: 'BULWARK', cost: 5000, tag: 'Front plate DEFLECTS shells back at the shooter. Lasers, mines and big shots still hurt — guard your back.',
+             speed: 132, fireCd: 0.5, plate: true, reqBattle: 20,
+             shell: { speed: 250, r: 4.5, life: 9, bounces: -1 } },
+  hailstorm: { name: 'HAILSTORM', cost: 7000, tag: 'Shells SHATTER on their first bounce — two splinters carry the hunt. Bank your shots.',
+             speed: 148, fireCd: 0.55, reqWave: 15,
+             shell: { speed: 240, r: 4.5, life: 9, bounces: -1, frag: true, maxLive: 4 } },
 };
-const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost', 'tempest'];
+const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost', 'tempest', 'bulwark', 'hailstorm'];
 // Cosmetic catalogs (scrap sinks — never touch the friend-or-foe color language)
 const TRAILS = {
   ember:   { name: 'EMBER TRAIL',   cost: 300, tag: 'Your shells leave burning sparks.', col: () => (Math.random() < 0.5 ? '#ff9a3c' : '#ffc46b') },
@@ -249,6 +255,8 @@ const SPRITE_META = {
   minelayer: { w: 175, h: 128, cx: 82, cy: 64 },
   ghost:   { w: 313, h: 128, cx: 122, cy: 64 },
   tempest: { w: 269, h: 128, cx: 109, cy: 64 },
+  bulwark: { w: 260, h: 128, cx: 126, cy: 64 },
+  hailstorm: { w: 238, h: 128, cx: 113, cy: 64 },
 };
 const tankSprites = {};   // kind -> { 0: amber-tinted canvas, 1: teal-tinted canvas }
 if (typeof Image !== 'undefined') {
@@ -822,7 +830,7 @@ function fireShell(t) {
         r: sh.r, owner: t.i, team: t.team, age: 0, grace: 0.12,
         big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
         bounces: sh.bounces === undefined ? -1 : sh.bounces, accel: sh.accel || 0,
-        life: sh.life || SHELL_LIFE, col: t.col,
+        life: sh.life || SHELL_LIFE, col: t.col, frag: !!sh.frag,
       });
     }
   }
@@ -853,6 +861,23 @@ function muzzlePoint(t, a) {
 // Returns false if the shell is out of bounces and should die.
 function onBounce(s) {
   sfx.bounce();
+  // HAILSTORM: the first bounce shatters the shell — two short-lived splinters
+  // fan out along the ricochet (they die on their own next bounce)
+  if (s.frag && !s.fragged) {
+    s.fragged = true;
+    const a0 = Math.atan2(s.vy, s.vx);
+    const v = Math.hypot(s.vx, s.vy);
+    for (const off of [-0.38, 0.38]) {
+      shells.push({
+        id: ++shellSeq, x: s.x, y: s.y,
+        vx: Math.cos(a0 + off) * v, vy: Math.sin(a0 + off) * v,
+        r: 3, owner: s.owner, team: s.team, age: 0, grace: 0.05,
+        big: false, heavy: false, smash: 0, bounces: 0, accel: 0,
+        life: 1.5, col: s.col,
+      });
+    }
+    spawnParticles(s.x, s.y, 6, s.col, 110, 0.22);
+  }
   if (s.accel) {
     const v = Math.hypot(s.vx, s.vy);
     const nv = Math.min(430, v * s.accel);
@@ -1018,6 +1043,8 @@ function survKind(w) {
   if (w >= 10) pool.push('photon');
   if (w >= 12) pool.push('ghost');
   if (w >= 14) pool.push('tempest');
+  if (w >= 16) pool.push('hailstorm');
+  if (w >= 18) pool.push('bulwark');
   return pool[(Math.random() * pool.length) | 0];
 }
 // far free cells for enemy spawns: away from the player, apart from each other, off pools
@@ -1601,6 +1628,24 @@ function updateShells(dt) {
         if (s.team !== undefined && s.team === t.team) continue;   // teammates never collide
         const d = Math.hypot(s.x - t.x, s.y - t.y);
         if (d < s.r + (t.r || TANK_R) - 2) {
+          // BULWARK: ordinary shells that strike the front ~120° arc glance off the
+          // plate — and become the BULWARK'S shell (they can hit the shooter now).
+          // Bigs/heavies punch through; a frozen plate deflects nothing.
+          if (tankDef(t).plate && !s.big && !s.heavy && !(t.frozenT > 0)
+              && Math.abs(angDiff(t.a, Math.atan2(s.y - t.y, s.x - t.x))) < 1.05) {
+            const n = Math.atan2(s.y - t.y, s.x - t.x);
+            const v = Math.hypot(s.vx, s.vy);
+            const dot = s.vx * Math.cos(n) + s.vy * Math.sin(n);
+            s.vx -= 2 * dot * Math.cos(n); s.vy -= 2 * dot * Math.sin(n);
+            const sp = Math.hypot(s.vx, s.vy) || 1;
+            s.vx *= v / sp; s.vy *= v / sp;
+            s.x = t.x + Math.cos(n) * (s.r + (t.r || TANK_R) + 2);
+            s.y = t.y + Math.sin(n) * (s.r + (t.r || TANK_R) + 2);
+            s.owner = t.i; s.team = t.team; s.col = t.col;
+            sfx.bounce();
+            spawnParticles(s.x, s.y, 7, '#ffd166', 130, 0.25);
+            continue;
+          }
           damageTank(t);
           dead = true; break;
         }
@@ -2680,15 +2725,18 @@ function renderGarage() {
     const btn = document.createElement('button');
     // TEMPEST is earned, not just bought: prove yourself in the storm first
     const waveLocked = !owned && d.reqWave && (profile.bestWave || 0) < d.reqWave;
+    const battleLocked = !owned && d.reqBattle && !profile.done[d.reqBattle];
     if (sel) { btn.className = 'cardBtn sel'; btn.textContent = 'SELECTED'; }
     else if (owned) { btn.className = 'cardBtn own'; btn.textContent = 'SELECT'; }
     else if (waveLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'SURVIVE WAVE ' + d.reqWave; }
+    else if (battleLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'BEAT BATTLE ' + d.reqBattle; }
     else if (profile.scrap >= d.cost) { btn.className = 'cardBtn'; btn.textContent = 'BUY ' + d.cost; }
     else { btn.className = 'cardBtn cant'; btn.textContent = d.cost + ' SCRAP'; }
     btn.onclick = () => {
       if (profile.tank === k) return;
       if (!profile.owned[k]) {
         if (d.reqWave && (profile.bestWave || 0) < d.reqWave) return;
+        if (d.reqBattle && !profile.done[d.reqBattle]) return;
         if (profile.scrap < d.cost) return;
         profile.scrap -= d.cost;
         profile.owned[k] = true;

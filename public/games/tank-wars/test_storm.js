@@ -437,6 +437,66 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.surv.on = false;
 }
 
+// ---------- 20. NEW EARNABLE TANKS: BULWARK + HAILSTORM ----------
+{
+  check('tanks: 10 in the garage order', tw.TANKS && Object.keys(tw.TANKS).length === 10);
+  check('bulwark: gated on beating battle 20', tw.TANKS.bulwark.reqBattle === 20 && tw.TANKS.bulwark.cost === 5000);
+  check('hailstorm: gated on storm wave 15', tw.TANKS.hailstorm.reqWave === 15 && tw.TANKS.hailstorm.cost === 7000);
+
+  // HAILSTORM: first bounce shatters into 2 splinters, second bounce doesn't
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.setPhase('play');
+  tw.shells.length = 0;
+  tw.shells.push({ id: 90001, x: 100, y: 8, vx: 0, vy: -200, r: 4.5, owner: 0, team: 0,
+                   age: 0, grace: 0, big: false, heavy: false, smash: 0, bounces: -1,
+                   accel: 0, life: 9, col: '#fff', frag: true });
+  for (let i = 0; i < 12; i++) tw.update(1 / 60);   // hits the top border -> bounce
+  const frags = tw.shells.filter(s => s.r === 3 && s.life <= 2);
+  check('hailstorm: bounce spawns 2 splinters', frags.length === 2, tw.shells.length);
+  check('hailstorm: parent survives, flagged fragged', tw.shells.some(s => s.frag && s.fragged));
+  check('hailstorm: splinters die on their own bounce (bounces 0)', frags.every(s => s.bounces === 0));
+
+  // BULWARK: front plate deflects and CONVERTS the shell; rear hit kills
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.setPhase('play');
+  const me2 = tw.tanks[0], foe2 = tw.tanks[1];
+  me2.kind = 'bulwark'; me2.x = 300; me2.y = 300; me2.a = 0;   // facing right
+  foe2.x = 600; foe2.y = 600;                                   // out of the way
+  tw.shells.length = 0;
+  tw.shells.push({ id: 90002, x: 340, y: 300, vx: -240, vy: 0, r: 4, owner: 1, team: 1,
+                   age: 0, grace: 0, big: false, heavy: false, smash: 0, bounces: -1,
+                   accel: 0, life: 9, col: '#f00' });
+  for (let i = 0; i < 10; i++) tw.update(1 / 60);
+  const defl = tw.shells.find(s => s.id === 90002);
+  check('bulwark: frontal shell deflected, tank alive', me2.alive && defl && defl.vx > 0);
+  check('bulwark: deflected shell switches sides', defl && defl.owner === 0 && defl.team === 0);
+  // rear shot goes through
+  tw.shells.length = 0;
+  tw.shells.push({ id: 90003, x: 260, y: 300, vx: 240, vy: 0, r: 4, owner: 1, team: 1,
+                   age: 0, grace: 0, big: false, heavy: false, smash: 0, bounces: -1,
+                   accel: 0, life: 9, col: '#f00' });
+  for (let i = 0; i < 10; i++) tw.update(1 / 60);
+  check('bulwark: rear hit still kills', me2.alive === false);
+
+  // big shots punch through the plate from the front
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.setPhase('play');
+  const me3 = tw.tanks[0];
+  me3.kind = 'bulwark'; me3.x = 300; me3.y = 300; me3.a = 0;
+  tw.tanks[1].x = 600; tw.tanks[1].y = 600;
+  tw.shells.length = 0;
+  tw.shells.push({ id: 90004, x: 340, y: 300, vx: -240, vy: 0, r: 9, owner: 1, team: 1,
+                   age: 0, grace: 0, big: true, heavy: true, smash: 2, bounces: -1,
+                   accel: 0, life: 9, col: '#f00' });
+  for (let i = 0; i < 10; i++) tw.update(1 / 60);
+  check('bulwark: big shot punches through the plate', me3.alive === false);
+
+  // deep-storm pool includes the new hulls
+  const srcTxt = m[1];
+  check('storm pool: hailstorm at w16, bulwark at w18', srcTxt.includes("w >= 16) pool.push('hailstorm')") && srcTxt.includes("w >= 18) pool.push('bulwark')"));
+  check('sprites: manifest entries present', /bulwark: \{ w: \d+, h: 128/.test(srcTxt) && /hailstorm: \{ w: \d+, h: 128/.test(srcTxt));
+}
+
 // ---------- 19. CAMPAIGN ACT II ----------
 {
   check('act2: campaign is 20 battles', tw.CAMPAIGN.length === 20);
