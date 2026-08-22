@@ -2,7 +2,7 @@
 // on a ~30s drive ticker, standings/roster/leaders/schedule views, localStorage saves.
 import { makeRng } from "./rng.mjs";
 import { buildLeague, emptyStats, depthChart, teamUnits, TEMPLATE, ATTR_DEFS, attr, ensureAttrs, bumpNextId } from "./players.mjs";
-import { simGame, matchupEdges, gameWeather } from "./sim.mjs";
+import { simGame, matchupEdges, gameWeather, STADIUM } from "./sim.mjs";
 import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, nextPlayoffRound } from "./season.mjs";
 import { TEAMS, TEAM_BY_ID } from "./data_teams.mjs";
 import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd } from "./sfx.mjs";
@@ -722,6 +722,14 @@ function render() {
 // ~30s pacing (user decision): drive log ≈ 22-24 entries → ~1.15s each. Skippable.
 function runTicker(myGame, results, done) {
   const overlay = $("#ticker");
+  // Weather-matched stadium backdrop (Meshy paintings). Missing file -> the
+  // gradient just sits on the flat dark background, exactly as before.
+  const wxT = myGame.weather ? myGame.weather.type : null;
+  const scene = STADIUM.dome.includes(myGame.home) ? "dome"
+    : wxT === "snow" ? "snow" : wxT === "rain" ? "rain"
+    : (wxT === "cold" || wxT === "wind") ? "cold" : "clear";
+  overlay.style.backgroundImage =
+    `linear-gradient(rgba(10,12,16,.82), rgba(10,12,16,.93)), url('img/stadium_${scene}.png')`;
   overlay.classList.remove("hidden");
   startCrowd();
   const home = myGame.home, away = myGame.away;
