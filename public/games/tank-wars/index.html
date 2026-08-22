@@ -292,6 +292,21 @@ const CAMPAIGN = [
   { id: 8,  name: 'CROSSFIRE',      foe: 'viper',   ai: 'ace',     arena: 'city',      reward: 110 },
   { id: 9,  name: 'TILT!',          foe: 'pinball', ai: 'ace',     arena: 'shifting',  reward: 130 },
   { id: 10, name: 'THE GENERAL',    foe: 'photon',  ai: 'ace',     arena: 'corridors', reward: 150 },
+  // ---- ACT II: THE STORM CAMPAIGN — the survival bosses come to you ----
+  { id: 11, name: 'MINE YOUR STEP', foe: 'minelayer', ai: 'officer', arena: 'lava',      reward: 70,  act: 2 },
+  { id: 12, name: 'NOW YOU SEE ME', foe: 'ghost',     ai: 'officer', arena: 'snow',      reward: 80,  act: 2 },
+  { id: 13, name: 'THE WARLORD',    foe: 'scout',     ai: 'officer', arena: 'pillars',   reward: 110, act: 2,
+    boss: 'warlord', bossHp: 4, bossName: 'THE WARLORD', rounds: 2 },
+  { id: 14, name: 'TWIN THUNDER',   foe: 'tempest',   ai: 'officer', arena: 'city',      reward: 90,  act: 2 },
+  { id: 15, name: 'THE JUGGERNAUT', foe: 'mammoth',   ai: 'officer', arena: 'dense',     reward: 120, act: 2,
+    boss: 'juggernaut', bossHp: 5, bossName: 'THE JUGGERNAUT', rounds: 2 },
+  { id: 16, name: 'GHOST TOWN',     foe: 'ghost',     ai: 'ace',     arena: 'city',      reward: 100, act: 2 },
+  { id: 17, name: 'THE VORTEX',     foe: 'photon',    ai: 'ace',     arena: 'corridors', reward: 130, act: 2,
+    boss: 'vortex', bossHp: 5, bossName: 'THE VORTEX', rounds: 2 },
+  { id: 18, name: 'STORM DRAIN',    foe: 'tempest',   ai: 'ace',     arena: 'shifting',  reward: 110, act: 2 },
+  { id: 19, name: 'COLD SNAP',      foe: 'minelayer', ai: 'ace',     arena: 'snow',      reward: 120, act: 2 },
+  { id: 20, name: 'THE PHANTOM',    foe: 'ghost',     ai: 'ace',     arena: 'jungle',    reward: 200, act: 2,
+    boss: 'phantom', bossHp: 6, bossName: 'THE PHANTOM', rounds: 2 },
 ];
 
 // ============================== PROFILE (persistent) ==============================
@@ -933,7 +948,7 @@ function damageTank(t) {
     shake = Math.max(shake, 6); sfx.crumble();
     if (t.boss && t.boss.type === 'vortex' && !t.boss.summoned && t.hp <= Math.ceil(t.boss.maxHp / 2)) {
       t.boss.summoned = true;
-      survSummonMinions(2);
+      survSummonMinions(surv.on ? 2 : 1);   // campaign VORTEX calls one helper, not two
     }
     return;
   }
@@ -1103,7 +1118,7 @@ function survBossThink(t, foe, dt) {
     // radial shell bursts on a timer — stand in a doorway or die in the open
     B.burstCd = (B.burstCd === undefined ? 2.4 : B.burstCd) - dt;
     if (B.burstCd <= 0 && phase === 'play') {
-      B.burstCd = Math.max(2.1, 3.6 - surv.wave * 0.04);
+      B.burstCd = Math.max(2.1, 3.6 - (surv.on ? surv.wave : 8) * 0.04);
       survRadialBurst(t, 10);
     }
     aiThink(t, foe, dt);
@@ -1141,7 +1156,7 @@ function survBossThink(t, foe, dt) {
     // every ~3.2s it decloaks with a 3-shell spectral fan, then fades again.
     B.fanCd = (B.fanCd === undefined ? 2.6 : B.fanCd) - dt;
     if (B.fanCd <= 0 && phase === 'play' && foe.alive && hasLOS(t.x, t.y, foe.x, foe.y)) {
-      B.fanCd = Math.max(2.6, 3.6 - surv.wave * 0.02);
+      B.fanCd = Math.max(2.6, 3.6 - (surv.on ? surv.wave : 10) * 0.02);
       t.cloakT = 0;                        // flash into view for the volley
       survFanBurst(t, foe, 3);
     }
@@ -1304,6 +1319,14 @@ function startRound() {
   genMaze(roundArena);
   genPools();
   spawnTanks();
+  // Act II boss battles: dress the foe as a storm boss — HP bar, big silhouette,
+  // and the same special-attack brain survival uses (survBossThink is generic).
+  if (matchCfg.mode === 'campaign' && matchCfg.battle && matchCfg.battle.boss) {
+    const bt = tanks[1], bdef = matchCfg.battle;
+    bt.boss = { type: bdef.boss, maxHp: bdef.bossHp, summoned: false };
+    bt.hp = bdef.bossHp;
+    bt.r = 18; bt.col = BOSS_COL; bt.glow = BOSS_GLOW;
+  }
   shells = []; beams = []; mines = []; particles = []; treads = []; powerup = null; confetti = [];
   powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
   roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
@@ -1311,7 +1334,7 @@ function startRound() {
   netSendRound();   // online host: ship maze + spawns + scores to the guest (no-op otherwise)
 }
 function endRound() {
-  const a = tanks[0].alive, b = tanks[1].alive;
+  const a = tanks[0].alive, b = tanks.some(t => t.i > 0 && t.team === 1 && t.alive);
   phase = 'roundover'; phaseT = 0;
   let winnerIdx = -1;
   if (a === b) { banner = 'DRAW!'; bannerCol = '#dfe8ff'; matchScrap += 2; }
@@ -1854,7 +1877,8 @@ function update(dt) {
     }
     if (t.isAI) {
       const ox = t.x, oy = t.y;
-      const foe = surv.on ? nearestFoe(t) : tanks[1 - t.i];
+      // outside survival, extra AI tanks (campaign VORTEX minions) hunt the player
+      const foe = surv.on ? nearestFoe(t) : (t.i > 1 ? tanks[0] : tanks[1 - t.i]);
       if (t.boss) survBossThink(t, foe, dt);
       else aiThink(t, foe, dt);
       t.lastVX = (t.x - ox) / dt; t.lastVY = (t.y - oy) / dt;
@@ -1897,7 +1921,8 @@ function update(dt) {
       if (!tanks.some(t => t.team === 0 && t.alive)) survOver();
       else if (!tanks.some(t => t.team === 1 && t.alive)) survWaveCleared();
     }
-  } else if (phase === 'play' && (!tanks[0].alive || !tanks[1].alive)) endRound();
+  } else if (phase === 'play' &&
+             (!tanks[0].alive || !tanks.some(t => t.i > 0 && t.team === 1 && t.alive))) endRound();
   netHostTick();   // online host: snapshots @20/s + dirty-wall broadcasts (no-op offline)
 }
 function updateParticles(dt) {
@@ -2229,11 +2254,14 @@ function render() {
       const n = Math.ceil(1.5 - phaseT);
       const label = phaseT < 1.5 ? String(Math.max(1, n)) : 'GO!';
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
+      const cbBoss = matchCfg.mode === 'campaign' && matchCfg.battle && matchCfg.battle.boss;
       drawBanner(surv.on
         ? ('WAVE ' + surv.wave + ' · ' + (surv.bossName ? 'BOSS: ' + surv.bossName
             : surv.enemiesAtStart + (surv.enemiesAtStart > 1 ? ' ENEMIES' : ' ENEMY'))
             + ' · ' + (ARENA_LABELS[roundArena] || ''))
-        : (ARENA_LABELS[roundArena] || ''), surv.on && surv.bossName ? BOSS_COL : '#8fa5cf', 20, H / 2 + 64);
+        : (cbBoss ? ('BOSS: ' + matchCfg.battle.bossName + ' · ' + (ARENA_LABELS[roundArena] || ''))
+                  : (ARENA_LABELS[roundArena] || '')),
+        (surv.on && surv.bossName) || cbBoss ? BOSS_COL : '#8fa5cf', 20, H / 2 + 64);
       const fxNote = roundArena === 'snow' ? 'deep snow — all tanks 15% slower'
         : roundArena === 'lava' ? 'molten pools — tanks blocked, shells fly over' : '';
       if (fxNote) drawBanner(fxNote, '#6b7ea3', 14, H / 2 + 92);
@@ -2723,7 +2751,17 @@ function renderCampaign() {
   const list = document.getElementById('campaignList');
   list.innerHTML = '';
   const unlocked = campaignUnlockedThrough();
+  let lastAct = 0;
   for (const b of CAMPAIGN) {
+    const act = b.act || 1;
+    if (act !== lastAct) {
+      lastAct = act;
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'margin:10px 4px 4px;font-weight:900;letter-spacing:2px;font-size:13px;color:' +
+        (act === 2 ? '#ff8f9f' : '#9fb3d9');
+      hdr.textContent = act === 2 ? '⚡ ACT II — THE STORM CAMPAIGN' : 'ACT I';
+      list.appendChild(hdr);
+    }
     const locked = b.id > unlocked;
     const stars = profile.stars[b.id] || 0;
     const row = document.createElement('div');
@@ -2731,7 +2769,7 @@ function renderCampaign() {
     row.innerHTML =
       '<div class="cnum">' + b.id + '</div>' +
       '<div class="cinfo"><div class="cname">' + b.name + '</div>' +
-      '<div class="cmeta">vs ' + TANKS[b.foe].name + ' &bull; ' + b.ai.toUpperCase() + ' &bull; ' +
+      '<div class="cmeta">' + (b.boss ? '<b style="color:#ff8f9f">BOSS BATTLE</b> &bull; first to ' + b.rounds + ' &bull; ' : 'vs ' + TANKS[b.foe].name + ' &bull; ') + b.ai.toUpperCase() + ' &bull; ' +
       b.arena.toUpperCase() + (profile.done[b.id] ? '' : ' &bull; reward ' + b.reward + ' scrap') + '</div></div>' +
       '<div class="cstars">' + '★'.repeat(stars) + '☆'.repeat(3 - stars) + '</div>';
     const btn = document.createElement('button');
@@ -2739,7 +2777,7 @@ function renderCampaign() {
     btn.textContent = locked ? 'LOCKED' : (profile.done[b.id] ? 'REPLAY' : 'BATTLE');
     if (!locked) btn.onclick = () => {
       audioInit();
-      startMatch({ mode: 'campaign', aiLevel: b.ai, arena: b.arena, foeTank: b.foe, battle: b });
+      startMatch({ mode: 'campaign', aiLevel: b.ai, arena: b.arena, foeTank: b.foe, battle: b, roundsToWin: b.rounds });
     };
     row.appendChild(btn);
     list.appendChild(row);

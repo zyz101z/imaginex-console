@@ -437,9 +437,46 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.surv.on = false;
 }
 
-// ---------- 16. campaign regression: config untouched ----------
-check('campaign: still 10 battles', tw.CAMPAIGN.length === 10);
-check('campaign: rewards intact', tw.CAMPAIGN[9].reward === 150);
+// ---------- 19. CAMPAIGN ACT II ----------
+{
+  check('act2: campaign is 20 battles', tw.CAMPAIGN.length === 20);
+  check('act2: Act I rewards untouched', tw.CAMPAIGN[9].reward === 150 && tw.CAMPAIGN[9].name === 'THE GENERAL');
+  check('act2: four boss battles', tw.CAMPAIGN.filter(b => b.boss).length === 4);
+  check('act2: finale is THE PHANTOM at 200 scrap', tw.CAMPAIGN[19].boss === 'phantom' && tw.CAMPAIGN[19].reward === 200);
+
+  // boss battle decoration: foe becomes a storm boss with HP bar + first-to-2
+  const warlordBattle = tw.CAMPAIGN.find(b => b.id === 13);
+  tw.startMatch({ mode: 'campaign', aiLevel: warlordBattle.ai, arena: warlordBattle.arena,
+                  foeTank: warlordBattle.foe, battle: warlordBattle, roundsToWin: warlordBattle.rounds });
+  check('act2: boss foe decorated (type/hp/r)', tw.tanks[1].boss && tw.tanks[1].boss.type === 'warlord'
+        && tw.tanks[1].hp === 4 && tw.tanks[1].r === 18);
+  check('act2: boss battles are first-to-2', tw.matchCfg.roundsToWin === 2);
+  // chip the boss: damage peels hp, doesn't kill
+  tw.setPhase('play');
+  tw.damageTank(tw.tanks[1]);
+  check('act2: boss soaks a hit (hp bar)', tw.tanks[1].alive && tw.tanks[1].hp === 3);
+
+  // VORTEX summons ONE minion in campaign, and rounds only end when it's dead too
+  const vortexBattle = tw.CAMPAIGN.find(b => b.id === 17);
+  tw.startMatch({ mode: 'campaign', aiLevel: vortexBattle.ai, arena: vortexBattle.arena,
+                  foeTank: vortexBattle.foe, battle: vortexBattle, roundsToWin: vortexBattle.rounds });
+  tw.setPhase('play');
+  const vb = tw.tanks[1];
+  while (vb.hp > Math.ceil(vb.boss.maxHp / 2)) tw.damageTank(vb);
+  check('act2: campaign vortex summons 1 minion', tw.tanks.length === 3 && tw.tanks[2].team === 1);
+  // minion AI must not crash outside survival (foe = player, not tanks[-1])
+  let crashed = false;
+  try { for (let i = 0; i < 30; i++) tw.update(1 / 60); } catch (e) { crashed = true; }
+  check('act2: minion AI runs without survival', !crashed);
+  // boss down, minion alive -> round keeps going; minion down -> round over
+  vb.alive = false;
+  tw.setPhase('play');
+  tw.update(1 / 60);
+  check('act2: round survives while a minion lives', tw.phase === 'play');
+  tw.tanks[2].alive = false;
+  tw.update(1 / 60);
+  check('act2: round ends when the last minion falls', tw.phase === 'roundover');
+}
 
 console.log(`\n=== stormtest: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

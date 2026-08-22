@@ -1,7 +1,9 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
-0. **CO-OP STORM needs a real dad↔son playtest** (2026-08-22): wave difficulty with 2 humans
+0. **ACT II playtest**: boss-battle difficulty solo (WARLORD hp4 first-to-2 as the on-ramp),
+   whether PHANTOM finale reads fairly with cloak + fan, Act II reward pacing toward TEMPEST 6k.
+0b. **CO-OP STORM needs a real dad↔son playtest** (2026-08-22): wave difficulty with 2 humans
    (enemy counts unchanged — with two tanks it's EASIER early; if too easy, scale
    `survPlan.count` +1 when net.coop), draft alternation feel (odd=host, even=guest),
    revive-by-wave pacing, and whether the guest's TEMPEST unlock via co-op bestWave feels earned.
@@ -12,6 +14,7 @@
 ## Session log — 2026-08-22
 | Ver | Commit | What |
 |---|---|---|
+| ACT2 | (this) | **CAMPAIGN ACT II — THE STORM CAMPAIGN** (battles 11-20, single-player update): the survival bosses become scripted campaign boss fights. New foes from the modern roster (minelayer/ghost/tempest) + 4 BOSS BATTLES (13 WARLORD hp4 · 15 JUGGERNAUT hp5 · 17 VORTEX hp5 w/ 1-minion summon · finale 20 THE PHANTOM hp6, reward 200; total Act II purse 1,130 scrap). Boss battles are FIRST TO 2 (`b.rounds`); `startRound` decorates tanks[1] with boss/hp/r/BOSS_COL — survBossThink is generic so the brains came free; burst/fan cooldowns guard stale `surv.wave` outside survival. Round-end now requires ALL team-1 tanks down (vortex minions), and `endRound` winner check generalized. ⚠️ FIXED latent crash: non-survival AI at i>1 computed foe=tanks[1-i]→tanks[-1] (minions) — now i>1 ⇒ hunt tanks[0]. Campaign screen: ACT I / ⚡ ACT II headers, red BOSS BATTLE rows, countdown names the boss. Tests **108** (9 new: act2 config, boss decoration, hp soak, campaign vortex minion, minion-AI no-crash, minion round-end rule). |
 | COOP | (this) | **⚡ ONLINE CO-OP STORM** — the son's favorite mode, together: host runs the full survival sim; guest is a team-0 teammate (isRemote slot 1, spawns in the neighbouring cell). Enemies target `nearestFoe` (closest living team-0). Wave fails only when the WHOLE team is down — a downed player spectates and revives next wave. Shared perk pool, **alternating drafts** (odd wave = host, even = guest; other side sees "TEAMMATE IS CHOOSING…"); guest picks travel as `spick`. New msgs: `swave` (walls/pools/tanks incl. team+bossHp), `sdraft`, `spick`, `sover` (guest banks the SAME run scrap + bestWave → TEMPEST gate opens for the guest too). Snapshot v2: serTank +hp/frozenT/telegraphT (11 fields), serShell +team (9) — guest interp generalized to N tanks, death FX loops all, survival sidecar `sv:[wave,run]` drives guest HUD. ❄ FREEZE now allowed in co-op (frozen rides the snapshot; still out of versus). Disconnect banking: co-op banks `surv.run` on both sides. Rematch = host restarts storm, guest waits. **W20 BOSS: THE PHANTOM** — ghost hull (cloaks naturally), decloaks every ~3.2s for a 3-shell spectral fan (`survFanBurst`); boss cycle now 4 (w25 wraps to warlord). **In-match RTT chip** (bottom-right, teal<80/amber<150/red) fed by the existing 1s ping loop. Menu: gold "⚡ CO-OP STORM" button beside START BATTLE (host, on connect). Tests: test_storm.js **99 checks** (28 new: co-op host build, nearestFoe, team-down, snapshot v2 arity, draft alternation + spick routing, guest swave/interp/sdraft/sover, phantom + 4-boss cycle, freeze pool split). No Meshy this session — pure systems work, existing art carried it. |
 
 ### (previous queue, 2026-07-25 — items 0-3 kept for reference)
