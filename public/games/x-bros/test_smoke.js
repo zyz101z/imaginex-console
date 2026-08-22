@@ -34,6 +34,7 @@ const PhaserStub = {
 
 const sandbox = {
   window: { AudioContext: FakeAudioContext },
+  navigator: { maxTouchPoints: 0 },
   document: { createElement: () => ({ getContext: () => null, width: 0, height: 0 }) },
   Phaser: PhaserStub,
   setInterval: (fn, ms) => ({ fn, ms }),
@@ -49,10 +50,31 @@ const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1
 const src = scripts[scripts.length - 1];
 // Script consts are top-level (no IIFE), so an appended shim in the same script
 // scope can see them and export what we need.
-vm.runInContext(src + "\n;globalThis.__X = { ROSTER, DIFFICULTY, STAGES, SFX, CpuController, zeroInput, W, ITEMS };", sandbox);
+vm.runInContext(src + "\n;globalThis.__X = { ROSTER, DIFFICULTY, STAGES, SFX, CpuController, zeroInput, W, ITEMS, TOUCH, HumanController };", sandbox);
 check("script evaluates", true);
 
-const { ROSTER, DIFFICULTY, STAGES, SFX, W, CpuController, zeroInput, ITEMS } = sandbox.__X;
+const { ROSTER, DIFFICULTY, STAGES, SFX, W, CpuController, zeroInput, ITEMS, TOUCH, HumanController } = sandbox.__X;
+
+// ---- Touch controls: virtual pad merges into HumanController ----
+const mkKey = () => ({ isDown: false });
+const keys = { left: mkKey(), right: mkKey(), up: mkKey(), down: mkKey(),
+               attack: mkKey(), special: mkKey(), shield: mkKey() };
+const hc = new HumanController(keys, true);
+TOUCH.right = true; TOUCH.attack = true; TOUCH.jump = true;
+let hin = hc.poll();
+check("touch right merges", hin.right === true);
+check("touch attack edge fires", hin.attackPressed === true && hin.attackDown === true);
+check("touch jump edge fires", hin.jumpPressed === true);
+hin = hc.poll();
+check("touch edges are one-frame", hin.attackPressed === false && hin.jumpPressed === false);
+TOUCH.attack = false;
+hin = hc.poll();
+check("touch attack release edge", hin.attackReleased === true);
+TOUCH.right = TOUCH.jump = false;
+const hcNoTouch = new HumanController(keys, false);
+TOUCH.left = true;
+check("non-touch controller ignores TOUCH", hcNoTouch.poll().left === false);
+TOUCH.left = false;
 check("3 item types", ITEMS.length === 3 && ITEMS.map(i => i.key).join() === "star,taco,bomb");
 check("stages have music leads", STAGES.every(s => typeof s.lead === "number" && s.lead >= 0 && s.lead <= 2));
 

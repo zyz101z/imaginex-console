@@ -259,6 +259,11 @@ class SoundManager {
 }
 const SFX = new SoundManager();
 
+// Touch support (iPad etc.): virtual buttons write into TOUCH; HumanController
+// merges it with the keyboard. Menus also accept taps.
+const IS_TOUCH = ("ontouchstart" in window) || (navigator.maxTouchPoints || 0) > 0;
+const TOUCH = { left: false, right: false, jump: false, attack: false, special: false, shield: false, down: false };
+
 const W = 1280, H = 720;
 const GROUND_Y = 640;
 const DEATH_BOTTOM = 880, DEATH_LEFT = -180, DEATH_RIGHT = W + 180;
@@ -429,15 +434,17 @@ class TitleScene extends Phaser.Scene {
 
     // Bottom pill so the prompt reads over the busy art
     this.add.rectangle(cx, 686, 420, 44, 0x0a1220, 0.65).setStrokeStyle(2, 0x3a5a8a);
-    const press = this.add.text(cx, 686, "PRESS ENTER", {
+    const press = this.add.text(cx, 686, IS_TOUCH ? "TAP TO START" : "PRESS ENTER", {
       fontFamily: "Press Start 2P", fontSize: "20px", color: "#ffffff"
     }).setOrigin(0.5);
     this.tweens.add({ targets: press, alpha: 0.35, duration: 600, yoyo: true, repeat: -1 });
 
-    this.input.keyboard.once("keydown-ENTER", () => {
+    const go = () => {
       SFX.play("confirm");
       this.scene.start("select");
-    });
+    };
+    this.input.keyboard.once("keydown-ENTER", go);
+    this.input.once("pointerdown", go);
   }
 }
 
@@ -503,6 +510,11 @@ class SelectScene extends Phaser.Scene {
         fontFamily: "Press Start 2P", fontSize: "11px", color: "#ffffff",
         align: "center", wordWrap: { width: slotW - 10 }
       }).setOrigin(0.5, 0);
+      // Touch: tap to select, tap the selected card again to confirm
+      bg.setInteractive().on("pointerdown", () => {
+        if (this.p1Index === i) { this.confirmPick(); }
+        else { this.p1Index = i; SFX.play("select"); this.refresh(); }
+      });
       return { bg, portrait, name, x, y };
     });
 
@@ -527,11 +539,22 @@ class SelectScene extends Phaser.Scene {
     this.p1Pick = 0;
     this.modeLabel = this.add.text(cx, 585, "", {
       fontFamily: "Press Start 2P", fontSize: "13px", color: "#9ad6ff"
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setInteractive().on("pointerdown", () => {
+      this.mode = this.mode === "cpu" ? "2p" : "cpu";
+      this.pickPhase = 1;
+      this.cursor.setStrokeStyle(4, 0xffe066);
+      SFX.play("select");
+      this.refresh();
+    });
     this.difficulty = "Normal";
     this.difficultyLabel = this.add.text(cx, 618, "", {
       fontFamily: "Press Start 2P", fontSize: "20px", color: "#ffffff"
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setInteractive().on("pointerdown", () => {
+      if (this.mode !== "cpu") return;
+      this.difficulty = nextDiff(this.difficulty, +1);
+      SFX.play("select");
+      this.refresh();
+    });
     this.add.text(cx, 648, "[Up / Down]  [T: mode]", {
       fontFamily: "Press Start 2P", fontSize: "10px", color: "#778899"
     }).setOrigin(0.5);
@@ -627,6 +650,12 @@ class SelectScene extends Phaser.Scene {
     const confirmPressed = Phaser.Input.Keyboard.JustDown(this.keyConfirm);
     const enterPressed = Phaser.Input.Keyboard.JustDown(this.keyEnter);
     if ((confirmPressed && this.confirmArmed) || (enterPressed && this.enterArmed)) {
+      this.confirmPick();
+    }
+  }
+
+  confirmPick() {
+    {
       SFX.play("confirm");
       if (this.mode === "2p" && this.pickPhase === 1) {
         // P1 locked in — same cursor now picks for P2 (red ring)
@@ -871,6 +900,8 @@ class BattleScene extends Phaser.Scene {
 
     this.hud = new HUD(this, this.p1, this.p2);
 
+    if (IS_TOUCH) this.buildTouchPad();
+
     // Off-screen indicators: a colored arrow at the top edge tracks a launched fighter
     this.offArrows = [this.p1, this.p2].map(f =>
       this.add.triangle(0, 18, 0, 22, 11, 0, 22, 22, f.character.color, 0.95)
@@ -883,7 +914,7 @@ class BattleScene extends Phaser.Scene {
       down: k.addKey("DOWN"), attack: k.addKey("Z"), special: k.addKey("X"),
       shield: k.addKey("C")
     };
-    this.p1Controller = new HumanController(this.p1Keys);
+    this.p1Controller = new HumanController(this.p1Keys, IS_TOUCH);
     if (this.mode === "2p") {
       this.p2Keys = {
         left: k.addKey("A"), right: k.addKey("D"), up: k.addKey("W"),
@@ -922,7 +953,7 @@ class BattleScene extends Phaser.Scene {
     // P pauses (handy mid-match in a living room)
     this.userPaused = false;
     this.pauseOverlay = null;
-    k.on("keydown-P", () => {
+    this.togglePause = () => {
       if (this.gameOver) return;
       this.userPaused = !this.userPaused;
       if (this.userPaused) {
@@ -940,7 +971,8 @@ class BattleScene extends Phaser.Scene {
         this.pauseOverlay.destroy();
         this.pauseOverlay = null;
       }
-    });
+    };
+    k.on("keydown-P", () => this.togglePause());
     k.on("keydown-M", () => {
       const muted = SFX.toggleMute();
       const txt = this.add.text(W / 2, 60, muted ? "SOUND OFF" : "SOUND ON", {
@@ -1020,6 +1052,36 @@ class BattleScene extends Phaser.Scene {
       }
     }
     return g;
+  }
+
+  // On-screen controls for touch devices. Buttons write into the global TOUCH
+  // flags; P1's HumanController merges them with the keyboard. Placed above the
+  // HUD cards so thumbs don't cover the score. (No down-tilts on touch — hold
+  // ATK for the smash instead.)
+  buildTouchPad() {
+    const mk = (x, y, label, flag, r = 48) => {
+      const c = this.add.circle(x, y, r, 0xffffff, 0.10).setStrokeStyle(3, 0xffffff, 0.35)
+        .setInteractive().setDepth(50);
+      this.add.text(x, y, label, {
+        fontFamily: "Press Start 2P", fontSize: "22px", color: "#ffffff"
+      }).setOrigin(0.5).setAlpha(0.75).setDepth(50);
+      const on = () => { TOUCH[flag] = true; c.setFillStyle(0xffffff, 0.28); };
+      const off = () => { TOUCH[flag] = false; c.setFillStyle(0xffffff, 0.10); };
+      c.on("pointerdown", on);
+      c.on("pointerup", off);
+      c.on("pointerout", off);
+      c.on("pointerupoutside", off);
+    };
+    mk(85, 515, "◀", "left");
+    mk(205, 515, "▶", "right");
+    mk(W - 90, 515, "▲", "jump");
+    mk(W - 205, 460, "A", "attack");
+    mk(W - 320, 515, "S", "special");
+    mk(W - 205, 570, "D", "shield");
+    // pause button top-right
+    this.add.text(W - 36, 58, "⏸", { fontFamily: "Press Start 2P", fontSize: "26px", color: "#ffffff" })
+      .setOrigin(0.5).setAlpha(0.7).setDepth(50)
+      .setInteractive().on("pointerdown", () => this.togglePause());
   }
 
   // Freeze the action for a few frames — the classic fighting-game hit pause.
@@ -1175,9 +1237,10 @@ class BattleScene extends Phaser.Scene {
     this.add.text(cx, H / 2 + 58, "ENTER = rematch    ESC = roster", {
       fontFamily: "Press Start 2P", fontSize: "14px", color: "#ffffff"
     }).setOrigin(0.5);
-    this.input.keyboard.once("keydown-ENTER", () =>
-      this.scene.restart({ p1: this.p1Char, p2: this.p2Char, difficulty: this.difficulty, mode: this.mode })
-    );
+    const rematch = () =>
+      this.scene.restart({ p1: this.p1Char, p2: this.p2Char, difficulty: this.difficulty, mode: this.mode });
+    this.input.keyboard.once("keydown-ENTER", rematch);
+    if (IS_TOUCH) this.time.delayedCall(700, () => this.input.once("pointerdown", rematch));
   }
 }
 
@@ -1187,26 +1250,34 @@ class BattleScene extends Phaser.Scene {
 // jumpPressed / attackPressed are edge-triggered (one frame per "press").
 
 class HumanController {
-  constructor(keys) {
+  constructor(keys, useTouch = false) {
     this.keys = keys;
+    this.useTouch = useTouch;      // P1 on a touch device also reads the TOUCH pad
     // Require Z to be released once so the select-screen confirm press
     // doesn't bleed in as an instant attack on frame 1.
     this.attackArmed = false;
+    this.tPrev = { jump: false, attack: false, special: false };
   }
   poll() {
     if (!this.keys.attack.isDown) this.attackArmed = true;
     const attackPressed = Phaser.Input.Keyboard.JustDown(this.keys.attack);
+    const T = this.useTouch ? TOUCH : null;
+    const tJumpP = !!(T && T.jump && !this.tPrev.jump);
+    const tAtkP = !!(T && T.attack && !this.tPrev.attack);
+    const tAtkR = !!(T && !T.attack && this.tPrev.attack);
+    const tSpP = !!(T && T.special && !this.tPrev.special);
+    if (T) { this.tPrev.jump = T.jump; this.tPrev.attack = T.attack; this.tPrev.special = T.special; }
     return {
-      left:  this.keys.left.isDown,
-      right: this.keys.right.isDown,
-      up:    this.keys.up.isDown,
+      left:  this.keys.left.isDown || !!(T && T.left),
+      right: this.keys.right.isDown || !!(T && T.right),
+      up:    this.keys.up.isDown || !!(T && T.jump),
       down:  this.keys.down.isDown,
-      jumpPressed:    Phaser.Input.Keyboard.JustDown(this.keys.up),
-      attackPressed:  attackPressed && this.attackArmed,
-      attackDown:     this.keys.attack.isDown && this.attackArmed,
-      attackReleased: Phaser.Input.Keyboard.JustUp(this.keys.attack),
-      specialPressed: Phaser.Input.Keyboard.JustDown(this.keys.special),
-      shield: this.keys.shield.isDown,
+      jumpPressed:    Phaser.Input.Keyboard.JustDown(this.keys.up) || tJumpP,
+      attackPressed:  (attackPressed && this.attackArmed) || tAtkP,
+      attackDown:     (this.keys.attack.isDown && this.attackArmed) || !!(T && T.attack),
+      attackReleased: Phaser.Input.Keyboard.JustUp(this.keys.attack) || tAtkR,
+      specialPressed: Phaser.Input.Keyboard.JustDown(this.keys.special) || tSpP,
+      shield: this.keys.shield.isDown || !!(T && T.shield),
       face: 0,
     };
   }
@@ -2374,6 +2445,7 @@ new Phaser.Game({
     default: "arcade",
     arcade: { gravity: { y: GRAVITY }, debug: false }
   },
+  input: { activePointers: 4 },   // move + jump + attack fingers simultaneously
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
