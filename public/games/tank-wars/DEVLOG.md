@@ -1,6 +1,20 @@
 # TANK WARS — DEVLOG
 
 ## ⏭️ NEXT SESSION — START HERE
+0. **CO-OP STORM needs a real dad↔son playtest** (2026-08-22): wave difficulty with 2 humans
+   (enemy counts unchanged — with two tanks it's EASIER early; if too easy, scale
+   `survPlan.count` +1 when net.coop), draft alternation feel (odd=host, even=guest),
+   revive-by-wave pacing, and whether the guest's TEMPEST unlock via co-op bestWave feels earned.
+1. (carried) SURVIVAL solo feel-checks + Minelayer/Ghost/snow/lava checks — see 2026-07-25 list below.
+2. (carried) Multiplayer reconnect grace on connection blips. RTT indicator ✅ DONE 2026-08-22.
+3. (carried) Metered dashboard Secret Key 401 loose end.
+
+## Session log — 2026-08-22
+| Ver | Commit | What |
+|---|---|---|
+| COOP | (this) | **⚡ ONLINE CO-OP STORM** — the son's favorite mode, together: host runs the full survival sim; guest is a team-0 teammate (isRemote slot 1, spawns in the neighbouring cell). Enemies target `nearestFoe` (closest living team-0). Wave fails only when the WHOLE team is down — a downed player spectates and revives next wave. Shared perk pool, **alternating drafts** (odd wave = host, even = guest; other side sees "TEAMMATE IS CHOOSING…"); guest picks travel as `spick`. New msgs: `swave` (walls/pools/tanks incl. team+bossHp), `sdraft`, `spick`, `sover` (guest banks the SAME run scrap + bestWave → TEMPEST gate opens for the guest too). Snapshot v2: serTank +hp/frozenT/telegraphT (11 fields), serShell +team (9) — guest interp generalized to N tanks, death FX loops all, survival sidecar `sv:[wave,run]` drives guest HUD. ❄ FREEZE now allowed in co-op (frozen rides the snapshot; still out of versus). Disconnect banking: co-op banks `surv.run` on both sides. Rematch = host restarts storm, guest waits. **W20 BOSS: THE PHANTOM** — ghost hull (cloaks naturally), decloaks every ~3.2s for a 3-shell spectral fan (`survFanBurst`); boss cycle now 4 (w25 wraps to warlord). **In-match RTT chip** (bottom-right, teal<80/amber<150/red) fed by the existing 1s ping loop. Menu: gold "⚡ CO-OP STORM" button beside START BATTLE (host, on connect). Tests: test_storm.js **99 checks** (28 new: co-op host build, nearestFoe, team-down, snapshot v2 arity, draft alternation + spick routing, guest swave/interp/sdraft/sover, phantom + 4-boss cycle, freeze pool split). No Meshy this session — pure systems work, existing art carried it. |
+
+### (previous queue, 2026-07-25 — items 0-3 kept for reference)
 0. **SURVIVAL feel-checks pending (2026-07-25 expansion):** wave pacing for a 9yo (enemy
    counts 1→4, tiers ramp by `survTier`), boss lethality (WARLORD radial bursts are HOT —
    they broke godmode-by-shield in probes), FREEZE 3.5s duration, TEMPEST twin feel +

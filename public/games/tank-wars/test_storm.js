@@ -231,7 +231,8 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   run(3.0);
   check('freeze: thaws after 3.5s', enemies().every(e => !(e.frozenT > 0)));
   check('freeze: offline powerup pool includes it', m[1].includes("'freeze'"));
-  check('freeze: online pool excludes it', /online' \? \['triple', 'rapid', 'shield', 'big'\]/.test(m[1]));
+  check('freeze: online VERSUS pool excludes it', m[1].includes("(matchCfg.mode === 'online' && !net.coop) ? ['triple', 'rapid', 'shield', 'big']"));
+  check('freeze: co-op storm pool includes it', m[1].includes("&& !net.coop"));
 }
 
 // ---------- 11. TEMPEST twin cannons ----------
@@ -337,6 +338,103 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   check('pause: online matches are not tap-resumable (host pause rules)', tw.resumeGame() === false && tw.paused === true);
   tw.matchCfg.mode = 'quick'; tw.setPaused(false);
   check('pause: TEMPEST sprite manifest present', /tempest: \{ w: \d+, h: 128/.test(m[1]));
+}
+
+// ---------- 17. CO-OP STORM ----------
+{
+  const net = tw.net;
+  // host builds a co-op wave: player + remote teammate on team 0, enemies from idx 2
+  net.role = 'host'; net.coop = false; net.guestKind = 'viper';
+  tw.startCoopStorm();
+  check('coop: flag set', net.coop === true);
+  check('coop: survival on + online mode', tw.surv.on === true && tw.matchCfg.mode === 'online');
+  check('coop: tanks[0] is host team 0', tw.tanks[0].team === 0 && !tw.tanks[0].isRemote);
+  check('coop: tanks[1] is remote teammate team 0', tw.tanks[1].team === 0 && tw.tanks[1].isRemote === true && tw.tanks[1].kind === 'viper');
+  check('coop: enemies start at index 2, team 1', tw.tanks.slice(2).length > 0 && tw.tanks.slice(2).every(t => t.team === 1));
+  check('coop: enemiesAtStart counts only team 1', tw.surv.enemiesAtStart === tw.tanks.filter(t => t.team === 1).length);
+
+  // nearestFoe: enemies hunt the closest living teammate
+  const e = tw.tanks[2];
+  tw.tanks[0].x = 100; tw.tanks[0].y = 100;
+  tw.tanks[1].x = e.x + 10; tw.tanks[1].y = e.y;
+  check('coop: nearestFoe picks the closer teammate', tw.nearestFoe(e) === tw.tanks[1]);
+  tw.tanks[1].alive = false;
+  check('coop: nearestFoe skips the dead', tw.nearestFoe(e) === tw.tanks[0]);
+  tw.tanks[1].alive = true;
+
+  // wave only fails when the WHOLE team is down
+  tw.setPhase('play');
+  tw.tanks[0].alive = false;
+  tw.update(1 / 60);
+  check('coop: one tank down does not end the run', tw.phase === 'play');
+  tw.tanks[1].alive = false;
+  tw.update(1 / 60);
+  check('coop: both down = storm over', tw.phase === 'survover');
+
+  // snapshot format carries hp/frozen/telegraph + shell team
+  const st = tw.serTank({ x: 1, y: 2, a: 0, alive: true, shield: false, hp: 3, frozenT: 1.2, telegraphT: 0.5 });
+  check('coop: serTank has 11 fields (hp/frozen/telegraph)', st.length === 11 && st[8] === 3 && st[9] === 1.2 && st[10] === 0.5);
+  const ss = tw.serShell({ id: 9, x: 0, y: 0, vx: 1, vy: 1, r: 4, owner: 2, team: 1 });
+  check('coop: serShell carries team', ss.length === 9 && ss[8] === 1);
+
+  // draft alternation: wave 1 clear -> host picks; wave 2 clear -> guest picks
+  net.coop = true;
+  tw.surv.wave = 1; tw.survWaveCleared();
+  check('coop: wave-1 draft is the host pick', tw.surv.picker === 0);
+  tw.surv.wave = 2; tw.survWaveCleared();
+  check('coop: wave-2 draft is the guest pick', tw.surv.picker === 1);
+  // host ignores its own input while the guest is choosing; spick applies it
+  const perksBefore = JSON.stringify(tw.surv.perks);
+  tw.survApplyPerk(0);
+  check('coop: host cannot pick on the guest turn', JSON.stringify(tw.surv.perks) === perksBefore && tw.phase === 'draft');
+  tw.netHandleMsg({ t: 'spick', i: 0 });
+  check('coop: spick applies the guest choice and starts the next wave', Object.keys(tw.surv.perks).length === 1 && tw.phase === 'countdown');
+
+  // guest side: swave message rebuilds the whole wave
+  net.role = 'guest'; net.coop = false;
+  tw.gmGuestSWave({
+    wave: 7, bn: '', ar: 'maze',
+    walls: { v: '0'.repeat(150), h: '0'.repeat(150) }, pl: [],
+    tk: [[50, 50, 0, 'scout', 0, 14, 0, 1], [80, 50, 0, 'viper', 0, 14, 0, 1],
+         [400, 300, 0, 'mammoth', 1, 14, 0, 1], [500, 300, 0, 'photon', 1, 18, 7, 7]],
+    pk: { quickload: 2 }, run: 55,
+  });
+  check('coop guest: wave + perks + run restored', tw.surv.wave === 7 && tw.surv.perks.quickload === 2 && tw.surv.run === 55);
+  check('coop guest: 4 tanks with teams', tw.tanks.length === 4 && tw.tanks[1].team === 0 && tw.tanks[2].team === 1);
+  check('coop guest: boss rebuilt with hp bar meta', tw.tanks[3].boss && tw.tanks[3].boss.maxHp === 7 && tw.tanks[3].hp === 7);
+
+  // guest interpolation applies hp/frozen to enemies from a snapshot
+  net.sPrev = null;
+  net.sCur = { at: 0, m: { a: tw.tanks.map(t => tw.serTank({ ...t, frozenT: t.team === 1 ? 2 : 0, hp: t.hp })), s: [], ph: 'play', rt: 1, sv: [7, 60] } };
+  tw.applyInterp();
+  check('coop guest: snapshot freezes enemies', tw.tanks[2].frozenT > 0 && !(tw.tanks[1].frozenT > 0));
+  check('coop guest: survival sidecar updates run', tw.surv.run === 60);
+
+  // sdraft/sover flow
+  tw.gmGuestSDraft({ d: ['overdrive', 'velocity', 'salvage'], w: 7, p: 1, run: 60, pk: {} });
+  check('coop guest: draft phase entered with 3 cards', tw.phase === 'draft' && tw.surv.draft.length === 3 && tw.surv.picker === 1);
+  const scrapBefore = tw.profile.scrap, bestBefore = tw.profile.bestWave || 0;
+  tw.gmGuestSOver({ w: Math.max(bestBefore + 1, 12), k: 30, run: 200 });
+  check('coop guest: sover pays scrap + advances best wave', tw.profile.scrap === scrapBefore + 200 && (tw.profile.bestWave || 0) > bestBefore);
+
+  net.role = null; net.coop = false; tw.surv.on = false;
+}
+
+// ---------- 18. PHANTOM (wave-20 boss) ----------
+{
+  tw.startSurvival();
+  tw.survStartWave(20);
+  const boss = tw.tanks.find(t => t.boss);
+  check('phantom: wave 20 spawns THE PHANTOM', boss && boss.boss.type === 'phantom' && tw.surv.bossName === 'THE PHANTOM');
+  check('phantom: rides the cloaking GHOST hull', boss.kind === 'ghost');
+  check('phantom: boss cycle is now 4 long (w25 = warlord again)', (() => { tw.survStartWave(25); const b = tw.tanks.find(t => t.boss); return b && b.boss.type === 'warlord'; })());
+  // spectral fan: 3 boss shells spread at the target
+  tw.survStartWave(20);
+  const b2 = tw.tanks.find(t => t.boss);
+  tw.shells.length = 0;
+  tw.survFanBurst(b2, tw.tanks[0], 3);
+  check('phantom: fan volley is 3 enemy-team shells', tw.shells.length === 3 && tw.shells.every(s => s.team === 1));
+  tw.surv.on = false;
 }
 
 // ---------- 16. campaign regression: config untouched ----------
