@@ -539,8 +539,10 @@ function viewDraft() {
   const slot = D.slots[D.idx] || D.slots[D.slots.length - 1];
   const onClock = slot.owner;
   const myClock = onClock === S.teamId;
-  let html = `<h2>Draft — Round ${slot.round}, Pick ${(D.idx % 32) + 1}</h2>
-    <p>On the clock: ${chip(onClock)} <b>${teamName(onClock)}</b>${myClock ? " — <b class='win'>YOUR PICK!</b>" : ""}</p>`;
+  let html = `<div class="draftbanner"><div class="draftbanner-inner">
+      <h2 style="margin:0">🏈 DRAFT DAY — Round ${slot.round}, Pick ${(D.idx % 32) + 1}</h2>
+      <p style="margin:6px 0 0">On the clock: ${chip(onClock)} <b>${teamName(onClock)}</b>${myClock ? " — <b class='win'>YOUR PICK!</b>" : ""}</p>
+    </div></div>`;
   // team needs summary
   const chart = depthChart(S.league[S.teamId]);
   const needs = Object.entries(TEMPLATE)
@@ -725,7 +727,8 @@ function runTicker(myGame, results, done) {
   // Weather-matched stadium backdrop (Meshy paintings). Missing file -> the
   // gradient just sits on the flat dark background, exactly as before.
   const wxT = myGame.weather ? myGame.weather.type : null;
-  const scene = STADIUM.dome.includes(myGame.home) ? "dome"
+  const scene = myGame.bowl ? "bowl"
+    : STADIUM.dome.includes(myGame.home) ? "dome"
     : wxT === "snow" ? "snow" : wxT === "rain" ? "rain"
     : (wxT === "cold" || wxT === "wind") ? "cold" : "clear";
   overlay.style.backgroundImage =
@@ -743,6 +746,11 @@ function runTicker(myGame, results, done) {
     wline.className = "tline";
     wline.textContent = `${w.icon} Conditions in ${TEAM_BY_ID[home].city}: ${w.desc}`;
     drivesEl.prepend(wline);
+  } else if (myGame.bowl) {
+    const bline = document.createElement("div");
+    bline.className = "tline";
+    bline.textContent = "🏆 THE GRIDIRON BOWL — neutral site, perfect conditions. For all of it.";
+    drivesEl.prepend(bline);
   }
   const scoreEl = $("#tickerScore");
   $("#tickerBox").classList.add("hidden");
@@ -1251,7 +1259,7 @@ function advancePlayoffs() {
       text: `PLAYOFFS (${PLAYOFF_STAGES[P.stage]}): ${teamName(w)} eliminate the ${TEAM_BY_ID[l].name} ${Math.max(r.scoreA, r.scoreB)}-${Math.min(r.scoreA, r.scoreB)}` });
     if (g.home === S.teamId || g.away === S.teamId) {
       myGame = { home: g.home, away: g.away, log: r.log, box: r.box,
-        scoreHome: r.scoreA, scoreAway: r.scoreB, weather: wx };
+        scoreHome: r.scoreA, scoreAway: r.scoreB, weather: wx, bowl: P.stage === 3 };
     }
   }
   if (P.stage === 3) {

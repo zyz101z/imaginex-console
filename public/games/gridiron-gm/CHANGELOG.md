@@ -1,5 +1,15 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-21 — Draft night + Gridiron Bowl scenes (approved follow-up)
+- **Draft-day banner**: `viewDraft` header is now a `.draftbanner` div over `img/draft.png` (draft-night stage painting) with scrim + text-shadow — round/pick/on-the-clock line unchanged inside it.
+- **Gridiron Bowl scene**: playoff `myGame` carries `bowl: P.stage === 3`; ticker scene picker puts `img/stadium_bowl.png` (fireworks + gold confetti championship stadium) first, plus a "🏆 THE GRIDIRON BOWL — neutral site" line atop the drive log (the Bowl has no weather line otherwise).
+- Batteries green (2,985 + 17,537); copies synced.
+
+## 2026-08-21 — Game-day atmosphere pass (Meshy art)
+- **Weather-matched stadium backdrops**: 5 Meshy paintings in `img/` (stadium_{clear,snow,rain,cold,dome}.png) shown behind the ticker overlay. `runTicker` picks by `STADIUM.dome` + `myGame.weather.type` (snow/rain; cold+wind share the overcast scene; else clear) and sets a `linear-gradient(.82/.93) + url()` backgroundImage — flat-dark fallback if a file is missing. CSS: `#ticker` got background-size cover.
+- **Trophy art**: `.champbox` (champion banner) now layers `img/trophy.png` (confetti trophy painting) under a scrim + text-shadow.
+- No sim/gm logic touched; batteries green (2,985 + 17,537). Copies synced (~/GridironGM ↔ console gridiron-gm), pushed `5d465a2`. Deliberately did NOT art up tables/menus — user prefers systems-first UI; art is scoped to game-day + championship moments.
+
 ## 2026-07-22 — Autonomous improvement pass (3 features)
 1. **Weather & stadium engine** (`sim.mjs`): STADIUM map (11 domes / 14 cold cities / rest mild). `gameWeather(seed, season, week, home)` is hash-deterministic — the THIS WEEK forecast IS the game's weather. Snow (pass −3.5, run +1, kick −10%, TO +1.5%), freezing, rain, wind; cold-city home teams get +1 run in snow/freeze ("built for it"). Ramps weeks 9→17; playoffs use week 18+stage; Gridiron Bowl is neutral/clear. Effects are symmetric so chalk holds. UI: forecast line + tooltip in THIS WEEK card, ❄️ icons on the schedule, conditions line atop the ticker. Season battery now runs weather-ON.
 2. **Future draft picks in trades** (`gm.mjs`/`app.mjs`): `S.futurePicks` book; next-year R1–R7 tradeable at `FUTURE_DISCOUNT` 0.6× value. Trade Center has a "Next-year picks" row per side; AI offers sweeten with future 1s–3s when short (`genAIOffer` 5th param). `execTrade(..., futurePicks)` moves them; at `finishOffseason` the future book **conveys** and becomes `S.picks` (slot builder resolves `from` ownership unchanged). Save migration included.
