@@ -411,6 +411,99 @@ function showPlayerCard(p) {
   document.body.appendChild(div);
 }
 const pn = (p) => `<span class="pn" onclick="__gm.pcard(${p.id})">${p.name}</span>`;
+// Hall of Fame plaque — career card for an inducted legend
+function hofCard(i) {
+  const h2 = S.hof[i];
+  if (!h2) return;
+  closePcard();
+  const div = document.createElement("div");
+  div.id = "pcard";
+  const t = h2.totals || {};
+  div.innerHTML = `<div class="pcBox" style="border-color:#c9a227">
+    <button class="pcClose" onclick="__gm.closePcard()">✕</button>
+    <div style="text-align:center;margin-bottom:6px;font-size:26px">🏛️</div>
+    <div style="text-align:center"><b style="font-size:19px">${h2.name}</b><br>
+      <span class="dim">${h2.pos}${h2.lastTeamId ? " · " + teamName(h2.lastTeamId) : ""}</span></div>
+    <div class="pcSec">CAREER</div>
+    <div>${statLine(h2.pos, t)} <span class="dim">(${t.gp || 0} games, ${h2.seasons} seasons)</span></div>
+    <div class="pcSec">LEGACY</div>
+    <div>HOF score <b style="color:#c9a227">${h2.score}</b> · retired Season ${h2.seasonRetired}</div>
+  </div>`;
+  div.onclick = (e) => { if (e.target === div) closePcard(); };
+  document.body.appendChild(div);
+}
+
+// Weekly milestone watch — the living world celebrates round numbers as they fall
+const MILESTONES = [
+  ["passYd", 4000, "passing yards"], ["passTD", 30, "passing TDs"],
+  ["rushYd", 1000, "rushing yards"], ["recYd", 1000, "receiving yards"],
+  ["sacks", 10, "sacks"], ["defInts", 8, "interceptions"],
+];
+// 📖 SEASON YEARBOOK — snapshot the season's story while the stats are still live
+// (built at the offseason turn, BEFORE archiveSeasonStats wipes the season lines)
+function buildYearbook(standing) {
+  const roster = S.league[S.teamId];
+  const active = roster.filter(p => p.stats.gp > 0);
+  const top = score => active.reduce((b, p) => (!b || score(p.stats) > score(b.stats)) ? p : b, null);
+  const mk = (label, p) => p && { label, id: p.id, name: p.name, pos: p.pos, line: statLine(p.pos, p.stats) };
+  const leaders = [
+    mk("Passing", top(x => x.passYd || 0)),
+    mk("Rushing", top(x => x.rushYd || 0)),
+    mk("Receiving", top(x => x.recYd || 0)),
+    mk("Defense", top(x => (x.sacks || 0) * 45 + (x.defInts || 0) * 55 + (x.tackles || 0) * 1.5)),
+  ].filter(Boolean);
+  // the season's story, read from the schedule
+  let bigWin = null, toughLoss = null, bestStreak = 0, run = 0;
+  for (let w = 0; w < 18; w++) {
+    const g = S.schedule[w] && S.schedule[w].find(x => x.home === S.teamId || x.away === S.teamId);
+    if (!g || !g.played) continue;
+    const my = g.home === S.teamId ? g.scoreHome : g.scoreAway;
+    const their = g.home === S.teamId ? g.scoreAway : g.scoreHome;
+    const opp = g.home === S.teamId ? g.away : g.home;
+    if (my > their) {
+      run++; bestStreak = Math.max(bestStreak, run);
+      if (!bigWin || my - their > bigWin.m) bigWin = { opp, sc: `${my}-${their}`, m: my - their, w: w + 1 };
+    } else if (my < their) {
+      run = 0;
+      if (!toughLoss || their - my > toughLoss.m) toughLoss = { opp, sc: `${their}-${my}`, m: their - my, w: w + 1 };
+    } else run = 0;
+  }
+  // rookie report: how the newest class actually played
+  const grade = sc => sc >= 1100 ? "A" : sc >= 650 ? "B" : sc >= 320 ? "C" : sc >= 120 ? "D" : "—";
+  const rscore = st => (st.passYd || 0) + (st.passTD || 0) * 40 + ((st.rushYd || 0) + (st.recYd || 0)) * 1.2 +
+    ((st.rushTD || 0) + (st.recTD || 0)) * 40 + (st.sacks || 0) * 45 + (st.defInts || 0) * 55 + (st.tackles || 0) * 1.5;
+  const rookies = roster.filter(p => p.rookie).map(p => ({
+    id: p.id, name: p.name, pos: p.pos, ovr: p.ovr,
+    line: p.stats.gp > 0 ? statLine(p.pos, p.stats) : "did not play",
+    grade: p.stats.gp > 0 ? grade(rscore(p.stats)) : "—",
+  }));
+  const myAwards = [];
+  if (S.lastAwards) {
+    for (const [label, w] of [["MVP", S.lastAwards.mvp], ["OPOY", S.lastAwards.opoy],
+                              ["DPOY", S.lastAwards.dpoy], ["ROY", S.lastAwards.roy]]) {
+      if (w && w.teamId === S.teamId) myAwards.push(`${label}: ${w.name}`);
+    }
+  }
+  const allProMine = (S.lastAllPro || []).filter(ap => ap.teamId === S.teamId).map(ap => ap.name);
+  return { season: S.seasonNum, record: `${standing.w}-${standing.l}`,
+           leaders, bigWin, toughLoss, bestStreak, rookies, myAwards, allProMine };
+}
+
+function milestoneNews() {
+  for (const roster of Object.values(S.league)) {
+    for (const p of roster) {
+      if (!p.stats.gp) continue;
+      p.mstone = p.mstone || {};
+      for (const [k, th, label] of MILESTONES) {
+        if (!p.mstone[k] && (p.stats[k] || 0) >= th) {
+          p.mstone[k] = true;
+          S.news.unshift({ week: S.week + 1, season: S.seasonNum,
+            text: `🎉 MILESTONE: ${p.name} (${p.teamId}) crosses ${th.toLocaleString()} ${label}${p.teamId === S.teamId ? " — that's your guy!" : ""}` });
+        }
+      }
+    }
+  }
+}
 
 function viewNews() {
   if (!S.news.length) return "<p class='dim'>No news yet — play some games.</p>";
@@ -448,6 +541,27 @@ function viewBracket() {
       html += "</table>";
     }
   }
+  const yb = S.yearbook;
+  if (yb && yb.season === S.seasonNum) {
+    html += `<h3>📖 Season ${yb.season} Yearbook — ${yb.record}</h3>`;
+    html += `<div class="coachcard">`;
+    if (yb.bigWin) html += `📈 <b>Signature win:</b> ${yb.bigWin.sc} over ${chip(yb.bigWin.opp)} ${teamName(yb.bigWin.opp)} (Week ${yb.bigWin.w})<br>`;
+    if (yb.toughLoss) html += `📉 <b>The one that stung:</b> ${yb.toughLoss.sc} to ${chip(yb.toughLoss.opp)} ${teamName(yb.toughLoss.opp)} (Week ${yb.toughLoss.w})<br>`;
+    if (yb.bestStreak >= 2) html += `🔥 <b>Longest win streak:</b> ${yb.bestStreak} games<br>`;
+    if (yb.myAwards.length) html += `🏆 <b>Hardware:</b> ${yb.myAwards.join(" · ")}<br>`;
+    if (yb.allProMine.length) html += `★ <b>All-Pros:</b> ${yb.allProMine.join(", ")}<br>`;
+    html += `</div>`;
+    if (yb.leaders.length) {
+      html += `<table><tr class="hdr"><td>Team leader</td><td>Player</td><td>Line</td></tr>`;
+      for (const L of yb.leaders) html += `<tr><td>${L.label}</td><td><span class="pn" onclick="__gm.pcard(${L.id})">${L.name}</span> <span class="dim">${L.pos}</span></td><td class="dim">${L.line}</td></tr>`;
+      html += `</table>`;
+    }
+    if (yb.rookies.length) {
+      html += `<h3>🎓 Rookie report card</h3><table><tr class="hdr"><td>Grade</td><td>Rookie</td><td>Season</td></tr>`;
+      for (const r of yb.rookies) html += `<tr><td><b class="${r.grade === "A" || r.grade === "B" ? "win" : r.grade === "—" ? "dim" : ""}">${r.grade}</b></td><td><span class="pn" onclick="__gm.pcard(${r.id})">${r.name}</span> <span class="dim">${r.pos} ${r.ovr}</span></td><td class="dim">${r.line}</td></tr>`;
+      html += `</table>`;
+    }
+  }
   if (S.records && S.records.player && Object.keys(S.records.player).length) {
     html += `<h3>📜 Record Book (single season)</h3><table>`;
     for (const [key, label] of RECORD_KEYS) {
@@ -463,7 +577,8 @@ function viewBracket() {
   if (S.hof.length) {
     html += `<h3>🏛️ Hall of Fame</h3><table>`;
     for (const h of [...S.hof].reverse().slice(0, 15)) {
-      html += `<tr><td>${h.name} (${h.pos})</td><td class="dim">${h.seasons} seasons · retired S${h.seasonRetired}</td></tr>`;
+      const idx = S.hof.indexOf(h);
+      html += `<tr><td><span class="pn" onclick="__gm.hofCard(${idx})">${h.name}</span> (${h.pos})</td><td class="dim">${h.seasons} seasons · retired S${h.seasonRetired}</td></tr>`;
     }
     html += "</table>";
   }
@@ -1026,6 +1141,7 @@ function advance() {
         scoreHome: myGame.scoreHome, scoreAway: myGame.scoreAway, box: myGame.box };
     }
     const finish = () => {
+      milestoneNews();
       S.week += 1;
       if (S.week >= 18) {
         S.phase = "postseason";
@@ -1062,6 +1178,7 @@ function advance() {
     if (madePlayoffs) delta += 8;
     if (champion) delta += 30;
     S.security = Math.max(0, Math.min(100, S.security + delta));
+    S.yearbook = buildYearbook(s);
     S.history.push({ season: S.seasonNum, record: `${s.w}-${s.l}`, champ: S.bracket.champion,
       awards: S.lastAwards, security: S.security });
     if (S.security <= 20 && S.seasonNum >= 2 && !champion) {
@@ -1382,12 +1499,12 @@ function leadersFilter(cf) { leadersConf = cf; render(); }
 function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
-  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard };
+  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard };
 
 function startOffseasonPipeline() {
     const rng = weekRng();
     archiveSeasonStats(S.league, S.seasonNum);
-    for (const roster of Object.values(S.league)) for (const p of roster) p.rookie = false;
+    for (const roster of Object.values(S.league)) for (const p of roster) { p.rookie = false; p.mstone = {}; }
     S.deadMoney = {}; for (const t of TEAMS) S.deadMoney[t.id] = 0;
     const news = ageAndRetire(rng, S.league);
     for (const n of news) if (n.type === "hof") S.hof.push({ ...n.inductee, seasonRetired: S.seasonNum });

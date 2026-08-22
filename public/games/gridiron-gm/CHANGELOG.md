@@ -1,5 +1,11 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-22 — Yearbook + milestones + HOF plaques (season-narrative pass)
+1. **📖 Season Yearbook** (`buildYearbook`, snapshotted at the offseason turn WHILE season stats are live, stored as `S.yearbook` + rendered in the offseason view): signature win / toughest loss / longest streak read from the schedule, team leaders (pass/rush/rec/defense, clickable), **🎓 rookie report card** (A–D grades by production score; "did not play" = —), your hardware + All-Pros.
+2. **🎉 Milestone news** (`milestoneNews` weekly before `S.week++`): 4,000 pass yds · 30 pass TD · 1,000 rush · 1,000 rec · 10 sacks · 8 INTs — once per player per season (`p.mstone`, reset in startOffseasonPipeline), "— that's your guy!" for your roster.
+3. **🏛️ HOF plaques** (`hofCard`): Hall of Fame names clickable → gold-trimmed career card (career statLine from the archived `totals`, games/seasons, HOF score, retirement season).
+- Batteries green (2,985 + 17,543). Copies synced.
+
 ## 2026-08-22 — Player cards + Gridiron All-Pro Team
 1. **Player cards everywhere**: click any dotted-underlined name (roster, leaders, FA market/street/expiring, awards, All-Pro) → `showPlayerCard` overlay: big ovr, team, attribute BARS (color-coded ≥88/≥75), contract, THIS SEASON + CAREER statlines (shared `statLine(pos, stats)` extracted from computeAwards — tolerant of missing keys for career totals), badges (★ ALL-PRO ×N / ROOKIE / INJURED Nw). Lookup via `findPlayerById` (league + FA pool; **draft prospects excluded on purpose** — the card would leak true ratings past scouting fog). `pn(p)` helper wraps names; `__gm.pcard/pcardByName/closePcard`.
 2. **★ GRIDIRON ALL-PRO TEAM** (`computeAllPro` in gm.mjs): 9 spots (QB/RB/WR/TE/DL/LB/CB/S/K) by award-family scoring, locked at week 18 with the awards; winners get persistent `p.allPro` count (card badge). Awards Night gains a finale slide (roster list + "N OF YOURS MADE THE TEAM!"); offseason awards view lists it with clickable names.
