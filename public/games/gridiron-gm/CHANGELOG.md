@@ -1,5 +1,8 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-23 (later 2) — iframe modal bug (user: reset did nothing, export invisible)
+Root cause: the CONSOLE's game iframe sandbox lacked `allow-modals` → confirm/alert/prompt were SILENT NO-OPS in every game (reset's confirm died; extension confirms have been dead in the iframe all along). Fixes: (1) console `page.tsx` sandbox += allow-modals (helps all games); (2) Gridiron export/import now an in-page `backupModal` with a textarea + copy/apply + inline errors (prompt() also truncates multi-KB saves on some browsers — never use it for save codes); (3) Reset franchise = two-click arm pattern ("⚠️ CLICK AGAIN TO DELETE", 4s window) — no dialog dependency at all. Batteries green.
+
 ## 2026-08-23 (later) — Audio pile-up fix (user report: "too many sounds at once")
 Cause: crowd.mp3 became the per-score cheer sample ON TOP of airhorns + the new gameday bed, with drive events every ~1.2s. Fix: `setDuck(f)` in sfx (cheer intensity + airHorn gain × duck); ticker sets duck 0.45 while its music bed plays (restored to 1 in both close handlers); gameday vol 0.2→0.14 (bowl 0.3→0.22); `updateMusic` now refuses to switch tracks while the ticker overlay is visible ("the ticker owns the speakers"). Batteries green.
 

@@ -552,7 +552,7 @@ function GamePlayer({
         ref={(el) => { if (el) setTimeout(() => el.focus(), 100); }}
         src={game.url}
         className="w-full h-full border-0"
-        sandbox="allow-scripts allow-same-origin allow-popups"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
         allow="autoplay; fullscreen"
         title={game.title}
         tabIndex={0}

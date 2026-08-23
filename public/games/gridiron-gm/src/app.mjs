@@ -1648,26 +1648,56 @@ function dismissIntro() { S.sawIntro = true; save(); render(); }
 
 // ---------------------------------------------------------------- save backup
 // localStorage is one cleared-cache from oblivion — give the franchise an exit.
-function exportSave() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) { alert("Nothing to export yet."); return; }
-  const done = () => alert("Franchise code copied to the clipboard.\nPaste it somewhere safe (notes, email to yourself…).");
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(raw).then(done, () => prompt("Copy your franchise code:", raw));
-  } else prompt("Copy your franchise code:", raw);
-}
-function importSave() {
-  const txt = prompt("Paste a franchise code (REPLACES the current save!):");
-  if (!txt) return;
-  try {
-    const parsed = JSON.parse(txt);
-    if (!parsed || !parsed.league || !parsed.seasonNum) throw new Error("bad");
-    localStorage.setItem(SAVE_KEY, txt);
-    location.reload();
-  } catch (e) {
-    alert("That doesn't look like a Gridiron GM franchise code.");
+// In-page modal (NOT prompt/alert: the console iframe used to swallow those, and
+// prompt() truncates multi-KB save strings on several browsers anyway)
+function backupModal(mode) {
+  const old = document.getElementById("pcard");
+  if (old) old.remove();
+  const isExport = mode === "export";
+  const raw = isExport ? (localStorage.getItem(SAVE_KEY) || "") : "";
+  const div = document.createElement("div");
+  div.id = "pcard";
+  div.innerHTML = `<div class="pcBox" style="width:min(560px,94vw)">
+    <button class="pcClose" onclick="__gm.closePcard()">✕</button>
+    <b>${isExport ? "💾 EXPORT FRANCHISE" : "📥 IMPORT FRANCHISE"}</b>
+    <p class="dim small" style="margin:6px 0">${isExport
+      ? "Copy this code somewhere safe (notes, email to yourself). It IS your whole franchise."
+      : "Paste a franchise code below. ⚠️ Applying it REPLACES the current save."}</p>
+    <textarea id="bkText" style="width:100%;height:140px;background:#0a0f18;color:#cfe0ff;border:1px solid #3a5a8a;border-radius:8px;padding:8px;font-size:11px" ${isExport ? "readonly" : ""}></textarea>
+    <p id="bkMsg" class="dim small" style="min-height:16px;margin:6px 0"></p>
+    ${isExport
+      ? `<button class="mini" id="bkCopy">COPY TO CLIPBOARD</button>`
+      : `<button class="mini" id="bkApply">APPLY (replaces save)</button>`}
+  </div>`;
+  div.onclick = (e) => { if (e.target === div) closePcard(); };
+  document.body.appendChild(div);
+  const ta = document.getElementById("bkText");
+  ta.value = raw;
+  const msg = document.getElementById("bkMsg");
+  if (isExport) {
+    document.getElementById("bkCopy").onclick = () => {
+      ta.select();
+      const ok = () => { msg.textContent = "✅ Copied to clipboard."; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(raw).then(ok, () => { document.execCommand("copy"); ok(); });
+      } else { document.execCommand("copy"); ok(); }
+    };
+  } else {
+    document.getElementById("bkApply").onclick = () => {
+      try {
+        const parsed = JSON.parse(ta.value.trim());
+        if (!parsed || !parsed.league || !parsed.seasonNum) throw new Error("bad");
+        localStorage.setItem(SAVE_KEY, ta.value.trim());
+        location.reload();
+      } catch (e) {
+        msg.textContent = "❌ That doesn't look like a Gridiron GM franchise code.";
+        msg.className = "loss small";
+      }
+    };
   }
 }
+function exportSave() { backupModal("export"); }
+function importSave() { backupModal("import"); }
 
 // ---------------------------------------------------------------- personalities
 // Deterministic per player (hashed id — no save migration, no reroll scumming).
@@ -2012,7 +2042,12 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   activeView = b.dataset.view; render();
 });
 $("#resetBtn").onclick = () => {
-  if (confirm("Delete franchise and start over?")) { localStorage.removeItem(SAVE_KEY); location.reload(); }
+  const b = $("#resetBtn");
+  if (b.dataset.armed) { localStorage.removeItem(SAVE_KEY); location.reload(); return; }
+  b.dataset.armed = "1";
+  b.textContent = "⚠️ CLICK AGAIN TO DELETE";
+  b.style.color = "#ff8f9f";
+  setTimeout(() => { delete b.dataset.armed; b.textContent = "Reset franchise"; b.style.color = ""; }, 4000);
 };
 
 // ".tt" tooltips: hover works via title, but also show on CLICK (title alone is easy to miss)
