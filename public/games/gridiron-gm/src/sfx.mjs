@@ -4,7 +4,44 @@ let ctx = null;
 let muted = false;
 let crowdNodes = null;
 
-export function setMuted(m) { muted = m; if (m) stopCrowd(); }
+export function setMuted(m) { muted = m; if (m) stopCrowd(); if (musicEl) musicEl.volume = m ? 0 : musicVol; }
+
+// ---------------------------------------------------------------- music (Suno tracks)
+// Optional mp3 beds — auto-detected, context-switched by app.updateMusic(). A missing
+// file fails silently (the procedural SFX carry the game exactly as before).
+const MUSIC_FILES = {
+  menu: "music_menu.mp3", gameday: "music_gameday.mp3", bowl: "music_bowl.mp3",
+  draft: "music_draft.mp3", offseason: "music_offseason.mp3", victory: "music_victory.mp3",
+};
+let musicEl = null, musicTrack = null, musicVol = 0.3;
+const musicOk = {};
+let gestureArmed = false;
+export function playMusic(track, { loop = true, vol = 0.3, onend = null } = {}) {
+  if (typeof Audio === "undefined" || !MUSIC_FILES[track]) return;
+  if (musicTrack === track && musicEl && !musicEl.paused) return;
+  if (musicOk[track] === false) return;      // known missing — stay quiet
+  stopMusic();
+  musicVol = vol;
+  const el = new Audio("./" + MUSIC_FILES[track]);
+  el.loop = loop;
+  el.volume = muted ? 0 : vol;
+  el.onerror = () => { musicOk[track] = false; if (musicEl === el) { musicEl = null; musicTrack = null; } };
+  if (onend) el.onended = onend;
+  const p = el.play();
+  if (p && p.catch) p.catch(() => {
+    // autoplay blocked before the first gesture — retry on the next click
+    if (!gestureArmed && typeof document !== "undefined") {
+      gestureArmed = true;
+      document.addEventListener("click", () => { if (musicEl && musicEl.paused) musicEl.play().catch(() => {}); },
+        { once: true });
+    }
+  });
+  musicEl = el; musicTrack = track;
+}
+export function stopMusic() {
+  if (musicEl) { try { musicEl.pause(); } catch (e) {} musicEl = null; musicTrack = null; }
+}
+export function currentMusic() { return musicTrack; }
 export function isMuted() { return muted; }
 
 function ac() {

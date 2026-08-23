@@ -79,6 +79,14 @@
     background: linear-gradient(rgba(8, 10, 18, .5), rgba(8, 10, 18, .78)),
       url('img/draft.png') center 30%/cover, #171b22; border: 1px solid #2a3a55; }
   .draftbanner-inner { padding: 26px 20px; text-shadow: 0 2px 6px #000; }
+  #decisionBox { background: #101826; border: 2px solid #ffc62f; border-radius: 12px;
+    padding: 14px 20px; margin-bottom: 12px; text-align: center; max-width: min(660px, 92vw);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
+  .decBtns { display: flex; gap: 10px; margin-top: 10px; justify-content: center; flex-wrap: wrap; }
+  .decBtns button { background: #1c2836; color: #e8eaf0; border: 2px solid #3a5a8a; border-radius: 10px;
+    padding: 10px 14px; cursor: pointer; font-weight: 800; min-width: 170px; }
+  .decBtns button span { display: block; font-weight: 400; font-size: 11px; color: #9fb3d9; margin-top: 4px; }
+  .decBtns button:hover { border-color: #ffc62f; background: #24344a; }
   #ticker { position: fixed; inset: 0; background: rgba(10, 12, 16, .93);
     background-size: cover; background-position: center;
     display: flex; flex-direction: column; align-items: center; padding-top: 8vh; z-index: 10; }

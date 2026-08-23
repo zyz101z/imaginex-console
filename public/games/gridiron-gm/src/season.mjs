@@ -2,6 +2,7 @@
 // 6 divisional + 11 cross-slate; real NFL formula fidelity is a P1 nicety.)
 import { TEAMS } from "./data_teams.mjs";
 import { simGame } from "./sim.mjs";
+import { makeRng } from "./rng.mjs";
 
 export function makeSchedule(rng, seasonNum = 1) {
   const weeks = Array.from({ length: 18 }, () => []); // 18 weeks, 17 games + 1 bye
@@ -135,14 +136,48 @@ export function emptyStandings() {
   return s;
 }
 
-export function playWeek(rng, league, schedule, week, standings, strategies = {}, coaches = {}, coachModsFn = null, weatherFn = null) {
+// Full pre-game snapshot of everything simGame mutates — the price of letting a
+// human rewrite a game that already happened (live decisions re-sim from here).
+function snapTeams(home, away) {
+  const snap = new Map();
+  for (const p of [...home.players, ...away.players]) {
+    snap.set(p, { stats: { ...p.stats }, injuredWeeks: p.injuredWeeks, newInjury: p.newInjury });
+  }
+  return snap;
+}
+function restoreSnap(snap) {
+  for (const [p, v] of snap) {
+    p.stats = { ...v.stats };
+    p.injuredWeeks = v.injuredWeeks;
+    p.newInjury = v.newInjury;
+  }
+}
+function applyGameToStandings(standings, game, scoreA, scoreB, sign) {
+  const hs = standings[game.home], as = standings[game.away];
+  hs.pf += sign * scoreA; hs.pa += sign * scoreB; as.pf += sign * scoreB; as.pa += sign * scoreA;
+  const th = TEAMS.find(t => t.id === game.home), ta = TEAMS.find(t => t.id === game.away);
+  const divGame = th.conf === ta.conf && th.div === ta.div;
+  if (scoreA > scoreB) {
+    hs.w += sign; as.l += sign;
+    if (divGame) { hs.divW += sign; as.divL += sign; }
+  } else {
+    as.w += sign; hs.l += sign;
+    if (divGame) { as.divW += sign; hs.divL += sign; }
+  }
+}
+
+export function playWeek(rng, league, schedule, week, standings, strategies = {}, coaches = {}, coachModsFn = null, weatherFn = null, hooks = null) {
   const results = [];
   for (const game of schedule[week]) {
     if (game.played) continue;
     const home = { id: game.home, players: league[game.home], strategy: strategies[game.home], coach: coaches[game.home] };
     const away = { id: game.away, players: league[game.away], strategy: strategies[game.away], coach: coaches[game.away] };
     const wx = weatherFn ? weatherFn(game.home, week) : null;
-    const r = simGame(rng, home, away, game.home, coachModsFn, wx);
+    const isUsers = hooks && (game.home === hooks.teamId || game.away === hooks.teamId);
+    if (isUsers) {
+      hooks.captured = { rngState: rng.state(), snap: snapTeams(home, away), game, home, away, wx };
+    }
+    const r = simGame(rng, home, away, game.home, coachModsFn, wx, isUsers ? hooks : null);
     game.weather = wx || undefined;
     game.played = true;
     game.scoreHome = r.scoreA; game.scoreAway = r.scoreB;
@@ -164,6 +199,30 @@ export function playWeek(rng, league, schedule, week, standings, strategies = {}
     for (const p of roster) if (p.injuredWeeks > 0) p.injuredWeeks--;
   }
   return results;
+}
+
+// Re-run the user's game from the captured rng state with the coach's decisions
+// applied. Reverts stats/injuries/standings/scores first, so the world ends up
+// exactly as if the game had been played this way the first time. NOTE: playWeek's
+// end-of-week heal tick already ran, so we re-apply it to these two rosters.
+export function replayUserGame(hooks, standings, coachModsFn, decisions) {
+  const C = hooks.captured;
+  if (!C) return null;
+  // 1) revert everything the first sim did
+  restoreSnap(C.snap);
+  applyGameToStandings(standings, C.game, C.game.scoreHome, C.game.scoreAway, -1);
+  // 2) same dice, new choices
+  const rng = makeRng(0);
+  rng.setState(C.rngState);
+  const r = simGame(rng, C.home, C.away, C.game.home, coachModsFn, C.wx,
+    { teamId: hooks.teamId, decide: ctx => decisions[ctx.drive] || null });
+  // 3) apply the new outcome + redo the weekly heal for these rosters
+  C.game.scoreHome = r.scoreA; C.game.scoreAway = r.scoreB;
+  applyGameToStandings(standings, C.game, r.scoreA, r.scoreB, +1);
+  for (const p of [...C.home.players, ...C.away.players]) {
+    if (p.injuredWeeks > 0) p.injuredWeeks--;
+  }
+  return r;
 }
 
 export function seeds(standings, conf) {

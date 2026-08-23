@@ -420,14 +420,14 @@ export function legalAfterLoss(roster, playerIds) {
 
 // AI (partner) evaluates: they give `theirAssets`, receive `myAssets`.
 // Returns {accept, reason, giveVal, getVal}
-export function evalTrade(league, picks, myTeamId, partnerId, myAssets, theirAssets) {
+export function evalTrade(league, picks, myTeamId, partnerId, myAssets, theirAssets, discount = 1) {
   const getVal = assetValue(league, picks, myTeamId, myAssets);
   const giveVal = assetValue(league, picks, partnerId, theirAssets);
   if (!theirAssets.players.length && !theirAssets.picks.length) return { accept: false, reason: "Nothing offered from their side.", giveVal, getVal };
   if (!legalAfterLoss(league[partnerId], theirAssets.players)) return { accept: false, reason: "That would gut their depth chart.", giveVal, getVal };
   if (league[partnerId].length - theirAssets.players.length + myAssets.players.length > ROSTER_MAX)
     return { accept: false, reason: "No roster room on their side.", giveVal, getVal };
-  const needed = giveVal * 1.1 + 4; // AI skims a premium
+  const needed = giveVal * 1.1 * discount + 4; // AI skims a premium (deadline sellers discount it)
   if (getVal < needed) {
     const gap = Math.round(needed - getVal);
     return { accept: false, reason: `Not enough value — they want roughly ${gap} more points of value.`, giveVal, getVal };
@@ -515,8 +515,12 @@ export function scoutProspect(p) {
 
 // ---------------------------------------------------------------- AI trade offers
 // An AI team with a need covets one of the user's good players and assembles a package.
-export function genAIOffer(rng, league, picks, userTeamId, futurePicks = null) {
-  const shuffled = [...TEAMS].filter(t => t.id !== userTeamId).sort(() => rng.f() - 0.5);
+export function genAIOffer(rng, league, picks, userTeamId, futurePicks = null, opts = {}) {
+  let shuffled = [...TEAMS].filter(t => t.id !== userTeamId).sort(() => rng.f() - 0.5);
+  if (opts.preferTeams && opts.preferTeams.length) {
+    const pref = new Set(opts.preferTeams);
+    shuffled = shuffled.filter(t => pref.has(t.id)).concat(shuffled.filter(t => !pref.has(t.id)));
+  }
   for (const t of shuffled.slice(0, 10)) {
     const chart = depthChart(league[t.id]);
     for (const [pos, want] of Object.entries(TEMPLATE)) {
@@ -527,7 +531,7 @@ export function genAIOffer(rng, league, picks, userTeamId, futurePicks = null) {
         .sort((a, b) => b.ovr - a.ovr);
       const target = targets[0];
       if (!target || !legalAfterLoss(league[userTeamId], [target.id])) continue;
-      const targetVal = playerValue(target) * (1.02 + rng.f() * 0.16); // they pay a premium
+      const targetVal = playerValue(target) * (opts.premium || (1.02 + rng.f() * 0.16)); // they pay a premium
       const give = { players: [], picks: [], fpicks: [] };
       let val = 0;
       const candidates = league[t.id]

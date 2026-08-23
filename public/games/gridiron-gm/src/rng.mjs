@@ -17,5 +17,8 @@ export function makeRng(seed) {
       return (s - 3) / 0.7071;
     },
     chance: (p) => next() < p,
+    // state capture for deterministic replay (live game decisions re-sim)
+    state: () => a >>> 0,
+    setState: (v) => { a = v >>> 0; },
   };
 }

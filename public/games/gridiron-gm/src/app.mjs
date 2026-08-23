@@ -3,16 +3,16 @@
 import { makeRng } from "./rng.mjs";
 import { buildLeague, emptyStats, depthChart, teamUnits, TEMPLATE, ATTR_DEFS, attr, ensureAttrs, bumpNextId } from "./players.mjs";
 import { simGame, matchupEdges, gameWeather, STADIUM } from "./sim.mjs";
-import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, nextPlayoffRound } from "./season.mjs";
+import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, nextPlayoffRound, replayUserGame } from "./season.mjs";
 import { TEAMS, TEAM_BY_ID } from "./data_teams.mjs";
-import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd } from "./sfx.mjs";
+import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd, playMusic, stopMusic } from "./sfx.mjs";
 import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, capRoom,
   cutPlayer, contractFor, CAP_LIMIT, ROSTER_MAX,
   archiveSeasonStats, computeAwards, computeAllPro, statLine, careerTotals,
   SCHEMES, genCoach, coachFit, coachMods, playerValue, PICK_VALUE,
   evalTrade, execTrade, freshPicks, legalAfterLoss, applyTraining, scoutProspect,
-  genAIOffer, updateRecords, RECORD_KEYS } from "./gm.mjs";
+  genAIOffer, updateRecords, RECORD_KEYS, hofScore } from "./gm.mjs";
 
 const SAVE_KEY = "gridiron_gm_save_v1";
 const $ = sel => document.querySelector(sel);
@@ -242,8 +242,19 @@ function viewRoster() {
     <b>Click any attribute to set a 🎯 training focus (${S.training.length}/3)</b> — focused attributes grow each offseason (young players + good coaches develop faster). Build your run-mauler.</div>`;
 }
 
+function holdoutBanner() {
+  const H = S.holdout;
+  if (!H || H.resolved) return "";
+  const p = S.league[S.teamId].find(x => x.id === H.id);
+  if (!p) return "";
+  return `<div class="coachcard" style="border-left:4px solid #ff8f9f">💢 <b>HOLDOUT:</b>
+    <span class="pn" onclick="__gm.pcard(${p.id})">${p.name}</span> (${p.pos} ${p.ovr}, $${p.contract.salary}M now)
+    demands <b>$${H.ask.salary}M × ${H.ask.years}y</b>.
+    <button class="mini" onclick="__gm.resolveHoldout(true)">PAY HIM</button>
+    <button class="mini" onclick="__gm.resolveHoldout(false)">LET HIM SIT (3 wks)</button></div>`;
+}
 function viewSchedule() {
-  let html = "";
+  let html = holdoutBanner();
   if (S.seasonNum === 1 && S.week === 0 && !S.sawIntro) {
     html += `<div class="coachcard intro"><b>Welcome, Coach.</b> The loop: check <b>THIS WEEK</b> below → tweak your
       <b>gameplan slider</b> (My Roster) → hit <b>ADVANCE WEEK</b> and watch the game. Between seasons you'll re-sign,
@@ -391,6 +402,7 @@ function showPlayerCard(p) {
     : `<span class="dim">rookie season</span>`;
   const PP = PERSONAS[personaOf(p)];
   const badges = [
+    S.franchiseTag === p.id ? `<span class="pcBadge" style="border-color:#4de37f;color:#4de37f">🏈 FRANCHISE</span>` : "",
     `<span class="pcBadge" style="border-color:#9fb3d9;color:#9fb3d9" title="${PP.blurb}">${PP.icon} ${PP.name}</span>`,
     p.allPro ? `<span class="pcBadge">★ ALL-PRO ×${p.allPro}</span>` : "",
     p.rookie ? `<span class="pcBadge" style="border-color:#7fd8c8;color:#7fd8c8">ROOKIE</span>` : "",
@@ -405,7 +417,10 @@ function showPlayerCard(p) {
     </div>
     ${badges ? `<div style="margin:4px 0 8px">${badges}</div>` : ""}
     ${bars}
-    <div class="pcSec">CONTRACT</div><div>${contract}</div>
+    <div class="pcSec">CONTRACT</div><div>${contract}${
+      p.teamId === S.teamId && S.franchiseTag !== p.id && p.ovr >= 78
+        ? ` &nbsp;<button class="mini" onclick="__gm.setFranchiseTag(${p.id})" title="One tag per team: he extends at a discount and never holds out">MAKE FRANCHISE PLAYER</button>`
+        : ""}</div>
     <div class="pcSec">THIS SEASON</div><div>${seasonL}</div>
     <div class="pcSec">CAREER</div><div>${careerL}</div>
   </div>`;
@@ -865,11 +880,124 @@ function tradesOpen() {
   return (S.phase === "season" && S.week <= 8) || S.phase === "freeagency";
 }
 
+// ---------------------------------------------------------------- storylines
+// Season-open beats that make year 4 feel different from year 1.
+function seasonStorylines(rng) {
+  S.holdout = null;
+  // 💢 HOLDOUT: a greedy/mercenary star clearly outplaying his contract wants a new one.
+  // Franchise-tagged players never hold out — that's half the point of the tag.
+  const candidates = S.league[S.teamId].filter(p => {
+    const key = personaOf(p);
+    return (key === "greedy" || key === "mercenary") && p.ovr >= 82 && p.id !== S.franchiseTag
+      && p.contract && p.contract.salary < extensionAsk(p).salary * 0.6;
+  }).sort((a, b) => b.ovr - a.ovr);
+  if (candidates.length && rng.chance(0.6)) {
+    const p = candidates[0];
+    const base = extensionAsk(p);
+    const ask = { salary: Math.round(base.salary * 1.1 * 10) / 10, years: Math.max(2, base.years) };
+    S.holdout = { id: p.id, ask, resolved: false };
+    S.news.unshift({ week: 0, season: S.seasonNum,
+      text: `💢 HOLDOUT: ${p.name} (${p.pos} ${p.ovr}) wants a new deal — $${ask.salary}M × ${ask.years}y. Pay him or he sits 3 weeks.` });
+  }
+  // 🕯️ RETIREMENT WATCH: aging legends on their possible final ride (league-wide, max 3)
+  let watches = 0;
+  for (const roster of Object.values(S.league)) {
+    for (const p of roster) {
+      if (watches >= 3) break;
+      if (p.age >= 34 && hofScore(p) >= 200 && p.rwatchSeason !== S.seasonNum) {
+        p.rwatchSeason = S.seasonNum;
+        watches++;
+        S.news.unshift({ week: 0, season: S.seasonNum,
+          text: `🕯️ RETIREMENT WATCH: ${p.name} (${p.teamId} ${p.pos}, ${p.age}) enters what may be his final ride — a Hall of Fame case is on the line` });
+      }
+    }
+  }
+}
+function resolveHoldout(pay) {
+  const H = S.holdout;
+  if (!H || H.resolved) return;
+  const p = S.league[S.teamId].find(x => x.id === H.id);
+  if (!p) { S.holdout = null; save(); render(); return; }
+  if (pay) {
+    const room = capRoom(S.league[S.teamId], S.deadMoney[S.teamId], S.capMode);
+    if (room !== Infinity && H.ask.salary - p.contract.salary > room) {
+      alert(`Not enough cap room (needs $${(H.ask.salary - p.contract.salary).toFixed(1)}M more). Clear salary or let him sit.`);
+      return;
+    }
+    p.contract = { salary: H.ask.salary, years: H.ask.years };
+    S.news.unshift({ week: S.week + 1, season: S.seasonNum,
+      text: `🤝 ${p.name} gets his money ($${H.ask.salary}M/yr) — holdout over, back in the building` });
+  } else {
+    p.injuredWeeks = Math.max(p.injuredWeeks, 3);   // he sits — the depth chart carries on
+    S.news.unshift({ week: S.week + 1, season: S.seasonNum,
+      text: `🧊 ${teamName(S.teamId)} refuse ${p.name}'s demands — he'll sit the next 3 weeks` });
+  }
+  S.holdout = { ...H, resolved: true };
+  save(); render();
+}
+// 🏈 FRANCHISE PLAYER: one tag, set from the player card. He extends at a discount
+// and never holds out. Moving the tag is allowed — telling the old guy is on you.
+function setFranchiseTag(id) {
+  const p = S.league[S.teamId].find(x => x.id === id);
+  if (!p) return;
+  S.franchiseTag = id;
+  S.news.unshift({ week: S.week + 1, season: S.seasonNum,
+    text: `🏈 ${p.name} named the FRANCHISE PLAYER — the locker room takes note` });
+  closePcard();
+  save(); render();
+}
+
+// ---------------------------------------------------------------- trade deadline
+// Weeks 7-9 are DEADLINE SEASON: winning teams turn buyers (more calls, fatter
+// premiums), losing teams turn sellers (veterans go ~20% under sticker).
+function deadlineWindow() { return S.phase === "season" && S.week >= 6 && S.week <= 8; }  // weeks 7-9 shown to the user
+function teamRecord(id) { const st = S.standings[id]; return st ? st.w - st.l : 0; }
+function sellerTeams() { return TEAMS.filter(t => t.id !== S.teamId && teamRecord(t.id) <= -2).map(t => t.id); }
+function buyerTeams() { return TEAMS.filter(t => t.id !== S.teamId && teamRecord(t.id) >= 2).map(t => t.id); }
+function fireSaleList() {
+  const sellers = new Set(sellerTeams());
+  const out = [];
+  for (const tid of sellers) {
+    for (const p of S.league[tid]) {
+      if (p.ovr >= 74 && (p.age >= 29 || p.contract.years === 1) && p.injuredWeeks === 0) {
+        out.push(p);
+      }
+    }
+  }
+  return out.sort((a, b) => b.ovr - a.ovr).slice(0, 8);
+}
+function shopPlayer(teamId, pid) {
+  if (!S.tradeUI) S.tradeUI = { partner: teamId, mine: [], theirs: [], minePicks: [], theirPicks: [], mineFPicks: [], theirFPicks: [], verdict: null };
+  S.tradeUI.partner = teamId;
+  S.tradeUI.theirs = [pid];
+  S.tradeUI.mine = []; S.tradeUI.minePicks = []; S.tradeUI.theirPicks = [];
+  S.tradeUI.mineFPicks = []; S.tradeUI.theirFPicks = []; S.tradeUI.verdict = null;
+  activeView = "trades";
+  render();
+}
+
 function viewTrades() {
   if (!tradesOpen()) return `<h2>Trade Center</h2><p class='dim'>Trades are open weeks 1–9 and during free agency. ${S.phase === "season" ? "The deadline has passed for this season." : ""}</p>`;
   if (!S.tradeUI) S.tradeUI = { partner: S.teamId === "GB" ? "CHI" : "GB", mine: [], theirs: [], minePicks: [], theirPicks: [], mineFPicks: [], theirFPicks: [], verdict: null };
   if (!S.tradeUI.mineFPicks) { S.tradeUI.mineFPicks = []; S.tradeUI.theirFPicks = []; } // migrate open UIs
   let offerHtml = "";
+  if (deadlineWindow()) {
+    const weeksLeft = 9 - (S.week + 1);
+    const sellers = sellerTeams();
+    offerHtml += `<div class="coachcard" style="border-left:4px solid #ff8f9f"><b>🔥 TRADE DEADLINE ${weeksLeft <= 0 ? "— FINAL WEEK!" : `— ${weeksLeft + 1} weeks left`}</b><br>
+      <span class="dim">Contenders are buying (expect rich offers for your stars). Sellers accept ~20% under value:</span>
+      ${sellers.length ? sellers.map(id => chip(id)).join(" ") : '<span class="dim">nobody is selling yet</span>'}</div>`;
+    const sale = fireSaleList();
+    if (sale.length) {
+      offerHtml += `<h3>🏷️ Fire sale — veterans on the block</h3><table><tr class="hdr"><td>Team</td><td>Player</td><td>Age</td><td>OVR</td><td>Deal</td><td></td></tr>`;
+      for (const p of sale) {
+        offerHtml += `<tr><td>${chip(p.teamId)}</td><td>${pn(p)}</td><td>${p.age}</td><td><b>${p.ovr}</b></td>
+          <td class="dim">$${p.contract.salary}M × ${p.contract.years}y</td>
+          <td><button class="mini" onclick="__gm.shopPlayer('${p.teamId}', ${p.id})">SHOP</button></td></tr>`;
+      }
+      offerHtml += "</table>";
+    }
+  }
   if (S.aiOffer) {
     const o = S.aiOffer;
     const giveDesc = o.giveIds.map(id => {
@@ -975,7 +1103,26 @@ function runAwardsNight() {
   show();
 }
 
+// ---------------------------------------------------------------- music director
+// One decision point: what should be playing right now? Missing mp3s fail silent.
+let victoryLock = false, pendingVictoryMusic = false;
+function updateMusic() {
+  if (victoryLock) return;
+  if (pendingVictoryMusic) {
+    pendingVictoryMusic = false;
+    victoryLock = true;
+    playMusic("victory", { loop: false, vol: 0.4, onend: () => { victoryLock = false; updateMusic(); } });
+    return;
+  }
+  if (!S) { playMusic("menu"); return; }
+  let want = "menu";
+  if (activeView === "draft" && S.draft) want = "draft";
+  else if (S.phase === "offseason" || S.phase === "fired") want = "offseason";
+  playMusic(want, { vol: 0.28 });
+}
+
 function render() {
+  updateMusic();
   if (S && S.phase === "offseason" && S.lastAwards && S.awardsCeremonySeason !== S.seasonNum
       && !document.getElementById("awardsNight")) {
     runAwardsNight();
@@ -1027,6 +1174,28 @@ function playerOfTheGame(myGame, hs, as) {
 }
 
 // ---------------------------------------------------------------- ticker
+let weekHooks = null;   // rng/snapshot capture for the user's game (live decisions)
+
+// The COACH'S CALL panel: ticker pauses BEFORE showing the marked drive's outcome.
+function showDecisionPanel(ctx, onPick) {
+  const old = document.getElementById("decisionBox");
+  if (old) old.remove();
+  const box = document.createElement("div");
+  box.id = "decisionBox";
+  const spot = ctx.start >= 50 ? `their ${100 - ctx.start}` : `your own ${ctx.start}`;
+  box.innerHTML = `<div class="dim" style="letter-spacing:2px">🧠 COACH'S CALL</div>
+    <b>Q4 · down ${-ctx.diff} · ball at ${spot} · ~${ctx.remaining} drives left</b>
+    <div class="decBtns">
+      <button data-c="go">🎲 GO FOR IT<br><span>chase the TD — no punts, boom or bust</span></button>
+      <button data-c="fg">🎯 TAKE THE POINTS<br><span>work into field-goal range</span></button>
+      <button data-c="safe">🛡️ PLAY IT SAFE<br><span>trust the defense — punt and flip the field</span></button>
+    </div>`;
+  for (const b of box.querySelectorAll("button")) {
+    b.onclick = () => { box.remove(); onPick(b.dataset.c); };
+  }
+  document.getElementById("ticker").insertBefore(box, document.getElementById("tickerLog"));
+  sfx.count();
+}
 // ~30s pacing (user decision): drive log ≈ 22-24 entries → ~1.15s each. Skippable.
 function runTicker(myGame, results, done) {
   const overlay = $("#ticker");
@@ -1041,9 +1210,12 @@ function runTicker(myGame, results, done) {
     `linear-gradient(rgba(10,12,16,.82), rgba(10,12,16,.93)), url('img/stadium_${scene}.png')`;
   overlay.classList.remove("hidden");
   startCrowd();
+  playMusic(myGame.bowl ? "bowl" : "gameday", { vol: myGame.bowl ? 0.3 : 0.2 });
   const home = myGame.home, away = myGame.away;
   let hs = 0, as = 0, i = 0;
-  const log = myGame.log;
+  let log = myGame.log;
+  let decisionsLeft = 2;                 // max coach's calls per game
+  const decisionsMade = {};              // drive index -> choice (fed to the re-sim)
   const drivesEl = $("#tickerLog");
   drivesEl.innerHTML = "";
   if (myGame.weather) {
@@ -1061,6 +1233,24 @@ function runTicker(myGame, results, done) {
   const scoreEl = $("#tickerScore");
   $("#tickerBox").classList.add("hidden");
   const step = () => {
+    // COACH'S CALL: the next entry is a decision moment we haven't shown yet.
+    // Pause, ask, re-sim the rest of the game with the choice, splice the log.
+    if (i < log.length && log[i].ask && decisionsLeft > 0 && weekHooks && weekHooks.captured) {
+      const ctx = log[i].ask;
+      decisionsLeft--;
+      showDecisionPanel(ctx, (choice) => {
+        decisionsMade[ctx.drive] = choice;
+        const r2 = replayUserGame(weekHooks, S.standings, coachMods, decisionsMade);
+        if (r2) {
+          // determinism: entries before i are identical rolls — swap in the new tail
+          log = myGame.log = r2.log;
+          myGame.box = r2.box;
+          myGame.scoreHome = r2.scoreA; myGame.scoreAway = r2.scoreB;
+        }
+        timer = setTimeout(step, 500);
+      });
+      return;
+    }
     if (i >= log.length) {
       $("#tickerSkip").textContent = "CONTINUE ▶";
       $("#tickerBox").classList.remove("hidden");
@@ -1108,14 +1298,22 @@ function runTicker(myGame, results, done) {
   let timer = setTimeout(step, 400);
   $("#tickerSkip").onclick = () => {
     clearTimeout(timer);
+    const db = document.getElementById("decisionBox");
+    if (db) db.remove();   // skipping abandons a pending call — auto-coach takes it
+    if (weekHooks) weekHooks.captured = null;
     stopCrowd();
+    stopMusic();
     overlay.classList.add("hidden");
     $("#tickerSkip").textContent = "SKIP ▶";
     done();
   };
   $("#tickerBox").onclick = () => {
     clearTimeout(timer);
+    const db2 = document.getElementById("decisionBox");
+    if (db2) db2.remove();
+    if (weekHooks) weekHooks.captured = null;
     stopCrowd();
+    stopMusic();
     overlay.classList.add("hidden");
     $("#tickerSkip").textContent = "SKIP ▶";
     activeView = "boxscore";
@@ -1130,32 +1328,38 @@ const weatherFor = (homeId, week) => gameWeather(S.seed, S.seasonNum, week, home
 function advance() {
   if (S.phase === "season") {
     const rng = weekRng();
-    const results = playWeek(rng, S.league, S.schedule, S.week, S.standings, aiStrategies(), S.coaches, coachMods, weatherFor);
-    genWeeklyNews(results);
-    const mg = results.find(g => g.home === S.teamId || g.away === S.teamId);
-    if (mg) {
-      const my = mg.home === S.teamId ? mg.scoreHome : mg.scoreAway;
-      const their = mg.home === S.teamId ? mg.scoreAway : mg.scoreHome;
-      const delta = my > their ? (my - their >= 17 ? 2 : 1) : (their - my >= 17 ? -2 : -1);
-      S.security = Math.max(0, Math.min(100, S.security + delta));
-    }
+    weekHooks = { teamId: S.teamId };
+    const results = playWeek(rng, S.league, S.schedule, S.week, S.standings, aiStrategies(), S.coaches, coachMods, weatherFor, weekHooks);
     S.scoutPts = Math.min(24, (S.scoutPts || 0) + 2); // scouts file weekly reports
     // AI teams occasionally call about your players (trade window only)
     if (S.aiOffer && S.week > S.aiOffer.week + 2) S.aiOffer = null; // offer expired
-    if (!S.aiOffer && S.week <= 8 && rng.chance(0.22)) {
-      const offer = genAIOffer(rng, S.league, S.picks, S.teamId, S.futurePicks);
+    const inDeadline = S.week >= 6 && S.week <= 8;
+    const offerChance = inDeadline ? 0.5 : 0.22;   // deadline season: the phone rings off the hook
+    if (!S.aiOffer && S.week <= 8 && rng.chance(offerChance)) {
+      const opts = inDeadline
+        ? { preferTeams: buyerTeams(), premium: 1.15 + rng.f() * 0.2 }   // contenders overpay
+        : {};
+      const offer = genAIOffer(rng, S.league, S.picks, S.teamId, S.futurePicks, opts);
       if (offer) {
         S.aiOffer = { ...offer, week: S.week };
         S.news.unshift({ week: S.week + 1, season: S.seasonNum,
-          text: `📞 The ${TEAM_BY_ID[offer.from].name} are calling about ${offer.wantName} — check the Trade Center` });
+          text: `${inDeadline ? "🔥 DEADLINE" : "📞"}: The ${TEAM_BY_ID[offer.from].name} are calling about ${offer.wantName} — check the Trade Center` });
       }
     }
+    if (S.week === 5) S.news.unshift({ week: 6, season: S.seasonNum,
+      text: "🔥 TRADE DEADLINE SEASON opens next week — buyers pay up, sellers cash out (deadline: end of week 9)" });
     const myGame = results.find(g => g.home === S.teamId || g.away === S.teamId);
-    if (myGame) {
-      S.lastBox = { week: S.week, home: myGame.home, away: myGame.away,
-        scoreHome: myGame.scoreHome, scoreAway: myGame.scoreAway, box: myGame.box };
-    }
     const finish = () => {
+      // post-ticker so a COACH'S CALL replay is fully reflected in news/box/security
+      genWeeklyNews(results);
+      if (myGame) {
+        S.lastBox = { week: S.week, home: myGame.home, away: myGame.away,
+          scoreHome: myGame.scoreHome, scoreAway: myGame.scoreAway, box: myGame.box };
+        const my = myGame.home === S.teamId ? myGame.scoreHome : myGame.scoreAway;
+        const their = myGame.home === S.teamId ? myGame.scoreAway : myGame.scoreHome;
+        const delta = my > their ? (my - their >= 17 ? 2 : 1) : (their - my >= 17 ? -2 : -1);
+        S.security = Math.max(0, Math.min(100, S.security + delta));
+      }
       milestoneNews();
       S.week += 1;
       if (S.week >= 18) {
@@ -1368,7 +1572,9 @@ function tradePropose() {
   if (!T || !tradesOpen()) return;
   const myAssets = { players: T.mine, picks: T.minePicks, fpicks: T.mineFPicks || [] };
   const theirAssets = { players: T.theirs, picks: T.theirPicks, fpicks: T.theirFPicks || [] };
-  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets);
+  const sellerDiscount = deadlineWindow() && sellerTeams().includes(T.partner) ? 0.8 : 1;
+  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, sellerDiscount);
+  if (verdict.accept && sellerDiscount < 1) verdict.reason = "Deal! (fire-sale price — they're sellers)";
   // user-side legality too: don't let a trade break your own minimums or cap
   if (verdict.accept) {
     const incoming = theirAssets.players.map(pid => S.league[T.partner].find(p => p.id === pid)).filter(Boolean);
@@ -1505,7 +1711,8 @@ function askOf(p, resigning) {
 function extensionAsk(p) {
   const r = makeRng(((S.seed ^ (p.id * 2654435761)) >>> 0));
   const base = contractFor(r, p, 1.15);
-  return { salary: Math.max(0.8, Math.round(base.salary * personaMult(p, "ext") * 10) / 10), years: base.years };
+  const tagMult = S.franchiseTag === p.id ? 0.85 : 1;   // the tag means something at the table
+  return { salary: Math.max(0.8, Math.round(base.salary * personaMult(p, "ext") * tagMult * 10) / 10), years: base.years };
 }
 
 function userExtend(playerId) {
@@ -1583,7 +1790,7 @@ function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
   tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard,
-  exportSave, importSave };
+  exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag };
 
 function startOffseasonPipeline() {
     const rng = weekRng();
@@ -1674,6 +1881,7 @@ function advancePlayoffs() {
   if (P.stage === 3) {
     S.bracket = { rounds: P.rounds.concat([{ name: PLAYOFF_STAGES[3], winners: winners.NFL, games: played }]),
       champion: winners.NFL[0] };
+    if (winners.NFL[0] === S.teamId) pendingVictoryMusic = true;   // fanfare after the ticker closes
     S.news.unshift({ week: 22, season: S.seasonNum, text: `🏆 ${teamName(winners.NFL[0])} WIN THE GRIDIRON BOWL!` });
     S.playoffs = null;
     S.phase = "offseason";
@@ -1764,6 +1972,7 @@ function finishOffseason() {
   S.schedule = makeSchedule(rng, S.seasonNum);
   S.standings = emptyStandings();
   S.fa = null; S.draft = null; S.lastBox = null; S.tradeUI = null; S.aiOffer = null;
+  seasonStorylines(rng);
   S.lastAwards = null; // recomputed at next week 18
   // futures convey: last year's "next-year" pick book IS this season's draft capital
   S.picks = S.futurePicks || freshPicks();

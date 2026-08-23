@@ -181,7 +181,7 @@ function applyCoach(units, coach, coachModsFn) {
   units.defPass += m.defPass; units.defRun += m.defRun;
 }
 
-export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null) {
+export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, hooks = null) {
   const ua = teamUnits(teamA.players), ub = teamUnits(teamB.players);
   applyCoach(ua, teamA.coach, coachModsFn);
   applyCoach(ub, teamB.coach, coachModsFn);
@@ -276,6 +276,15 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null) 
       }
     }
     let hurry = false, milk = false, noPunt = false;
+    // LIVE COACH'S CALL (user team, trailing, crunch time): the app can pause the
+    // ticker here and let the human pick the branch. hooks null (or decide->null)
+    // = the automatic policy below runs exactly as it always has.
+    let decision = null, askInfo;
+    if (hooks && hooks.teamId === off.t.id && lateGame && diff < 0 && diff >= -9 && remaining >= 2) {
+      const ctx = { drive: d, quarter, diff, start, remaining };
+      decision = hooks.decide ? hooks.decide(ctx) : null;
+      if (!decision) askInfo = ctx;   // mark the moment; the ticker may come back for it
+    }
     if (lateGame && diff > 0 && remaining <= 2) {
       // victory formation: leading team with the ball late kneels it out
       if (remaining === 1 || rng.chance(0.6)) {
@@ -284,11 +293,18 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null) 
         break; // ballgame
       }
     }
-    if (lateGame && diff < 0) {
+    if (lateGame && diff < 0 && decision !== "safe") {
       // trailing: hurry-up, and 4th downs are GO downs — punting is (mostly) off the table
       const deficit = -diff;
       const puntP = Math.max(0, 1 - (p.to + p.td + p.fgAtt));
-      if (deficit >= 4) {
+      if (decision === "go") {
+        // the human says CHASE THE TOUCHDOWN — all gas, no punts
+        p.td += puntP * 0.45; p.fgAtt += puntP * 0.10; p.to += puntP * 0.45;
+        noPunt = true;
+      } else if (decision === "fg") {
+        // the human says TAKE THE POINTS — bleed toward the kick
+        p.td += puntP * 0.10; p.fgAtt += puntP * 0.55; p.to += puntP * 0.10;
+      } else if (deficit >= 4) {
         // need a TD (or two): all-out aggression — converts or turns it over on downs
         p.td += puntP * 0.40; p.fgAtt += puntP * 0.15; p.to += puntP * 0.45;
         noPunt = true;
@@ -352,7 +368,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null) 
     if (result === "TO" || rng.chance(0.40)) def.sacksFor += rng.chance(0.55) ? 1 : 0;
     log.push({ q: quarter, off: off.t.id, result, points, yards, scorer: scorerText, start,
       hurry: hurry || undefined, milk: milk || undefined, conv: conv || undefined,
-      downs: downs || undefined });
+      downs: downs || undefined, ask: askInfo });
     scorerText = null;
   }
   // defense stat attribution — the mismatch rusher (facing side's weak OL) eats first

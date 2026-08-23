@@ -3,7 +3,7 @@
 import { makeRng } from "../src/rng.mjs";
 import { buildLeague, teamUnits, emptyStats } from "../src/players.mjs";
 import { simGame } from "../src/sim.mjs";
-import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds } from "../src/season.mjs";
+import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, replayUserGame } from "../src/season.mjs";
 import { TEAMS } from "../src/data_teams.mjs";
 import { REAL_ROSTERS } from "../src/data_rosters.mjs";
 
@@ -244,6 +244,59 @@ const band = (name, val, lo, hi) =>
     return `${r.scoreA}-${r.scoreB}`;
   };
   check("same seed => same result", run() === run());
+}
+
+// ---- §7 LIVE COACH'S CALL: hooks, marks, deterministic replay ----
+{
+  const rng = makeRng(4242);
+  const league = buildLeague(rng);
+  const schedule = makeSchedule(rng, 1);
+  const standings = emptyStandings();
+  const userId = "MIN";
+  // hunt a few weeks until the user's game produces a marked decision moment
+  let hooks = null, myGame = null, week = -1;
+  for (let w = 0; w < 18 && !myGame; w++) {
+    hooks = { teamId: userId };
+    const res = playWeek(rng, league, schedule, w, standings, {}, {}, null, null, hooks);
+    const g = res.find(x => x.home === userId || x.away === userId);
+    if (g && g.log.some(d => d.ask)) { myGame = g; week = w; }
+  }
+  check("call: a marked decision moment appears within a season", !!myGame, week);
+  if (myGame) {
+    const askEntry = myGame.log.find(d => d.ask);
+    const askIdx = myGame.log.indexOf(askEntry);
+    check("call: mark carries context", askEntry.ask.drive >= 0 && askEntry.ask.diff < 0 && askEntry.ask.remaining >= 2);
+    check("call: marked drive is the user's offense", askEntry.off === userId);
+
+    // snapshot world state for integrity checks
+    const stTot = (id) => { const s = standings[id]; return [s.w, s.l, s.pf, s.pa].join("/"); };
+    const preMine = stTot(userId);
+    const gpSum = () => league[userId].reduce((a, p) => a + p.stats.gp, 0);
+    const gpBefore = gpSum();
+
+    // replay with GO FOR IT at the marked drive
+    const oldLog = myGame.log;
+    const r2 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive]: "go" });
+    check("call: replay returns a game", !!r2 && Array.isArray(r2.log));
+    // determinism: everything BEFORE the decision replays identically
+    let prefixSame = true;
+    for (let i = 0; i < askIdx; i++) {
+      const a = oldLog[i], b = r2.log[i];
+      if (!b || a.result !== b.result || a.points !== b.points || a.off !== b.off) prefixSame = false;
+    }
+    check("call: pre-decision drives replay identically", prefixSame);
+    check("call: the decided drive is no longer marked", !r2.log[askIdx] || !r2.log[askIdx].ask || r2.log[askIdx].ask.drive !== askEntry.ask.drive);
+    // world integrity: standings reflect exactly one played game for the user
+    const s2 = standings[userId];
+    const playedCt = schedule.slice(0, week + 1).reduce((n, wk) =>
+      n + wk.filter(x => x.played && (x.home === userId || x.away === userId)).length, 0);
+    check("call: games conserved after replay (w+l = games played)", s2.w + s2.l === playedCt, stTot(userId) + " played " + playedCt);
+    check("call: schedule score matches the replay", schedule[week].find(x => x.home === myGame.home && x.away === myGame.away).scoreHome === r2.scoreA);
+    check("call: gp not double-counted", gpSum() <= gpBefore + 0, gpSum() - gpBefore);
+    // replay with same (empty) decisions = byte-identical outcome
+    const r3 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive]: "go" });
+    check("call: replay is deterministic", r3.scoreA === r2.scoreA && r3.scoreB === r2.scoreB && r3.log.length === r2.log.length);
+  }
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
