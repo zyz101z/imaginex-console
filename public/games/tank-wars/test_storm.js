@@ -365,6 +365,10 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.tanks[1].alive = true;
 
   // wave only fails when the WHOLE team is down
+  // (park the buddy away from enemy muzzles first — the nearestFoe check left him
+  //  10px from a hostile, and a point-blank AI shot made this flaky)
+  tw.tanks[1].x = 60; tw.tanks[1].y = 60;
+  for (const e2 of tw.tanks.slice(2)) e2.cd = 5;
   tw.setPhase('play');
   tw.tanks[0].alive = false;
   tw.update(1 / 60);
@@ -550,6 +554,20 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.survOver();
   check('rush: bestRush recorded, bestWave untouched', tw.profile.bestRush === 6 && tw.profile.bestWave === bw);
   tw.surv.on = false; tw.surv.rush = false; tw.surv.daily = false;
+}
+
+// ---------- 22b. mode-entry regression (the shadowed-global bug) ----------
+{
+  // startSurvival('rush') froze the whole game because a parameter named 'mode'
+  // shadowed the global game state. Verify every entry path REALLY enters play.
+  for (const m2 of [undefined, 'daily', 'rush']) {
+    tw.profile.bestWave = 12;
+    tw.startSurvival(m2);
+    check('entry: startSurvival(' + m2 + ') reaches game mode play', tw.mode === 'play');
+    check('entry: tanks actually spawned (' + m2 + ')', tw.tanks.length >= 2 && tw.tanks[0].alive);
+    check('entry: phase is countdown (' + m2 + ')', tw.phase === 'countdown');
+  }
+  tw.surv.on = false; tw.surv.daily = false; tw.surv.rush = false;
 }
 
 // ---------- 22. DAILY QUESTS ----------

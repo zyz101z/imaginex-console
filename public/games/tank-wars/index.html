@@ -1096,9 +1096,11 @@ function survMag(t)      { return (surv.on && t.team === 0) ? (surv.perks.magazi
 function survShellMul(t) { return (surv.on && t.team === 0) ? 1 + 0.12 * (surv.perks.velocity || 0) : 1; }
 function survGain(n) { surv.run += Math.round(n * (1 + 0.4 * (surv.perks.salvage || 0))); }
 
-function startSurvival(mode) {
+function startSurvival(smode) {
+  // ⚠ param must NOT be named 'mode' — it would shadow the global game-state
+  // variable and the 'mode = play' below would silently do nothing (2026-08-23 bug)
   surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
-  surv.daily = mode === 'daily'; surv.rush = mode === 'rush';
+  surv.daily = smode === 'daily'; surv.rush = smode === 'rush';
   matchCfg = { mode: 'survival', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
                playerTank: profile.owned[profile.tank] ? profile.tank : 'scout', foeTank: 'scout', battle: null };
   aiParams = AI_LEVELS.officer;
@@ -3719,6 +3721,7 @@ window.__tw = {
   TANKS, PERKS, PERK_ORDER, AI_LEVELS, CAMPAIGN,
   setPhase(v) { phase = v; }, setTanks(v) { tanks = v; },
   get paused() { return paused; }, setPaused(v) { paused = !!v; }, resumeGame,
+  get mode() { return mode; },
   // co-op storm test surface
   net, serTank, serShell, startCoopStorm, netSendSWave, nearestFoe, survFanBurst, dailyKey, packWalls,
   ensureQuests, questBump, QUEST_DEFS, get questToasts() { return questToasts; },
