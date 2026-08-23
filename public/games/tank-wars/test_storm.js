@@ -497,6 +497,59 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   check('sprites: manifest entries present', /bulwark: \{ w: \d+, h: 128/.test(srcTxt) && /hailstorm: \{ w: \d+, h: 128/.test(srcTxt));
 }
 
+// ---------- 21. DAILY STORM + BOSS RUSH ----------
+{
+  // DAILY: identical setup on every attempt (walls, arena, enemy kinds, drafts)
+  const sig = () => JSON.stringify({
+    w: tw.packWalls(), a: tw.roundArena,
+    k: tw.tanks.slice(1).map(x => [x.kind, Math.round(x.x), Math.round(x.y)]),
+  });
+  tw.startSurvival('daily');
+  const s1 = sig();
+  tw.survStartWave(3);
+  const s3a = sig();
+  tw.startSurvival('daily');
+  const s2 = sig();
+  tw.survStartWave(3);
+  const s3b = sig();
+  check('daily: wave 1 is identical across attempts', s1 === s2);
+  check('daily: later waves are wave-keyed identical too', s3a === s3b);
+  tw.surv.wave = 1;
+  tw.survWaveCleared();
+  const d1 = tw.surv.draft.join();
+  tw.startSurvival('daily'); tw.surv.wave = 1; tw.survWaveCleared();
+  check('daily: the perk draft is shared too', tw.surv.draft.join() === d1, d1);
+  // plain survival is NOT locked to the daily seed
+  tw.startSurvival();
+  const p1 = sig();
+  tw.startSurvival();
+  check('storm: plain runs still vary', sig() !== p1);
+  // daily best recording
+  tw.startSurvival('daily');
+  tw.surv.wave = 6; tw.surv.run = 0;
+  tw.profile.daily = null; tw.profile.bestWave = 20;   // avoid NEW BEST noise
+  tw.survOver();
+  check('daily: today\'s best recorded', tw.profile.daily && tw.profile.daily.best === 6 &&
+        tw.profile.daily.date === String(tw.dailyKey()));
+
+  // BOSS RUSH: every wave is a boss, cycling types, 3+w hp; separate best track
+  tw.profile.bestWave = 12;   // unlocked
+  tw.startSurvival('rush');
+  let b = tw.tanks.find(x => x.boss);
+  check('rush: wave 1 is a boss (warlord, 4hp)', b && b.boss.type === 'warlord' && b.boss.maxHp === 4);
+  tw.survStartWave(2);
+  b = tw.tanks.find(x => x.boss);
+  check('rush: wave 2 cycles to juggernaut (5hp)', b && b.boss.type === 'juggernaut' && b.boss.maxHp === 5);
+  tw.survStartWave(5);
+  b = tw.tanks.find(x => x.boss);
+  check('rush: wave 5 wraps back to warlord (8hp)', b && b.boss.type === 'warlord' && b.boss.maxHp === 8);
+  tw.surv.wave = 6; tw.profile.bestRush = 0;
+  const bw = tw.profile.bestWave;
+  tw.survOver();
+  check('rush: bestRush recorded, bestWave untouched', tw.profile.bestRush === 6 && tw.profile.bestWave === bw);
+  tw.surv.on = false; tw.surv.rush = false; tw.surv.daily = false;
+}
+
 // ---------- 19. CAMPAIGN ACT II ----------
 {
   check('act2: campaign is 20 battles', tw.CAMPAIGN.length === 20);

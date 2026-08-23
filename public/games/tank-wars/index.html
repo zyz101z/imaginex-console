@@ -78,6 +78,11 @@
     <button class="btn" id="btnSurvival" style="background:linear-gradient(180deg,#ffd97a,#f0973a);">&#9889; SURVIVAL &mdash; TANK STORM</button>
     <p class="tag" id="survTag" style="margin:2px 0 0;"></p>
     <div class="row">
+      <button class="btn" id="btnDaily" style="background:linear-gradient(180deg,#9fd8ff,#5aa8e8);">&#128197; DAILY STORM</button>
+      <button class="btn" id="btnRush" style="background:linear-gradient(180deg,#ff9a9a,#d9534f);">&#9760; BOSS RUSH</button>
+    </div>
+    <p class="tag" id="dailyTag" style="margin:2px 0 0;"></p>
+    <div class="row">
       <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
       <button class="btn" id="btnAce">QUICK &bull; ACE</button>
     </div>
@@ -335,6 +340,9 @@ try {
       profile.vicsOwned = p.vicsOwned || {};
       profile.vic = VICS[p.vic] ? p.vic : '';
       profile.bestWave = Math.max(0, parseInt(p.bestWave, 10) || 0);
+      profile.bestRush = Math.max(0, parseInt(p.bestRush, 10) || 0);
+      profile.dailyBest = Math.max(0, parseInt(p.dailyBest, 10) || 0);
+      profile.daily = (p.daily && typeof p.daily === 'object') ? p.daily : null;
     }
   }
 } catch (e) {}
@@ -991,7 +999,31 @@ function killShell(i) {
 // Endless waves vs up to 4 tanks at once. Boss every 5th wave (HP bar, special attacks).
 // Between waves: pick 1 of 3 stacking perks — the roguelite loop that makes run #40 as
 // interesting as run #1. Offline-only by design (net.role stays null throughout).
-const surv = { on: false, wave: 0, kills: 0, run: 0, perks: {}, draft: [], bossName: '', enemiesAtStart: 0 };
+const surv = { on: false, wave: 0, kills: 0, run: 0, perks: {}, draft: [], bossName: '', enemiesAtStart: 0,
+               daily: false, rush: false };
+// DAILY STORM: everyone on Earth gets the SAME storm today. Setup randomness
+// (arena, maze, spawns, enemy kinds, bosses, drafts) is seeded by UTC date + wave,
+// so retries replay the same gauntlet; the fighting itself stays live.
+function dailyKey() {
+  const d = new Date();
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// swap Math.random for a wave-keyed seeded stream while fn runs (daily mode only)
+function withDailyRng(salt, fn) {
+  if (!surv.daily) return fn();
+  const orig = Math.random;
+  Math.random = seededRandom((dailyKey() * 2654435761) ^ Math.imul(surv.wave + 1, 40503) ^ salt);
+  try { return fn(); } finally { Math.random = orig; }
+}
 const PERKS = {
   overdrive: { icon: '⚙️', name: 'OVERDRIVE',    desc: '+10% tank speed' },
   quickload: { icon: '🔫', name: 'QUICKLOAD',    desc: '-18% reload time' },
@@ -1008,8 +1040,9 @@ function survMag(t)      { return (surv.on && t.team === 0) ? (surv.perks.magazi
 function survShellMul(t) { return (surv.on && t.team === 0) ? 1 + 0.12 * (surv.perks.velocity || 0) : 1; }
 function survGain(n) { surv.run += Math.round(n * (1 + 0.4 * (surv.perks.salvage || 0))); }
 
-function startSurvival() {
+function startSurvival(mode) {
   surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
+  surv.daily = mode === 'daily'; surv.rush = mode === 'rush';
   matchCfg = { mode: 'survival', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
                playerTank: profile.owned[profile.tank] ? profile.tank : 'scout', foeTank: 'scout', battle: null };
   aiParams = AI_LEVELS.officer;
@@ -1024,6 +1057,7 @@ function startSurvival() {
 }
 // The storm's escalation table — all of survival's difficulty lives in these three helpers.
 function survPlan(w) {
+  if (surv.rush) return { boss: true };          // BOSS RUSH: no trash waves, ever
   if (w % 5 === 0) return { boss: true };
   return { boss: false, count: w < 2 ? 1 : w < 4 ? 2 : w < 8 ? 3 : 4 };
 }
@@ -1065,6 +1099,9 @@ function survSpawnCells(n, px, py) {
 }
 function survStartWave(w) {
   surv.wave = w;
+  return withDailyRng(0x51ee7, () => survStartWaveInner(w));
+}
+function survStartWaveInner(w) {
   roundArena = pickArena();
   genMaze(roundArena);
   genPools();
@@ -1087,12 +1124,12 @@ function survStartWave(w) {
   if (plan.boss) {
     const types = [['warlord', 'THE WARLORD', 'scout'], ['juggernaut', 'THE JUGGERNAUT', 'mammoth'],
                    ['vortex', 'THE VORTEX', 'photon'], ['phantom', 'THE PHANTOM', 'ghost']];
-    const [type, name, kind] = types[(((w / 5) | 0) - 1) % 4];
+    const [type, name, kind] = surv.rush ? types[(w - 1) % 4] : types[(((w / 5) | 0) - 1) % 4];
     surv.bossName = name;
     const [[cx, cy]] = survSpawnCells(1, player.x, player.y);
     const boss = makeTank(tanks.length, cx, cy, kind);
-    boss.isAI = true; boss.aiLv = w >= 10 ? 'ace' : 'officer';
-    boss.boss = { type, maxHp: 5 + 2 * Math.floor((w - 5) / 5), summoned: false };
+    boss.isAI = true; boss.aiLv = surv.rush ? (w >= 3 ? 'ace' : 'officer') : (w >= 10 ? 'ace' : 'officer');
+    boss.boss = { type, maxHp: surv.rush ? 3 + w : 5 + 2 * Math.floor((w - 5) / 5), summoned: false };
     boss.hp = boss.boss.maxHp;
     boss.r = 18;                       // bigger hitbox to match the bigger silhouette
     boss.col = BOSS_COL; boss.glow = BOSS_GLOW;
@@ -1226,10 +1263,12 @@ function survWaveCleared() {
   // draft: 3 distinct perks (AEGIS leaves the pool once owned — a second shield is nothing)
   const pool = PERK_ORDER.filter(id => id !== 'aegis' || !surv.perks.aegis);
   surv.draft = [];
-  while (surv.draft.length < 3 && pool.length) {
-    const i = (Math.random() * pool.length) | 0;
-    surv.draft.push(pool.splice(i, 1)[0]);
-  }
+  withDailyRng(0xd4af7, () => {
+    while (surv.draft.length < 3 && pool.length) {
+      const i = (Math.random() * pool.length) | 0;
+      surv.draft.push(pool.splice(i, 1)[0]);
+    }
+  });
   // co-op: the draft alternates — odd waves the host chooses, even waves the guest
   surv.picker = net.coop ? ((surv.wave % 2 === 1) ? 0 : 1) : 0;
   phase = 'draft'; phaseT = 0;
@@ -1261,18 +1300,35 @@ function survOver() {
   phase = 'survover'; phaseT = 0;
   musicStop(true);
   // milestone bonuses for how deep the run got (paid raw — salvage already paid its share)
-  for (const [w, pay] of [[5, 25], [10, 75], [15, 150], [20, 300]]) if (surv.wave >= w) surv.run += pay;
+  // (boss rush has its own scale — wave 6 there is a feat; no storm milestones)
+  if (!surv.rush) for (const [w, pay] of [[5, 25], [10, 75], [15, 150], [20, 300]]) if (surv.wave >= w) surv.run += pay;
   if (net.coop && net.role === 'host') {
     netSendGame({ t: 'sover', w: surv.wave, k: surv.kills, run: surv.run });
   }
-  const newBest = surv.wave > (profile.bestWave || 0);
-  if (newBest) profile.bestWave = surv.wave;
+  let newBest = false;
+  if (surv.rush) {
+    newBest = surv.wave > (profile.bestRush || 0);
+    if (newBest) profile.bestRush = surv.wave;
+    surv.run += surv.wave * 15;   // rush pay: every boss down is worth a bounty
+  } else {
+    newBest = surv.wave > (profile.bestWave || 0);
+    if (newBest) profile.bestWave = surv.wave;
+  }
+  if (surv.daily) {
+    const key = String(dailyKey());
+    if (!profile.daily || profile.daily.date !== key) profile.daily = { date: key, best: 0 };
+    if (surv.wave > profile.daily.best) profile.daily.best = surv.wave;
+    if (surv.wave > (profile.dailyBest || 0)) profile.dailyBest = surv.wave;
+  }
   profile.scrap += surv.run;
   saveProfile();
-  document.getElementById('winName').textContent = 'THE STORM ENDS';
+  document.getElementById('winName').textContent =
+    surv.rush ? 'THE RUSH ENDS' : surv.daily ? 'DAILY STORM COMPLETE' : 'THE STORM ENDS';
   document.getElementById('winName').style.color = BOSS_COL;
   document.getElementById('winScore').textContent =
-    'WAVE ' + surv.wave + '  ·  ' + surv.kills + ' TANKS DESTROYED' + (newBest ? '  ·  ★ NEW BEST!' : '');
+    (surv.rush ? (surv.wave - 1) + ' BOSSES DOWN' : 'WAVE ' + surv.wave + '  ·  ' + surv.kills + ' TANKS DESTROYED')
+    + (newBest ? '  ·  ★ NEW BEST!' : '')
+    + (surv.daily ? '  ·  today\'s best: ' + profile.daily.best : '');
   document.getElementById('winScrap').textContent = '+' + surv.run + ' SCRAP EARNED';
   document.getElementById('btnRematch').classList.remove('hidden');
   document.getElementById('winWait').classList.add('hidden');
@@ -1444,6 +1500,15 @@ function updateWinTag() {
   if (st) st.textContent = (profile.bestWave || 0) > 0
     ? ('STORM BEST: WAVE ' + profile.bestWave + (profile.bestWave >= 10 ? '  ·  TEMPEST UNLOCKED' : ''))
     : 'How deep into the storm can you go?';
+  const dt = document.getElementById('dailyTag');
+  if (dt) {
+    const today = profile.daily && profile.daily.date === String(dailyKey()) ? profile.daily.best : 0;
+    const rushTxt = (profile.bestWave || 0) >= 10
+      ? ('RUSH BEST: ' + Math.max(0, (profile.bestRush || 1) - 1) + ' bosses')
+      : 'RUSH: survive wave 10 to unlock';
+    dt.textContent = 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
+      '  ·  ' + rushTxt;
+  }
 }
 
 // ============================== AI ==============================
@@ -2301,7 +2366,7 @@ function render() {
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
       const cbBoss = matchCfg.mode === 'campaign' && matchCfg.battle && matchCfg.battle.boss;
       drawBanner(surv.on
-        ? ('WAVE ' + surv.wave + ' · ' + (surv.bossName ? 'BOSS: ' + surv.bossName
+        ? ((surv.rush ? '☠ RUSH ' : surv.daily ? '📅 DAILY ' : '') + 'WAVE ' + surv.wave + ' · ' + (surv.bossName ? 'BOSS: ' + surv.bossName
             : surv.enemiesAtStart + (surv.enemiesAtStart > 1 ? ' ENEMIES' : ' ENEMY'))
             + ' · ' + (ARENA_LABELS[roundArena] || ''))
         : (cbBoss ? ('BOSS: ' + matchCfg.battle.bossName + ' · ' + (ARENA_LABELS[roundArena] || ''))
@@ -2834,6 +2899,15 @@ function renderCampaign() {
 
 document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'rookie' }); };
 document.getElementById('btnSurvival').onclick = () => { audioInit(); startSurvival(); };
+document.getElementById('btnDaily').onclick = () => { audioInit(); startSurvival('daily'); };
+document.getElementById('btnRush').onclick = () => {
+  if ((profile.bestWave || 0) < 10) {
+    const dt = document.getElementById('dailyTag');
+    if (dt) dt.textContent = '☠ BOSS RUSH locks until you survive STORM wave 10 — go earn it.';
+    return;
+  }
+  audioInit(); startSurvival('rush');
+};
 document.getElementById('btnAce').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'ace' }); };
 document.getElementById('btnCampaign').onclick = () => { audioInit(); renderCampaign(); show('menu', false); show('campaign', true); };
 document.getElementById('btnCampaignBack').onclick = () => { show('campaign', false); show('menu', true); };
@@ -2844,7 +2918,7 @@ document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false);
 document.getElementById('btnRematch').onclick = () => {
   show('victory', false);
   if (net.coop && net.role === 'host') startCoopStorm();
-  else if (matchCfg.mode === 'survival') startSurvival();
+  else if (matchCfg.mode === 'survival') startSurvival(surv.rush ? 'rush' : surv.daily ? 'daily' : undefined);
   else startMatch(matchCfg);
 };
 document.getElementById('btnMenu').onclick = () => {
@@ -3128,6 +3202,7 @@ function netHostTick() {
 function startCoopStorm() {
   net.coop = true;
   surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
+  surv.daily = false; surv.rush = false;
   matchCfg = { mode: 'online', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
                playerTank: profile.owned[profile.tank] ? profile.tank : 'scout',
                foeTank: net.guestKind || 'scout', battle: null };
@@ -3561,7 +3636,7 @@ window.__tw = {
   setPhase(v) { phase = v; }, setTanks(v) { tanks = v; },
   get paused() { return paused; }, setPaused(v) { paused = !!v; }, resumeGame,
   // co-op storm test surface
-  net, serTank, serShell, startCoopStorm, netSendSWave, nearestFoe, survFanBurst,
+  net, serTank, serShell, startCoopStorm, netSendSWave, nearestFoe, survFanBurst, dailyKey, packWalls,
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,
 };
 
