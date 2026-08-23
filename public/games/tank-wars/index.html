@@ -82,6 +82,7 @@
       <button class="btn" id="btnRush" style="background:linear-gradient(180deg,#ff9a9a,#d9534f);">&#9760; BOSS RUSH</button>
     </div>
     <p class="tag" id="dailyTag" style="margin:2px 0 0;"></p>
+    <p class="tag" id="questTag" style="margin:2px 0 0;white-space:pre-line;"></p>
     <div class="row">
       <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
       <button class="btn" id="btnAce">QUICK &bull; ACE</button>
@@ -343,6 +344,8 @@ try {
       profile.bestRush = Math.max(0, parseInt(p.bestRush, 10) || 0);
       profile.dailyBest = Math.max(0, parseInt(p.dailyBest, 10) || 0);
       profile.daily = (p.daily && typeof p.daily === 'object') ? p.daily : null;
+      profile.questDay = typeof p.questDay === 'string' ? p.questDay : null;
+      profile.quests = Array.isArray(p.quests) ? p.quests : null;
     }
   }
 } catch (e) {}
@@ -965,6 +968,10 @@ function explodeTank(t) {
   shake = 14; hitstop = 0.1;
   sfx.boom();
   if (surv.on && t.team === 1) survEnemyDown(t);
+  if (t.i !== 0 && (t.team === 1 || !surv.on)) {
+    questBump('kills', 1);
+    if (t.boss) questBump('boss', 1);
+  }
 }
 // One hit lands on a tank. Order: shield eats it -> boss armor eats it -> tank dies.
 // Every damage source (shells, lasers, mines) funnels through here so bosses can't be
@@ -1017,6 +1024,55 @@ function seededRandom(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// ============================== DAILY QUESTS ==============================
+// Three per UTC day, seeded like the Daily Storm — the whole family chases the
+// same list. Progress counts in any OFFLINE mode; completion pays scrap instantly.
+const QUEST_DEFS = [
+  { id: 'kills12',   txt: 'Destroy 12 enemy tanks',              ev: 'kills',    target: 12,  pay: 40 },
+  { id: 'kills25',   txt: 'Destroy 25 enemy tanks',              ev: 'kills',    target: 25,  pay: 70 },
+  { id: 'rounds3',   txt: 'Win 3 rounds (quick or campaign)',    ev: 'rounds',   target: 3,   pay: 40 },
+  { id: 'wave6',     txt: 'Reach wave 6 in any storm',           ev: 'wave',     target: 6,   pay: 50,  max: true },
+  { id: 'wave10',    txt: 'Reach wave 10 in any storm',          ev: 'wave',     target: 10,  pay: 80,  max: true },
+  { id: 'power4',    txt: 'Grab 4 power-ups',                    ev: 'powerups', target: 4,   pay: 35 },
+  { id: 'boss1',     txt: 'Destroy a boss',                      ev: 'boss',     target: 1,   pay: 60 },
+  { id: 'daily1',    txt: 'Run the Daily Storm (reach wave 2+)', ev: 'daily',    target: 1,   pay: 45 },
+  { id: 'bigrun120', txt: 'Bank 120+ scrap in one storm run',    ev: 'bigrun',   target: 120, pay: 60,  max: true },
+];
+function ensureQuests() {
+  const key = String(dailyKey());
+  if (profile.questDay === key && Array.isArray(profile.quests) && profile.quests.length === 3) return;
+  const r = seededRandom((dailyKey() * 2246822519) ^ 0x9e3779b9);
+  const pool = [...QUEST_DEFS];
+  const picked = [];
+  while (picked.length < 3 && pool.length) {
+    const q = pool.splice((r() * pool.length) | 0, 1)[0];
+    if (picked.some(x => x.ev === q.ev)) continue;   // one quest per event family
+    picked.push(q);
+  }
+  profile.questDay = key;
+  profile.quests = picked.map(q => ({ id: q.id, progress: 0, done: false }));
+  saveProfile();
+}
+let questToasts = [];   // {txt, t} — drawn briefly in the HUD
+function questBump(ev, n) {
+  if (matchCfg.mode === 'online') return;   // offline honors only — keeps it fair & simple
+  ensureQuests();
+  let changed = false;
+  for (const state of profile.quests) {
+    const def = QUEST_DEFS.find(q => q.id === state.id);
+    if (!def || def.ev !== ev || state.done) continue;
+    state.progress = def.max ? Math.max(state.progress, n) : state.progress + n;
+    if (state.progress >= def.target) {
+      state.done = true;
+      profile.scrap += def.pay;
+      questToasts.push({ txt: '🏅 QUEST COMPLETE: ' + def.txt + '  +' + def.pay + ' 🔧', t: 4 });
+      sfx.powerup();
+    }
+    changed = true;
+  }
+  if (changed) { saveProfile(); updateWinTag(); }
+}
+
 // swap Math.random for a wave-keyed seeded stream while fn runs (daily mode only)
 function withDailyRng(salt, fn) {
   if (!surv.daily) return fn();
@@ -1099,6 +1155,7 @@ function survSpawnCells(n, px, py) {
 }
 function survStartWave(w) {
   surv.wave = w;
+  if (w >= 2 && !net.coop) questBump('wave', w);
   return withDailyRng(0x51ee7, () => survStartWaveInner(w));
 }
 function survStartWaveInner(w) {
@@ -1314,6 +1371,8 @@ function survOver() {
     newBest = surv.wave > (profile.bestWave || 0);
     if (newBest) profile.bestWave = surv.wave;
   }
+  if (surv.daily && surv.wave >= 2) questBump('daily', 1);
+  if (!net.coop) questBump('bigrun', surv.run);
   if (surv.daily) {
     const key = String(dailyKey());
     if (!profile.daily || profile.daily.date !== key) profile.daily = { date: key, best: 0 };
@@ -1428,6 +1487,7 @@ function endRound() {
     banner = (w.i === 0 ? 'YOU SCORE!' : (matchCfg.mode === 'online' ? 'OPPONENT SCORES!' : 'THE AI SCORES!'));
     bannerCol = w.col;
     matchScrap += (w.i === 0) ? 10 : 2;   // win the round +10; even a loss pays +2
+    if (w.i === 0) questBump('rounds', 1);
   }
   netSendGame({ t: 'rover', w: winnerIdx, sc: [tanks[0].score, tanks[1].score] });
 }
@@ -1508,6 +1568,14 @@ function updateWinTag() {
       : 'RUSH: survive wave 10 to unlock';
     dt.textContent = 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
       '  ·  ' + rushTxt;
+  }
+  const qt = document.getElementById('questTag');
+  if (qt) {
+    ensureQuests();
+    qt.textContent = '🏅 TODAY\'S QUESTS:  ' + profile.quests.map(s => {
+      const def = QUEST_DEFS.find(q => q.id === s.id);
+      return (s.done ? '✅ ' : '▫ ') + def.txt + (s.done ? '' : ' (' + Math.min(s.progress, def.target) + '/' + def.target + ')');
+    }).join('   ·   ');
   }
 }
 
@@ -1785,6 +1853,7 @@ function updatePowerups(dt) {
       for (const t of tanks) {
         if (!t.alive) continue;
         if (Math.hypot(t.x - powerup.x, t.y - powerup.y) < TANK_R + 13) {
+          if (t.i === 0) questBump('powerups', 1);
           if (powerup.kind === 'shield') t.shield = true;
           else if (powerup.kind === 'freeze') {
             // instant: every tank on the OTHER team gets iced for 3.5s (AI can grab it too!)
@@ -2024,6 +2093,8 @@ function update(dt) {
   updatePowerups(dt);
   updateParticles(dt);
   for (const tr of treads) tr.life -= dt;
+  for (const q of questToasts) q.t -= dt;
+  questToasts = questToasts.filter(q => q.t > 0);
   while (treads.length && treads[0].life <= 0) treads.shift();
 
   if (surv.on) {
@@ -2601,6 +2672,19 @@ function drawHUD() {
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.font = '800 12px sans-serif';
     ctx.fillStyle = ms < 80 ? '#4de3c2' : ms < 150 ? '#ffd166' : '#ff8f9f';
     ctx.fillText('\u21c4 ' + ms + ' ms', W - 10, H - 12);
+    ctx.restore();
+  }
+  // quest toasts: brief gold banners under the top edge
+  if (questToasts.length) {
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 15px sans-serif';
+    questToasts.forEach((q, qi) => {
+      ctx.globalAlpha = Math.min(1, q.t);
+      ctx.fillStyle = 'rgba(7,10,18,0.8)';
+      roundRect(W / 2 - 240, 40 + qi * 30, 480, 24, 12);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(q.txt, W / 2, 52 + qi * 30);
+    });
     ctx.restore();
   }
   if (surv.on) {
@@ -3637,6 +3721,7 @@ window.__tw = {
   get paused() { return paused; }, setPaused(v) { paused = !!v; }, resumeGame,
   // co-op storm test surface
   net, serTank, serShell, startCoopStorm, netSendSWave, nearestFoe, survFanBurst, dailyKey, packWalls,
+  ensureQuests, questBump, QUEST_DEFS, get questToasts() { return questToasts; },
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,
 };
 

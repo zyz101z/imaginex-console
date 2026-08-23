@@ -278,6 +278,8 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.startSurvival();
   tw.survStartWave(11);
   tw.surv.run = 100; tw.surv.kills = 30;
+  tw.ensureQuests();
+  tw.profile.quests.forEach(q => { q.done = true; });   // isolate milestone accounting from quest payouts
   const scrap0 = tw.profile.scrap;
   tw.survOver();
   check('over: phase survover', tw.phase === 'survover');
@@ -548,6 +550,58 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.survOver();
   check('rush: bestRush recorded, bestWave untouched', tw.profile.bestRush === 6 && tw.profile.bestWave === bw);
   tw.surv.on = false; tw.surv.rush = false; tw.surv.daily = false;
+}
+
+// ---------- 22. DAILY QUESTS ----------
+{
+  // deterministic per day, 3 quests, one per event family
+  tw.profile.questDay = null; tw.profile.quests = null;
+  tw.ensureQuests();
+  const ids1 = tw.profile.quests.map(q => q.id).join();
+  tw.profile.questDay = null; tw.profile.quests = null;
+  tw.ensureQuests();
+  check('quests: 3 per day, deterministic', tw.profile.quests.length === 3 && tw.profile.quests.map(q => q.id).join() === ids1, ids1);
+  const evs = tw.profile.quests.map(s => tw.QUEST_DEFS.find(d => d.id === s.id).ev);
+  check('quests: one per event family', new Set(evs).size === 3, evs.join());
+
+  // force a known quest and complete it via the bump path
+  tw.matchCfg.mode = 'quick';
+  tw.profile.questDay = String(tw.dailyKey());   // pin the day so ensureQuests keeps our list
+  const forced = (id) => [{ id, progress: 0, done: false },
+    { id: 'rounds3', progress: 0, done: true }, { id: 'boss1', progress: 0, done: true }];
+  tw.profile.quests = forced('kills12');
+  const scrapQ = tw.profile.scrap;
+  for (let i = 0; i < 11; i++) tw.questBump('kills', 1);
+  check('quests: progress accumulates, no early pay', tw.profile.quests[0].progress === 11 && !tw.profile.quests[0].done && tw.profile.scrap === scrapQ);
+  tw.questBump('kills', 1);
+  check('quests: completion pays instantly (+40) with a toast', tw.profile.quests[0].done && tw.profile.scrap === scrapQ + 40 && tw.questToasts.length > 0);
+  tw.questBump('kills', 5);
+  check('quests: done quests stop counting', tw.profile.quests[0].progress === 12);
+
+  // max-semantics quest (reach wave N)
+  tw.profile.quests = forced('wave6');
+  tw.questBump('wave', 4);
+  tw.questBump('wave', 3);
+  check('quests: max-type keeps the high-water mark', tw.profile.quests[0].progress === 4);
+  tw.questBump('wave', 6);
+  check('quests: max-type completes at target', tw.profile.quests[0].done === true);
+
+  // online play never counts
+  tw.profile.quests = forced('kills12');
+  tw.matchCfg.mode = 'online';
+  tw.questBump('kills', 5);
+  check('quests: online kills do not count', tw.profile.quests[0].progress === 0);
+  tw.matchCfg.mode = 'quick';
+
+  // kill hook: exploding an enemy credits the quest
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.profile.questDay = String(tw.dailyKey());
+  tw.profile.quests = forced('kills12');
+  tw.setPhase('play');
+  tw.tanks[1].shield = false; tw.tanks[1].hp = 1;
+  tw.damageTank(tw.tanks[1]);
+  check('quests: real kill bumps the counter', tw.profile.quests[0].progress === 1);
+  tw.profile.questDay = null; tw.profile.quests = null;
 }
 
 // ---------- 19. CAMPAIGN ACT II ----------
