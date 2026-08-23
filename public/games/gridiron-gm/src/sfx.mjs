@@ -3,6 +3,10 @@
 let ctx = null;
 let muted = false;
 let crowdNodes = null;
+// duck factor: while a music bed is playing (game ticker), procedural crowd/horn
+// layers pull back so score moments read as accents, not a pile-up
+let duck = 1;
+export function setDuck(f) { duck = Math.max(0.1, Math.min(1, f)); }
 
 export function setMuted(m) { muted = m; if (m) stopCrowd(); if (musicEl) musicEl.volume = m ? 0 : musicVol; }
 
@@ -123,6 +127,7 @@ async function loadCrowdSample(c) {
 // stadium AIR HORN — the unmistakable "somebody scored" sound. Detuned saw cluster,
 // octave undertone, hard attack, slight sag at the end.
 function airHorn(c, { dur = 0.9, delay = 0, gain = 0.28 }) {
+  gain *= duck;
   const t0 = c.currentTime + delay;
   const lp = c.createBiquadFilter();
   lp.type = "lowpass"; lp.frequency.value = 1900; lp.Q.value = 0.8;
@@ -144,6 +149,7 @@ function airHorn(c, { dur = 0.9, delay = 0, gain = 0.28 }) {
 }
 
 function cheer(c, { intensity = 1, dur = 1.6, delay = 0 }) {
+  intensity *= duck;
   loadCrowdSample(c);
   const t0 = c.currentTime + delay;
   if (crowdSample) {

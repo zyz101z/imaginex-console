@@ -5,7 +5,7 @@ import { buildLeague, emptyStats, depthChart, teamUnits, TEMPLATE, ATTR_DEFS, at
 import { simGame, matchupEdges, gameWeather, STADIUM } from "./sim.mjs";
 import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, nextPlayoffRound, replayUserGame } from "./season.mjs";
 import { TEAMS, TEAM_BY_ID } from "./data_teams.mjs";
-import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd, playMusic, stopMusic } from "./sfx.mjs";
+import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd, playMusic, stopMusic, setDuck } from "./sfx.mjs";
 import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, capRoom,
   cutPlayer, contractFor, CAP_LIMIT, ROSTER_MAX,
@@ -1108,6 +1108,8 @@ function runAwardsNight() {
 let victoryLock = false, pendingVictoryMusic = false;
 function updateMusic() {
   if (victoryLock) return;
+  const tk = document.getElementById("ticker");
+  if (tk && !tk.classList.contains("hidden")) return;   // the ticker owns the speakers
   if (pendingVictoryMusic) {
     pendingVictoryMusic = false;
     victoryLock = true;
@@ -1210,7 +1212,8 @@ function runTicker(myGame, results, done) {
     `linear-gradient(rgba(10,12,16,.82), rgba(10,12,16,.93)), url('img/stadium_${scene}.png')`;
   overlay.classList.remove("hidden");
   startCrowd();
-  playMusic(myGame.bowl ? "bowl" : "gameday", { vol: myGame.bowl ? 0.3 : 0.2 });
+  playMusic(myGame.bowl ? "bowl" : "gameday", { vol: myGame.bowl ? 0.22 : 0.14 });
+  setDuck(0.45);   // crowd swells + horns become accents under the music bed
   const home = myGame.home, away = myGame.away;
   let hs = 0, as = 0, i = 0;
   let log = myGame.log;
@@ -1303,6 +1306,7 @@ function runTicker(myGame, results, done) {
     if (weekHooks) weekHooks.captured = null;
     stopCrowd();
     stopMusic();
+    setDuck(1);
     overlay.classList.add("hidden");
     $("#tickerSkip").textContent = "SKIP ▶";
     done();
@@ -1314,6 +1318,7 @@ function runTicker(myGame, results, done) {
     if (weekHooks) weekHooks.captured = null;
     stopCrowd();
     stopMusic();
+    setDuck(1);
     overlay.classList.add("hidden");
     $("#tickerSkip").textContent = "SKIP ▶";
     activeView = "boxscore";
