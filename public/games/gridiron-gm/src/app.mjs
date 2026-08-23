@@ -389,7 +389,9 @@ function showPlayerCard(p) {
   const careerL = p.career.length
     ? `${statLine(p.pos, tot)} <span class="dim">(${p.career.length} season${p.career.length > 1 ? "s" : ""} + this one)</span>`
     : `<span class="dim">rookie season</span>`;
+  const PP = PERSONAS[personaOf(p)];
   const badges = [
+    `<span class="pcBadge" style="border-color:#9fb3d9;color:#9fb3d9" title="${PP.blurb}">${PP.icon} ${PP.name}</span>`,
     p.allPro ? `<span class="pcBadge">★ ALL-PRO ×${p.allPro}</span>` : "",
     p.rookie ? `<span class="pcBadge" style="border-color:#7fd8c8;color:#7fd8c8">ROOKIE</span>` : "",
     p.injuredWeeks > 0 ? `<span class="pcBadge" style="border-color:#ff8f9f;color:#ff8f9f">INJURED ${p.injuredWeeks}w</span>` : "",
@@ -622,7 +624,15 @@ function viewBracket() {
   html += "<h3>Playoff Bracket</h3>";
   for (const r of [...S.bracket.rounds].reverse()) html += roundHtml(r);
   if (S.history.length) {
-    html += "<h3>Franchise history</h3><table><tr class='hdr'><td>Season</td><td>Your record</td><td>Champion</td></tr>";
+    const titles = S.history.filter(h => h.champ === S.teamId).length;
+    const parsed = S.history.map(h => ({ w: parseInt(h.record, 10) || 0, h }));
+    const best = parsed.reduce((b, x) => (!b || x.w > b.w) ? x : b, null);
+    const avgW = (parsed.reduce((s2, x) => s2 + x.w, 0) / parsed.length).toFixed(1);
+    html += `<h3>Franchise history</h3>
+      <p class="dim">🏈 GM legacy: <b>${S.history.length}</b> season${S.history.length > 1 ? "s" : ""} ·
+      <b class="${titles ? "champ" : ""}">${titles}</b> title${titles === 1 ? "" : "s"} ·
+      best <b>${best.h.record}</b> (S${best.h.season}) · avg <b>${avgW}</b> wins</p>`;
+    html += "<table><tr class='hdr'><td>Season</td><td>Your record</td><td>Champion</td></tr>";
     for (const h of S.history) html += `<tr><td>${h.season}</td><td>${h.record}</td><td>${chip(h.champ)} ${teamName(h.champ)}</td></tr>`;
     html += "</table>";
   }
@@ -691,8 +701,9 @@ function viewFreeAgency() {
   if (mine.length) {
     html += `<h3>Your expiring players (re-sign before they leave!)</h3><table>`;
     for (const p of mine.slice(0, 12)) {
-      html += `<tr><td>${p.pos}</td><td>${pn(p)}</td><td>${p.age}y</td><td><b>${p.ovr}</b></td>
-        <td>$${p.asking.salary}M × ${p.asking.years}y</td>
+      const ask = askOf(p, true);
+      html += `<tr><td>${p.pos}</td><td>${personaBadge(p)} ${pn(p)}</td><td>${p.age}y</td><td><b>${p.ovr}</b></td>
+        <td>$${ask.salary}M × ${ask.years}y</td>
         <td><button class="mini" onclick="__gm.userSignFA(${p.id})">RE-SIGN</button></td></tr>`;
     }
     html += "</table>";
@@ -703,8 +714,9 @@ function viewFreeAgency() {
   <table><tr class="hdr"><td>Pos</td><td>Player</td><td>Age</td><td>OVR</td><td>Asking</td><td></td></tr>`;
   for (const p of marketShown.slice(0, 40)) {
     const hi = (ATTR_DEFS[p.pos] || []).map(k => `${k} ${attr(p, k)}`).join(" · ");
-    html += `<tr><td>${p.pos}</td><td>${pn(p)}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
-      <td>$${p.asking.salary}M × ${p.asking.years}y</td>
+    const ask = askOf(p, false);
+    html += `<tr><td>${p.pos}</td><td>${personaBadge(p)} ${pn(p)}<br><span class="dim small">${hi}</span></td><td>${p.age}</td><td><b>${p.ovr}</b></td>
+      <td>$${ask.salary}M × ${ask.years}y</td>
       <td><button class="mini" onclick="__gm.userSignFA(${p.id})">SIGN</button></td></tr>`;
   }
   html += "</table>";
@@ -797,7 +809,10 @@ function viewFinances() {
   const capTxt = S.capMode === "none" ? "No cap (sandbox)" :
     S.capMode === "soft" ? `Soft cap $${CAP_LIMIT}M (can exceed to $${Math.round(CAP_LIMIT * 1.15)}M)` :
     `Hard cap $${CAP_LIMIT}M`;
-  let html = `<h2>Finances</h2>`;
+  let html = `<h2>Finances</h2>
+    <p><button class="mini" onclick="__gm.exportSave()">💾 EXPORT FRANCHISE</button>
+       <button class="mini" onclick="__gm.importSave()">📥 IMPORT FRANCHISE</button>
+       <span class="dim small">— back up your save or move it to another device</span></p>`;
   if (room !== Infinity && room < 0) {
     html += `<div class="coachcard" style="border-left:4px solid #ff7b72"><b class="loss">⚠️ $${Math.abs(room).toFixed(1)}M OVER THE CAP.</b>
       You can't sign or acquire salary. Escape routes: TRADE players for picks (salary-shedding trades are always allowed), or CUT (30% dead money, 70% relief).</div>`;
@@ -1288,11 +1303,12 @@ function userSignFA(playerId) {
   const idx = S.fa.pool.findIndex(p => p.id === playerId);
   if (idx === -1) return;
   const p = S.fa.pool[idx];
+  const ask = askOf(p, p.lastTeamId === S.teamId);
   const room = capRoom(S.league[S.teamId], S.deadMoney[S.teamId], S.capMode);
   if (S.league[S.teamId].length >= ROSTER_MAX) { alert("Roster is full (60)."); return; }
-  if (p.asking.salary > room) { alert(`Not enough cap room ($${room}M left, asking $${p.asking.salary}M).`); return; }
+  if (ask.salary > room) { alert(`Not enough cap room ($${room}M left, asking $${ask.salary}M).`); return; }
   S.fa.pool.splice(idx, 1);
-  p.contract = { salary: p.asking.salary, years: p.asking.years };
+  p.contract = { salary: ask.salary, years: ask.years };
   p.teamId = S.teamId;
   S.league[S.teamId].push(p);
   S.fa.signings.unshift({ team: S.teamId, name: p.name, pos: p.pos, ovr: p.ovr, salary: p.contract.salary, mine: true });
@@ -1419,10 +1435,77 @@ function scout(prospectId) {
 
 function dismissIntro() { S.sawIntro = true; save(); render(); }
 
+// ---------------------------------------------------------------- save backup
+// localStorage is one cleared-cache from oblivion — give the franchise an exit.
+function exportSave() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) { alert("Nothing to export yet."); return; }
+  const done = () => alert("Franchise code copied to the clipboard.\nPaste it somewhere safe (notes, email to yourself…).");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(raw).then(done, () => prompt("Copy your franchise code:", raw));
+  } else prompt("Copy your franchise code:", raw);
+}
+function importSave() {
+  const txt = prompt("Paste a franchise code (REPLACES the current save!):");
+  if (!txt) return;
+  try {
+    const parsed = JSON.parse(txt);
+    if (!parsed || !parsed.league || !parsed.seasonNum) throw new Error("bad");
+    localStorage.setItem(SAVE_KEY, txt);
+    location.reload();
+  } catch (e) {
+    alert("That doesn't look like a Gridiron GM franchise code.");
+  }
+}
+
+// ---------------------------------------------------------------- personalities
+// Deterministic per player (hashed id — no save migration, no reroll scumming).
+// App-layer only: engine contract math is untouched, so the batteries hold.
+const PERSONAS = {
+  greedy:    { icon: "💰", name: "GREEDY",      blurb: "Wants top dollar. Every time.",            ext: 1.25, fa: 1.15 },
+  loyal:     { icon: "🤝", name: "LOYAL",       blurb: "Hometown discount to stay — don't shop him.", ext: 0.90, fa: 1.05 },
+  chaser:    { icon: "💍", name: "RING CHASER", blurb: "Discounts for winners. Taxes losers.",     ext: 1.0,  fa: 1.0 },
+  mercenary: { icon: "🧳", name: "MERCENARY",   blurb: "No loyalty. Just money.",                  ext: 1.12, fa: 1.05 },
+  steady:    { icon: "😐", name: "STEADY",      blurb: "Fair market. No drama.",                   ext: 1.0,  fa: 1.0 },
+};
+function personaOf(p) {
+  const h = ((p.id * 2654435761) ^ 0x9e3779b9) >>> 0;
+  const r = h % 100;
+  return r < 15 ? "greedy" : r < 30 ? "loyal" : r < 42 ? "chaser" : r < 55 ? "mercenary" : "steady";
+}
+function myRecentWins() {
+  const last = S.history && S.history.length ? S.history[S.history.length - 1] : null;
+  if (last && last.record) return parseInt(last.record, 10) || 0;
+  const st = S.standings && S.standings[S.teamId];
+  return st ? st.w : 8;
+}
+// Ring chasers read the room: your recent record moves their number
+function personaMult(p, kind, resigning) {
+  const key = personaOf(p);
+  const P = PERSONAS[key];
+  let m = kind === "ext" ? P.ext : P.fa;
+  if (key === "chaser") {
+    const w = myRecentWins();
+    m *= w >= 11 ? 0.85 : w <= 5 ? 1.18 : 1.0;
+  }
+  if (key === "loyal" && resigning) m *= 0.85;   // stacking hometown discount on re-signs
+  return m;
+}
+function personaBadge(p) {
+  const P = PERSONAS[personaOf(p)];
+  return `<span class="tt" title="${P.name}: ${P.blurb}">${P.icon}</span>`;
+}
+// A player's real asking price once his personality weighs in
+function askOf(p, resigning) {
+  const m = personaMult(p, "fa", resigning);
+  return { salary: Math.max(0.8, Math.round(p.asking.salary * m * 10) / 10), years: p.asking.years };
+}
+
 // stable per-player extension asking price (seeded by player id — no reroll scumming)
 function extensionAsk(p) {
   const r = makeRng(((S.seed ^ (p.id * 2654435761)) >>> 0));
-  return contractFor(r, p, 1.15);
+  const base = contractFor(r, p, 1.15);
+  return { salary: Math.max(0.8, Math.round(base.salary * personaMult(p, "ext") * 10) / 10), years: base.years };
 }
 
 function userExtend(playerId) {
@@ -1499,7 +1582,8 @@ function leadersFilter(cf) { leadersConf = cf; render(); }
 function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
-  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard };
+  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard,
+  exportSave, importSave };
 
 function startOffseasonPipeline() {
     const rng = weekRng();

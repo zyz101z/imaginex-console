@@ -1,5 +1,11 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-23 — Personalities + save backup + GM legacy
+1. **Contract personalities** (app-layer ONLY — engine contract math untouched, batteries hold): `personaOf(p)` hashes player id → 💰 GREEDY (ext ×1.25, FA ×1.15) · 🤝 LOYAL (ext ×0.90; extra ×0.85 on re-signs) · 💍 RING CHASER (reads your recent record via `myRecentWins`: ≥11 wins ×0.85, ≤5 ×1.18) · 🧳 MERCENARY (×1.12/×1.05) · 😐 STEADY. Applied via `askOf` in the FA market/re-sign tables + `userSignFA` charge + `extensionAsk`; icons in FA rows (tooltip blurbs), badge on the player card. Street FAs stay flat (already discounted vets). Deterministic — no save migration.
+2. **💾 Franchise backup**: EXPORT (clipboard, prompt fallback) / IMPORT (validated paste → reload) buttons atop Finances.
+3. **🏈 GM legacy line** above franchise history: seasons · titles · best record · average wins.
+- Batteries green (2,985 + 17,543). Copies synced.
+
 ## 2026-08-22 — Yearbook + milestones + HOF plaques (season-narrative pass)
 1. **📖 Season Yearbook** (`buildYearbook`, snapshotted at the offseason turn WHILE season stats are live, stored as `S.yearbook` + rendered in the offseason view): signature win / toughest loss / longest streak read from the schedule, team leaders (pass/rush/rec/defense, clickable), **🎓 rookie report card** (A–D grades by production score; "did not play" = —), your hardware + All-Pros.
 2. **🎉 Milestone news** (`milestoneNews` weekly before `S.week++`): 4,000 pass yds · 30 pass TD · 1,000 rush · 1,000 rec · 10 sacks · 8 INTs — once per player per season (`p.mstone`, reset in startOffseasonPipeline), "— that's your guy!" for your roster.
