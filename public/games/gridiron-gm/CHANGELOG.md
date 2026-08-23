@@ -1,5 +1,8 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-23 (later 3) — backup moved to the nav (user: "why Finances? odd place")
+Export/import now lives as "💾 Backup / restore save" in the NAV FOOTER next to Reset franchise (save-level actions together); opens a chooser modal → export/import panels. Finances is clean again. Cache `?v=20260823c`.
+
 ## 2026-08-23 (later 2) — iframe modal bug (user: reset did nothing, export invisible)
 Root cause: the CONSOLE's game iframe sandbox lacked `allow-modals` → confirm/alert/prompt were SILENT NO-OPS in every game (reset's confirm died; extension confirms have been dead in the iframe all along). Fixes: (1) console `page.tsx` sandbox += allow-modals (helps all games); (2) Gridiron export/import now an in-page `backupModal` with a textarea + copy/apply + inline errors (prompt() also truncates multi-KB saves on some browsers — never use it for save codes); (3) Reset franchise = two-click arm pattern ("⚠️ CLICK AGAIN TO DELETE", 4s window) — no dialog dependency at all. Batteries green.
 

@@ -824,10 +824,7 @@ function viewFinances() {
   const capTxt = S.capMode === "none" ? "No cap (sandbox)" :
     S.capMode === "soft" ? `Soft cap $${CAP_LIMIT}M (can exceed to $${Math.round(CAP_LIMIT * 1.15)}M)` :
     `Hard cap $${CAP_LIMIT}M`;
-  let html = `<h2>Finances</h2>
-    <p><button class="mini" onclick="__gm.exportSave()">💾 EXPORT FRANCHISE</button>
-       <button class="mini" onclick="__gm.importSave()">📥 IMPORT FRANCHISE</button>
-       <span class="dim small">— back up your save or move it to another device</span></p>`;
+  let html = `<h2>Finances</h2>`;
   if (room !== Infinity && room < 0) {
     html += `<div class="coachcard" style="border-left:4px solid #ff7b72"><b class="loss">⚠️ $${Math.abs(room).toFixed(1)}M OVER THE CAP.</b>
       You can't sign or acquire salary. Escape routes: TRADE players for picks (salary-shedding trades are always allowed), or CUT (30% dead money, 70% relief).</div>`;
@@ -2041,6 +2038,21 @@ function showTeamPicker() {
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   activeView = b.dataset.view; render();
 });
+$("#exportBtn").onclick = () => {
+  // chooser modal: export or import from one place (lives next to Reset — save-level actions together)
+  closePcard();
+  const div = document.createElement("div");
+  div.id = "pcard";
+  div.innerHTML = `<div class="pcBox" style="text-align:center">
+    <button class="pcClose" onclick="__gm.closePcard()">✕</button>
+    <b>💾 FRANCHISE SAVE</b>
+    <p class="dim small" style="margin:8px 0">Your dynasty lives in this browser. Back it up, or restore one.</p>
+    <button class="mini" onclick="__gm.exportSave()">💾 EXPORT (copy code)</button>
+    <button class="mini" onclick="__gm.importSave()">📥 IMPORT (paste code)</button>
+  </div>`;
+  div.onclick = (e) => { if (e.target === div) closePcard(); };
+  document.body.appendChild(div);
+};
 $("#resetBtn").onclick = () => {
   const b = $("#resetBtn");
   if (b.dataset.armed) { localStorage.removeItem(SAVE_KEY); location.reload(); return; }
