@@ -675,6 +675,73 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.profile.medals = {}; tw.profile.life = {};
 }
 
+// ---------- 24. SCRAPYARD + CRUSHERS + RECONNECT GRACE ----------
+{
+  // arena registration
+  check('scrapyard: labeled + layouted', m[1].includes("scrapyard: 'SCRAPYARD'") && m[1].includes("scrapyard: 'pillars'"));
+  // crushers spawn only there, never in spawn corners
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'scrapyard' });
+  check('scrapyard: 3 crusher pads', tw.crushers.length === 3, tw.crushers.length);
+  const CELL2 = 64; // cell size assumption not needed — use raw coords vs corners
+  check('scrapyard: pads clear of all four spawn corners', tw.crushers.every(c =>
+    !(c.x < 190 && c.y < 190) && !(c.x > 770 && c.y > 450) && !(c.x > 770 && c.y < 190) && !(c.x < 190 && c.y > 450)));
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'maze' });
+  check('scrapyard: other arenas have no pads', tw.crushers.length === 0);
+
+  // phase math: idle -> telegraph -> slam across the cycle
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'scrapyard' });
+  tw.setPhase('play');
+  const c0 = tw.crushers[0];
+  tw.setRoundTime(0 - c0.phase + 1.0);
+  check('crusher: early cycle is idle', tw.crusherPhase(c0).s === 'idle');
+  tw.setRoundTime(0 - c0.phase + tw.CRUSH.idle + 0.5);
+  check('crusher: then telegraph', tw.crusherPhase(c0).s === 'tele');
+  tw.setRoundTime(0 - c0.phase + tw.CRUSH.idle + tw.CRUSH.tele + 0.1);
+  check('crusher: then SLAM', tw.crusherPhase(c0).s === 'slam');
+
+  // slam kills a tank parked on the pad — exactly once per cycle
+  const victim = tw.tanks[1];
+  victim.x = c0.x; victim.y = c0.y; victim.shield = false; victim.hp = 1; victim.alive = true;
+  tw.tanks[0].x = 80; tw.tanks[0].y = 80;
+  tw.updateCrushers();
+  check('crusher: slam crushes the parked tank', victim.alive === false);
+  victim.alive = true; victim.hp = 1;
+  tw.updateCrushers();
+  check('crusher: same slam never hits twice', victim.alive === true);
+
+  // AI shuffles off during the telegraph
+  tw.setRoundTime(0 - c0.phase + tw.CRUSH.idle + 0.6);
+  const ai = tw.tanks[1];
+  ai.alive = true; ai.isAI = true; ai.x = c0.x + 4; ai.y = c0.y;
+  const d0 = Math.hypot(ai.x - c0.x, ai.y - c0.y);
+  for (let i = 0; i < 30; i++) tw.updateCrushers();
+  check('crusher: AI flees the flashing pad', Math.hypot(ai.x - c0.x, ai.y - c0.y) > d0 + 10);
+
+  // crushers ride the co-op wave message
+  tw.net.role = 'guest';
+  tw.gmGuestSWave({
+    wave: 2, bn: '', ar: 'scrapyard',
+    walls: { v: '0'.repeat(150), h: '0'.repeat(150) }, pl: [],
+    cr: [[300, 200, 0], [500, 300, 1.7]],
+    tk: [[50, 50, 0, 'scout', 0, 14, 0, 1], [80, 50, 0, 'scout', 0, 14, 0, 1]],
+    pk: {}, run: 0,
+  });
+  check('crusher: guest rebuilds pads from swave', tw.crushers.length === 2 && tw.crushers[1].phase === 1.7);
+  tw.net.role = null; tw.surv.on = false; tw.net.coop = false;
+
+  // reconnect grace: a 15s+ blip aborts cleanly; a short blip does not
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie' });
+  tw.setPhase('play');
+  tw.matchCfg.mode = 'online';
+  tw.net.blip = performance.now() - 3000;
+  tw.update(1 / 60);
+  check('grace: short blip keeps playing', tw.phase === 'play' && tw.net.blip !== 0);
+  tw.net.blip = performance.now() - 16000;
+  tw.update(1 / 60);
+  check('grace: 15s blip aborts to the victory screen', tw.phase === 'matchover' && tw.net.blip === 0);
+  tw.matchCfg.mode = 'quick';
+}
+
 // ---------- 19. CAMPAIGN ACT II ----------
 {
   check('act2: campaign is 20 battles', tw.CAMPAIGN.length === 20);

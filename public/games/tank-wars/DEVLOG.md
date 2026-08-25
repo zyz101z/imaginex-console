@@ -11,6 +11,11 @@
 2. (carried) Multiplayer reconnect grace on connection blips. RTT indicator ✅ DONE 2026-08-22.
 3. (carried) Metered dashboard Secret Key 401 loose end.
 
+## Session log — 2026-08-25
+| Ver | Commit | What |
+|---|---|---|
+| SCRAP | (this) | **🏗 ARENA #10: SCRAPYARD** (pillars layout, 0.90-0.96 rotation slice) w/ a NEW HAZARD CLASS — **CRUSHER PADS**: 3 industrial presses, cycle 5s (3.3 idle → 1.25 flashing telegraph → 0.45 SLAM = damageTank on the pad, once per cycle via hitStamp). State is a **pure function of roundTime** → online guests sync for free (positions ride `cr` on round/swave msgs); daily-mode determinism free too (withDailyRng wraps survStartWaveInner→genCrushers). AI shuffles off flashing pads (moveTankVec nudge, frozen tanks can't). Spawn corners always clear; pads avoid pools + each other. Meshy art 18cr: `floor_scrap.png` (inset-crop 512 tile) + `theme_junk.png` (junk-car pile, magenta+dark-shadow key recipe) stamped lava-style; neon fallback if missing. Countdown warns "off the plate when it flashes!" **📶 RECONNECT GRACE** (oldest queue item, DONE): ice 'disconnected' during a match starts a 15s grace (net.blip) with an amber HUD notice instead of instant abort — most wifi blips self-heal to 'connected'; 'failed' or 15s → clean netAbort. Tests **175** (13 new: registration, pad gen/corner-safety, phase math, slam-kill + once-per-cycle, AI flee, guest swave rebuild, short-vs-long blip) + deep probe scrapyard 25s fuzz. |
+
 ## Session log — 2026-08-23
 | Ver | Commit | What |
 |---|---|---|

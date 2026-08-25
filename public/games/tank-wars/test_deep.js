@@ -240,6 +240,13 @@ for (const id of [1, 7, 10, 13, 15, 17, 20]) {
   tw.surv.on = false;
 }
 
+// ---------- H2. scrapyard: fuzz on the crusher arena ----------
+{
+  tw.startMatch({ mode: 'quick', aiLevel: 'ace', arena: 'scrapyard' });
+  check('scrapyard: enters play with pads', tw.mode === 'play' && tw.crushers.length === 3);
+  report(fuzz('scrapyard', 25), 'scrapyard: 25s fuzz with live crushers clean');
+}
+
 // ---------- H. static hazard scan: params shadowing globals ----------
 {
   const src = m[1];
