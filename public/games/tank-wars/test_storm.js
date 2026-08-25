@@ -280,6 +280,8 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.surv.run = 100; tw.surv.kills = 30;
   tw.ensureQuests();
   tw.profile.quests.forEach(q => { q.done = true; });   // isolate milestone accounting from quest payouts
+  tw.MEDALS.forEach(md => { tw.profile.medals[md.id] = true; });   // ...and from medal payouts
+  tw.bumpStreak();                                                  // ...and from the daily streak bonus
   const scrap0 = tw.profile.scrap;
   tw.survOver();
   check('over: phase survover', tw.phase === 'survover');
@@ -620,6 +622,57 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.damageTank(tw.tanks[1]);
   check('quests: real kill bumps the counter', tw.profile.quests[0].progress === 1);
   tw.profile.questDay = null; tw.profile.quests = null;
+}
+
+// ---------- 23. STREAKS + MEDALS + BOARD ----------
+{
+  // streak: first play today pays; same-day repeat is idempotent
+  tw.profile.streakLast = null; tw.profile.streakN = 0;
+  const s0 = tw.profile.scrap;
+  tw.bumpStreak();
+  check('streak: day 1 pays 15', tw.profile.streakN === 1 && tw.profile.scrap === s0 + 15);
+  tw.bumpStreak();
+  check('streak: same day is idempotent', tw.profile.streakN === 1 && tw.profile.scrap === s0 + 15);
+  // consecutive-day math
+  const y = new Date(Date.now() - 86400000);
+  tw.profile.streakLast = String(y.getUTCFullYear() * 10000 + (y.getUTCMonth() + 1) * 100 + y.getUTCDate());
+  tw.profile.streakN = 4;
+  tw.bumpStreak();
+  check('streak: yesterday chains to 5 (+35)', tw.profile.streakN === 5);
+  tw.profile.streakLast = '20200101'; tw.profile.streakN = 9;
+  tw.bumpStreak();
+  check('streak: a gap resets to 1', tw.profile.streakN === 1);
+  check('streak: bestStreak keeps the high-water mark', (tw.profile.bestStreak || 0) >= 5);
+
+  // medals: stat crossing unlocks once, pays once
+  tw.profile.medals = {}; tw.profile.life = { kills: 99 };
+  const m0 = tw.profile.scrap;
+  tw.medalCheck();
+  check('medal: below target stays locked', !tw.profile.medals.k100 && tw.profile.scrap === m0);
+  tw.profile.life.kills = 100;
+  tw.medalCheck();
+  check('medal: crossing pays +50 once', tw.profile.medals.k100 === true && tw.profile.scrap === m0 + 50);
+  tw.medalCheck();
+  check('medal: never pays twice', tw.profile.scrap === m0 + 50);
+  check('medal: 14 defined, ids unique', tw.MEDALS.length === 14 && new Set(tw.MEDALS.map(x => x.id)).size === 14);
+
+  // lifetime counters ride questBump (and ignore online)
+  tw.matchCfg.mode = 'quick';
+  tw.profile.life = {};
+  tw.questBump('kills', 3);
+  check('life: offline kills counted', tw.profile.life.kills === 3);
+  tw.matchCfg.mode = 'online';
+  tw.questBump('kills', 3);
+  check('life: online kills ignored', tw.profile.life.kills === 3);
+  tw.matchCfg.mode = 'quick';
+
+  // board rendering + id shape
+  check('board: id is date-scoped', new RegExp('^tank-wars-daily-\\d{8}$').test(tw.dailyBoardId()));
+  const html2 = tw.boardRowsHtml([{ nickname: 'DAD', score: 14 }, { nickname: 'KID', score: 15 }]);
+  check('board: rows render name + wave', html2.includes('DAD') && html2.includes('wave 14') && html2.includes('KID'));
+  check('board: null renders the offline message', tw.boardRowsHtml(null).includes('board'));
+  check('board: empty renders the challenge line', tw.boardRowsHtml([]).includes('set the bar'));
+  tw.profile.medals = {}; tw.profile.life = {};
 }
 
 // ---------- 19. CAMPAIGN ACT II ----------

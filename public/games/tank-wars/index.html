@@ -88,7 +88,11 @@
       <button class="btn" id="btnAce">QUICK &bull; ACE</button>
     </div>
     <button class="btn" id="btnOnline" style="background:linear-gradient(180deg,#b3bcff,#8a96f5);">ONLINE VS &nbsp;<span style="font-size:11px;vertical-align:2px;">BETA</span></button>
-    <button class="btn ghost" id="btnGarage">GARAGE &mdash; TANKS &amp; SHELLS</button>
+    <div class="row">
+      <button class="btn ghost" id="btnGarage">GARAGE &mdash; TANKS</button>
+      <button class="btn ghost" id="btnMedals">&#127942; MEDALS</button>
+      <button class="btn ghost" id="btnBoard">&#127758; TODAY'S TOP 10</button>
+    </div>
     <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
     <p class="tag" id="winTag"></p>
   </div>
@@ -103,6 +107,20 @@
   </div>
 </div>
 
+<div id="medals" class="overlay hidden">
+  <div class="panel">
+    <h1>&#127942; MEDALS</h1>
+    <div id="medalList" style="max-height:64vh;overflow-y:auto;text-align:left;"></div>
+    <button class="btn ghost" id="btnMedalsBack">BACK</button>
+  </div>
+</div>
+<div id="boardBox" class="overlay hidden">
+  <div class="panel">
+    <h1>&#127758; DAILY STORM &mdash; TODAY'S TOP 10</h1>
+    <div id="boardList" style="min-height:120px;text-align:left;"></div>
+    <button class="btn ghost" id="btnBoardBack">BACK</button>
+  </div>
+</div>
 <div id="campaign" class="overlay hidden">
   <div class="panel wide">
     <h1 class="title" style="font-size:28px;">CAMPAIGN</h1>
@@ -177,6 +195,7 @@
     <h1 class="winTitle" id="winName">YOU WIN!</h1>
     <p class="winSub" id="winScore">5 — 3</p>
     <p class="winSub" id="winScrap" style="color:#ffd166;font-weight:800;letter-spacing:1px;"></p>
+    <div id="dailyBoard" class="hidden" style="margin:6px auto 2px;max-width:340px;text-align:left;"></div>
     <p id="winWait" class="tag hidden">waiting for the host &mdash; they can start a rematch&hellip;</p>
     <button class="btn" id="btnRematch">REMATCH</button>
     <button class="btn ghost" id="btnMenu">MAIN MENU</button>
@@ -346,6 +365,12 @@ try {
       profile.daily = (p.daily && typeof p.daily === 'object') ? p.daily : null;
       profile.questDay = typeof p.questDay === 'string' ? p.questDay : null;
       profile.quests = Array.isArray(p.quests) ? p.quests : null;
+      profile.streakLast = typeof p.streakLast === 'string' ? p.streakLast : null;
+      profile.streakN = Math.max(0, parseInt(p.streakN, 10) || 0);
+      profile.bestStreak = Math.max(0, parseInt(p.bestStreak, 10) || 0);
+      profile.life = (p.life && typeof p.life === 'object') ? p.life : {};
+      profile.medals = (p.medals && typeof p.medals === 'object') ? p.medals : {};
+      profile.pilot = typeof p.pilot === 'string' ? p.pilot.slice(0, 16) : null;
     }
   }
 } catch (e) {}
@@ -1053,9 +1078,74 @@ function ensureQuests() {
   profile.quests = picked.map(q => ({ id: q.id, progress: 0, done: false }));
   saveProfile();
 }
+// ============================== STREAKS & MEDALS ==============================
+// 🔥 Play any offline mode once a day: streak climbs, pay scales, medals watch.
+function bumpStreak() {
+  const today = String(dailyKey());
+  if (profile.streakLast === today) return;
+  const y = new Date(Date.now() - 86400000);
+  const yKey = String(y.getUTCFullYear() * 10000 + (y.getUTCMonth() + 1) * 100 + y.getUTCDate());
+  profile.streakN = profile.streakLast === yKey ? (profile.streakN || 0) + 1 : 1;
+  profile.streakLast = today;
+  profile.bestStreak = Math.max(profile.bestStreak || 0, profile.streakN);
+  const pay = 10 + 5 * Math.min(10, profile.streakN);
+  profile.scrap += pay;
+  questToasts.push({ txt: '🔥 DAY ' + profile.streakN + ' STREAK — welcome back!  +' + pay + ' 🔧', t: 5 });
+  sfx.powerup();
+  medalCheck();
+  saveProfile(); updateWinTag();
+}
+// 🎖 Lifetime medals: long-horizon goals with one-time scrap payouts.
+const MEDALS = [
+  { id: 'k100',    txt: 'Destroy 100 tanks',        stat: () => L('kills'),    target: 100,  pay: 50 },
+  { id: 'k500',    txt: 'Destroy 500 tanks',        stat: () => L('kills'),    target: 500,  pay: 150 },
+  { id: 'k2000',   txt: 'Destroy 2,000 tanks',      stat: () => L('kills'),    target: 2000, pay: 400 },
+  { id: 'r25',     txt: 'Win 25 rounds',            stat: () => L('rounds'),   target: 25,   pay: 60 },
+  { id: 'r100',    txt: 'Win 100 rounds',           stat: () => L('rounds'),   target: 100,  pay: 200 },
+  { id: 'b5',      txt: 'Slay 5 bosses',            stat: () => L('boss'),     target: 5,    pay: 80 },
+  { id: 'b25',     txt: 'Slay 25 bosses',           stat: () => L('boss'),     target: 25,   pay: 300 },
+  { id: 'p50',     txt: 'Grab 50 power-ups',        stat: () => L('powerups'), target: 50,   pay: 60 },
+  { id: 'w15',     txt: 'Reach storm wave 15',      stat: () => profile.bestWave || 0, target: 15, pay: 150 },
+  { id: 'w20',     txt: 'Reach storm wave 20',      stat: () => profile.bestWave || 0, target: 20, pay: 400 },
+  { id: 'act1',    txt: 'Beat Act I (Battle 10)',   stat: () => profile.done[10] ? 1 : 0, target: 1, pay: 100 },
+  { id: 'act2',    txt: 'Beat Act II (Battle 20)',  stat: () => profile.done[20] ? 1 : 0, target: 1, pay: 250 },
+  { id: 'garage',  txt: 'Own all 10 tanks',         stat: () => Object.keys(TANKS).filter(k => profile.owned[k]).length, target: 10, pay: 500 },
+  { id: 'streak7', txt: 'Keep a 7-day streak',      stat: () => profile.bestStreak || 0, target: 7, pay: 200 },
+];
+function L(k) { return (profile.life && profile.life[k]) || 0; }
+function medalCheck() {
+  profile.medals = profile.medals || {};
+  for (const md of MEDALS) {
+    if (profile.medals[md.id]) continue;
+    if (md.stat() >= md.target) {
+      profile.medals[md.id] = true;
+      profile.scrap += md.pay;
+      questToasts.push({ txt: '🎖 MEDAL EARNED: ' + md.txt + '  +' + md.pay + ' 🔧', t: 5 });
+      sfx.powerup();
+    }
+  }
+}
+function renderMedals() {
+  const list = document.getElementById('medalList');
+  profile.medals = profile.medals || {};
+  const got = MEDALS.filter(md => profile.medals[md.id]).length;
+  list.innerHTML = '<p class="tag">' + got + ' / ' + MEDALS.length + ' earned</p>' + MEDALS.map(md => {
+    const done = !!profile.medals[md.id];
+    const v = Math.min(md.stat(), md.target);
+    return '<div style="padding:6px 10px;margin:4px 0;border-radius:8px;background:' + (done ? '#1d2b1f' : '#101a30') +
+      ';border:1px solid ' + (done ? '#4de37f' : '#26365c') + ';">' +
+      (done ? '🎖 ' : '▫ ') + '<b>' + md.txt + '</b> — ' +
+      (done ? '<span style="color:#4de37f">earned</span>' : v + '/' + md.target) +
+      ' <span style="color:#ffd166;float:right;">+' + md.pay + ' 🔧</span></div>';
+  }).join('');
+}
+
 let questToasts = [];   // {txt, t} — drawn briefly in the HUD
 function questBump(ev, n) {
   if (matchCfg.mode === 'online') return;   // offline honors only — keeps it fair & simple
+  profile.life = profile.life || {};
+  if (ev !== 'wave' && ev !== 'bigrun') profile.life[ev] = (profile.life[ev] || 0) + n;
+  medalCheck();
   ensureQuests();
   let changed = false;
   for (const state of profile.quests) {
@@ -1071,6 +1161,59 @@ function questBump(ev, n) {
     changed = true;
   }
   if (changed) { saveProfile(); updateWinTag(); }
+}
+
+// ============================== DAILY LEADERBOARD ==============================
+// Same-origin API: per-day rotating board (tank-wars-daily-YYYYMMDD, expires in 3d).
+function dailyBoardId() { return 'tank-wars-daily-' + dailyKey(); }
+function fetchDailyBoard(cb) {
+  try {
+    fetch('/api/leaderboard?gameId=' + dailyBoardId())
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => cb(Array.isArray(rows) ? rows : []))
+      .catch(() => cb(null));
+  } catch (e) { cb(null); }
+}
+function submitDailyBoard(wave, cb) {
+  if (!profile.pilot || !wave) { if (cb) cb(false); return; }
+  try {
+    fetch('/api/leaderboard', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: dailyBoardId(), nickname: profile.pilot, score: wave }),
+    }).then(r => { if (cb) cb(r.ok); }).catch(() => { if (cb) cb(false); });
+  } catch (e) { if (cb) cb(false); }
+}
+function boardRowsHtml(rows) {
+  if (rows === null) return '<p class="tag">couldn\'t reach the board — try again later</p>';
+  if (!rows.length) return '<p class="tag">no runs yet today — set the bar!</p>';
+  return rows.slice(0, 10).map((r, i) =>
+    '<div style="display:flex;justify-content:space-between;padding:3px 10px;' +
+    (r.nickname === profile.pilot ? 'color:#ffd166;font-weight:800;' : '') + '">' +
+    '<span>' + (i + 1) + '. ' + String(r.nickname).slice(0, 16) + '</span><span>wave ' + r.score + '</span></div>').join('');
+}
+// victory-overlay board: name entry on first use, then auto-submit + top 10
+function showDailyBoardOnVictory() {
+  const box = document.getElementById('dailyBoard');
+  if (!box) return;
+  box.classList.remove('hidden');
+  const best = profile.daily ? profile.daily.best : 0;
+  if (!profile.pilot) {
+    box.innerHTML = '<p class="tag" style="text-align:center">join today\'s board — pick a pilot name:</p>' +
+      '<div style="display:flex;gap:6px;justify-content:center;">' +
+      '<input id="pilotName" maxlength="16" style="background:#0a0f18;color:#dfe8ff;border:1px solid #3a5a8a;border-radius:8px;padding:6px 10px;width:150px;" placeholder="pilot name">' +
+      '<button class="btn" style="padding:6px 14px;" id="pilotGo">SUBMIT WAVE ' + best + '</button></div>';
+    document.getElementById('pilotGo').onclick = () => {
+      const v = (document.getElementById('pilotName').value || '').trim().slice(0, 16);
+      if (!v) return;
+      profile.pilot = v; saveProfile();
+      showDailyBoardOnVictory();
+    };
+  } else {
+    box.innerHTML = '<p class="tag" style="text-align:center">🌍 TODAY\'S TOP 10 — you: ' + profile.pilot + '</p><p class="tag" style="text-align:center">…</p>';
+    submitDailyBoard(best, () => {
+      fetchDailyBoard(rows => { box.innerHTML = '<p class="tag" style="text-align:center">🌍 TODAY\'S TOP 10</p>' + boardRowsHtml(rows); });
+    });
+  }
 }
 
 // swap Math.random for a wave-keyed seeded stream while fn runs (daily mode only)
@@ -1318,6 +1461,7 @@ function survRadialBurst(t, n) {
   shake = Math.max(shake, 6);
 }
 function survWaveCleared() {
+  bumpStreak();
   survGain(6 + surv.wave + (surv.bossName ? 24 : 0));
   // draft: 3 distinct perks (AEGIS leaves the pool once owned — a second shield is nothing)
   const pool = PERK_ORDER.filter(id => id !== 'aegis' || !surv.perks.aegis);
@@ -1381,8 +1525,13 @@ function survOver() {
     if (surv.wave > profile.daily.best) profile.daily.best = surv.wave;
     if (surv.wave > (profile.dailyBest || 0)) profile.dailyBest = surv.wave;
   }
+  bumpStreak();
+  medalCheck();
   profile.scrap += surv.run;
   saveProfile();
+  const db = document.getElementById('dailyBoard');
+  if (db) { db.classList.add('hidden'); db.innerHTML = ''; }
+  if (surv.daily) showDailyBoardOnVictory();
   document.getElementById('winName').textContent =
     surv.rush ? 'THE RUSH ENDS' : surv.daily ? 'DAILY STORM COMPLETE' : 'THE STORM ENDS';
   document.getElementById('winName').style.color = BOSS_COL;
@@ -1478,6 +1627,7 @@ function startRound() {
   netSendRound();   // online host: ship maze + spawns + scores to the guest (no-op otherwise)
 }
 function endRound() {
+  if (matchCfg.mode !== 'online') bumpStreak();
   const a = tanks[0].alive, b = tanks.some(t => t.i > 0 && t.team === 1 && t.alive);
   phase = 'roundover'; phaseT = 0;
   let winnerIdx = -1;
@@ -1495,6 +1645,8 @@ function endRound() {
 }
 function endMatch() {
   phase = 'matchover'; phaseT = 0;   // terminal state
+  const dbx = document.getElementById('dailyBoard');
+  if (dbx) { dbx.classList.add('hidden'); dbx.innerHTML = ''; }
   musicStop(true);                    // fade the music so the fanfare stands alone — without this, the roundover
   // branch re-entered endMatch EVERY FRAME: fanfare × 60/s (awful ringing) + unbounded confetti.
   const w = tanks[0].score >= matchCfg.roundsToWin ? tanks[0] : tanks[1];
@@ -1568,7 +1720,8 @@ function updateWinTag() {
     const rushTxt = (profile.bestWave || 0) >= 10
       ? ('RUSH BEST: ' + Math.max(0, (profile.bestRush || 1) - 1) + ' bosses')
       : 'RUSH: survive wave 10 to unlock';
-    dt.textContent = 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
+    const stk = profile.streakN && profile.streakLast === String(dailyKey()) ? ('🔥 ' + profile.streakN + '-day streak · ') : '';
+    dt.textContent = stk + 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
       '  ·  ' + rushTxt;
   }
   const qt = document.getElementById('questTag');
@@ -2998,6 +3151,16 @@ document.getElementById('btnAce').onclick = () => { audioInit(); startMatch({ mo
 document.getElementById('btnCampaign').onclick = () => { audioInit(); renderCampaign(); show('menu', false); show('campaign', true); };
 document.getElementById('btnCampaignBack').onclick = () => { show('campaign', false); show('menu', true); };
 document.getElementById('btnGarage').onclick = () => { audioInit(); renderGarage(); show('menu', false); show('garage', true); };
+document.getElementById('btnMedals').onclick = () => { audioInit(); renderMedals(); show('menu', false); show('medals', true); };
+document.getElementById('btnMedalsBack').onclick = () => { show('medals', false); show('menu', true); };
+document.getElementById('btnBoard').onclick = () => {
+  audioInit();
+  show('menu', false); show('boardBox', true);
+  const bl = document.getElementById('boardList');
+  bl.innerHTML = '<p class="tag">loading…</p>';
+  fetchDailyBoard(rows => { bl.innerHTML = boardRowsHtml(rows); });
+};
+document.getElementById('btnBoardBack').onclick = () => { show('boardBox', false); show('menu', true); };
 document.getElementById('btnGarageBack').onclick = () => { show('garage', false); show('menu', true); };
 document.getElementById('btnHelp').onclick = () => { show('menu', false); show('helpBox', true); };
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
@@ -3726,6 +3889,7 @@ window.__tw = {
   // co-op storm test surface
   net, serTank, serShell, startCoopStorm, netSendSWave, nearestFoe, survFanBurst, dailyKey, packWalls,
   ensureQuests, questBump, QUEST_DEFS, get questToasts() { return questToasts; },
+  bumpStreak, medalCheck, MEDALS, renderMedals, boardRowsHtml, dailyBoardId,
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,
 };
 
