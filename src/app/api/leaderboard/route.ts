@@ -24,6 +24,13 @@ function key(gameId: string) {
   return `imaginex:leaderboard:${gameId}`;
 }
 
+// Rotating per-day boards (Tank Wars DAILY STORM): tank-wars-daily-YYYYMMDD.
+// Excluded from the all-games aggregate; keys expire on the write side.
+const DAILY_ID = /^tank-wars-daily-\d{8}$/;
+function validGame(gameId: string) {
+  return KNOWN_GAMES.has(gameId) || DAILY_ID.test(gameId);
+}
+
 export async function GET(req: NextRequest) {
   const gameId = req.nextUrl.searchParams.get("gameId");
 
@@ -51,7 +58,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (gameId) {
-    if (!KNOWN_GAMES.has(gameId)) return NextResponse.json([]);
+    if (!validGame(gameId)) return NextResponse.json([]);
     return NextResponse.json(await readGame(gameId));
   }
 
@@ -76,7 +83,7 @@ export async function POST(req: NextRequest) {
   if (!nickname) return NextResponse.json({ error: "nickname required" }, { status: 400 });
   if (containsProfanity(nickname))
     return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
-  if (!KNOWN_GAMES.has(gameId))
+  if (!validGame(gameId))
     return NextResponse.json({ error: "unknown gameId" }, { status: 400 });
   const maxScore = MAX_SCORE_BY_GAME[gameId] ?? MAX_SCORE;
   if (!Number.isFinite(score) || score < 0 || score > maxScore)
@@ -110,6 +117,7 @@ export async function POST(req: NextRequest) {
     // Trim to top KEEP_TOP by removing the lowest-ranked extras.
     await redis.zremrangebyrank(k, 0, -KEEP_TOP - 1);
   }
+  if (DAILY_ID.test(gameId)) await redis.expire(k, 3 * 86400);   // daily boards rotate out
 
   return NextResponse.json({ ok: true });
 }
