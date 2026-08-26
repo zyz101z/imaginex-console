@@ -985,6 +985,20 @@ function setFranchiseTag(id) {
 // ---------------------------------------------------------------- trade deadline
 // Weeks 7-9 are DEADLINE SEASON: winning teams turn buyers (more calls, fatter
 // premiums), losing teams turn sellers (veterans go ~20% under sticker).
+// 🤝 NEGOTIATING MOOD: each front office prices trades a little differently each
+// week (seeded — no reroll-scumming). 0.90 = motivated seller, 1.12 = wants a premium.
+// This is where "a good deal now and then" lives for user-proposed trades.
+function tradeMood(partnerId) {
+  let h = (S.seed ^ (S.seasonNum * 2654435761) ^ ((S.week + 1) * 40503)) >>> 0;
+  for (const ch of partnerId) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return 0.90 + ((h % 1000) / 1000) * 0.22;   // 0.90 .. 1.12
+}
+function moodLabel(m) {
+  return m < 0.96 ? { icon: "🔥", txt: "motivated to deal" }
+       : m > 1.06 ? { icon: "💎", txt: "asking a premium" }
+       : { icon: "😐", txt: "by-the-book" };
+}
 function deadlineWindow() { return S.phase === "season" && S.week >= 6 && S.week <= 8; }  // weeks 7-9 shown to the user
 function teamRecord(id) { const st = S.standings[id]; return st ? st.w - st.l : 0; }
 function sellerTeams() { return TEAMS.filter(t => t.id !== S.teamId && teamRecord(t.id) <= -2).map(t => t.id); }
@@ -1051,7 +1065,7 @@ function viewTrades() {
   let html = `<h2>Trade Center</h2>${offerHtml}<p>Partner:
     <select onchange="__gm.tradePartner(this.value)">` +
     partners.map(t => `<option value="${t.id}" ${t.id === T.partner ? "selected" : ""}>${t.city} ${t.name}</option>`).join("") +
-    `</select></p><div class="divgrid">`;
+    `</select> <span class="dim small">${(() => { const m = moodLabel(tradeMood(T.partner)); return `${m.icon} front office is ${m.txt} this week`; })()}</span></p><div class="divgrid">`;
   const side = (teamId, sel, picksSel, tag) => {
     const roster = [...S.league[teamId]].sort((a, b) => b.ovr - a.ovr); // FULL roster
     let h = `<div><h3>${chip(teamId)} send: <span class="dim small">(${roster.length} players)</span></h3><div class="scrollbox"><table>`;
@@ -1631,8 +1645,11 @@ function tradePropose() {
   const myAssets = { players: T.mine, picks: T.minePicks, fpicks: T.mineFPicks || [] };
   const theirAssets = { players: T.theirs, picks: T.theirPicks, fpicks: T.theirFPicks || [] };
   const sellerDiscount = deadlineWindow() && sellerTeams().includes(T.partner) ? 0.8 : 1;
-  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, sellerDiscount);
+  const mood = tradeMood(T.partner);
+  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, sellerDiscount * mood);
   if (verdict.accept && sellerDiscount < 1) verdict.reason = "Deal! (fire-sale price — they're sellers)";
+  else if (verdict.accept && mood < 0.96) verdict.reason = "Deal! (they were motivated — you caught them at the right time)";
+  else if (!verdict.accept && mood > 1.06) verdict.reason = verdict.reason + " (they're asking a premium this week — try another team, or wait)";
   // user-side legality too: don't let a trade break your own minimums or cap
   if (verdict.accept) {
     const incoming = theirAssets.players.map(pid => S.league[T.partner].find(p => p.id === pid)).filter(Boolean);
