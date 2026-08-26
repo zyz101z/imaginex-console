@@ -118,3 +118,6 @@ Pro Bowl, save slots/export, deeper glossary, per-quarter box lines, multi-team 
 - NEW trade negotiating moods (app.mjs only, engines untouched): each partner's front office prices trades 0.90x–1.12x per week, seeded on seed+partner+season+week (no reroll-scumming). 🔥 motivated / 😐 by-the-book / 💎 premium shown next to the partner picker; verdicts explain mood. ~13% of partner-weeks are true steal windows — shop around or wait a week.
 - Probe fix: aiPick returns a board INDEX (caller splices) — earlier probe misread it as a player.
 - Batteries green: sim 3,000 / gm 17,543. Cache bump ?v=20260826b (both copies synced).
+
+## 2026-08-26 (later) — League probe (audit round 2)
+- NEW test/league.probe.mjs (44 checks): game realism (scoring/home-field/OT/margins), season stat realism (schedule shape, leader bands, W-L bookkeeping), injuries (volume/heal-cap/rehab), playoff integrity (seeding rules, champion quality over 12 seasons), awards/All-Pro sanity, and a 10-season league-drift run through the REAL offseason pipeline (talent/age stability, cap legality, retirement flow, draft absorption, save-size growth, records, HOF). All pass; no game-code changes needed.
