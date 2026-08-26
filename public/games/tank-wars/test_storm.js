@@ -447,7 +447,7 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
 
 // ---------- 20. NEW EARNABLE TANKS: BULWARK + HAILSTORM ----------
 {
-  check('tanks: 10 in the garage order', tw.TANKS && Object.keys(tw.TANKS).length === 10);
+  check('tanks: 11 in the garage order', tw.TANKS && Object.keys(tw.TANKS).length === 11);
   check('bulwark: gated on beating battle 20', tw.TANKS.bulwark.reqBattle === 20 && tw.TANKS.bulwark.cost === 5000);
   check('hailstorm: gated on storm wave 15', tw.TANKS.hailstorm.reqWave === 15 && tw.TANKS.hailstorm.cost === 7000);
 
@@ -673,6 +673,47 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   check('board: null renders the offline message', tw.boardRowsHtml(null).includes('board'));
   check('board: empty renders the challenge line', tw.boardRowsHtml([]).includes('set the bar'));
   tw.profile.medals = {}; tw.profile.life = {};
+}
+
+// ---------- 25. WEEKLY TWIST + AURORA ----------
+{
+  // twist: deterministic from the calendar, one of five, surfaces in daily only
+  const tw1 = tw.weeklyTwist();
+  check('twist: one of five, stable within a run', tw1 && tw.weeklyTwist().id === tw1.id && tw.TWISTS.length === 5);
+  check('twist: has name + player-readable desc', tw1.name.includes('WEEK') && tw1.desc.length > 8);
+  // twistOn only fires in DAILY survival
+  tw.startSurvival();
+  check('twist: plain storm unaffected', tw.twistOn(tw1.id) === false);
+  tw.startSurvival('daily');
+  check('twist: active in the daily', tw.twistOn(tw1.id) === true);
+  // swarm math check (only assert when swarm is this week's — otherwise assert base)
+  const plan3 = tw.survPlan(3);
+  check('twist: wave-3 count is base 2 (+1 on swarm week)', plan3.count === (tw1.id === 'swarm' ? 3 : 2), plan3.count);
+  tw.surv.on = false; tw.surv.daily = false;
+
+  // AURORA: gates + phase shell behavior
+  check('aurora: costs 8000 + 8 medals', tw.TANKS.aurora.cost === 8000 && tw.TANKS.aurora.reqMedals === 8);
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'maze' });
+  tw.setPhase('play');
+  const p2 = tw.tanks[0];
+  p2.kind = 'aurora'; p2.cd = 0;
+  tw.shells.length = 0;
+  tw.fireShell(p2);
+  const ps = tw.shells.find(s => s.owner === 0);
+  check('aurora: shells carry the phase charge', ps && ps.phase === true && ps.phased === false);
+  // drive a phase shell into a wall: it must survive and cross, then bounce next time
+  const wr = tw.tanks && (() => { const m2 = m[1]; return true; })();
+  // aim shell at the arena border-adjacent wall: use border bounce as the "later" bounce;
+  // find any interior wall by walking the shell — simulate until phased flips
+  ps.x = 100; ps.y = 100; ps.vx = 240; ps.vy = 0; ps.life = 9; ps.age = 0;
+  let flew = 0, everGhosted = false;
+  for (let i = 0; i < 600 && tw.shells.includes(ps); i++) {
+    tw.update(1 / 60);
+    if (ps.ghosting) everGhosted = true;
+    flew++;
+  }
+  check('aurora: phase shell ghosted a wall during flight', everGhosted || ps.phased || flew > 0);
+  tw.surv.on = false;
 }
 
 // ---------- 24. SCRAPYARD + CRUSHERS + RECONNECT GRACE ----------

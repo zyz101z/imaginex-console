@@ -251,8 +251,11 @@ const TANKS = {
   hailstorm: { name: 'HAILSTORM', cost: 7000, tag: 'Shells SHATTER on their first bounce — two splinters carry the hunt. Bank your shots.',
              speed: 148, fireCd: 0.55, reqWave: 15,
              shell: { speed: 240, r: 4.5, life: 9, bounces: -1, frag: true, maxLive: 4 } },
+  aurora: { name: 'AURORA', cost: 8000, tag: 'PHASE shells ghost through the FIRST wall they touch, then fly true. The prestige hull — earn 8 medals.',
+             speed: 150, fireCd: 0.5, reqMedals: 8,
+             shell: { speed: 255, r: 4, life: 8, bounces: -1, phase: true, maxLive: 5 } },
 };
-const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost', 'tempest', 'bulwark', 'hailstorm'];
+const TANK_ORDER = ['scout', 'mammoth', 'viper', 'pinball', 'photon', 'minelayer', 'ghost', 'tempest', 'bulwark', 'hailstorm', 'aurora'];
 // Cosmetic catalogs (scrap sinks — never touch the friend-or-foe color language)
 const TRAILS = {
   ember:   { name: 'EMBER TRAIL',   cost: 300, tag: 'Your shells leave burning sparks.', col: () => (Math.random() < 0.5 ? '#ff9a3c' : '#ffc46b') },
@@ -282,6 +285,7 @@ const SPRITE_META = {
   tempest: { w: 269, h: 128, cx: 109, cy: 64 },
   bulwark: { w: 260, h: 128, cx: 126, cy: 64 },
   hailstorm: { w: 238, h: 128, cx: 113, cy: 64 },
+  aurora: { w: 341, h: 128, cx: 125, cy: 64 },
 };
 const tankSprites = {};   // kind -> { 0: amber-tinted canvas, 1: teal-tinted canvas }
 if (typeof Image !== 'undefined') {
@@ -907,7 +911,7 @@ function fireShell(t) {
   const max = (t.power === 'rapid' ? 7 : (sh.maxLive || MAX_SHELLS)) + survMag(t);
   if (live >= max) return;
   const spread = t.power === 'triple' ? [-0.26, 0, 0.26] : [0];
-  const spdMul = (t.power === 'rapid' ? 1.25 : 1) * survShellMul(t);
+  const spdMul = (t.power === 'rapid' ? 1.25 : 1) * survShellMul(t) * (twistOn('swift') ? 1.15 : 1);
   // TEMPEST: two barrels — each trigger pull spawns a parallel PAIR (triple = 3 pairs)
   const lats = def.twin ? [-5.5, 5.5] : [0];
   for (const off of spread) {
@@ -922,6 +926,7 @@ function fireShell(t) {
         big: false, heavy: sh.r >= 7, smash: sh.smash || 0,
         bounces: sh.bounces === undefined ? -1 : sh.bounces, accel: sh.accel || 0,
         life: sh.life || SHELL_LIFE, col: t.col, frag: !!sh.frag,
+        phase: !!sh.phase, phased: false, ghosting: false,
       });
     }
   }
@@ -1218,6 +1223,19 @@ function questBump(ev, n) {
   if (changed) { saveProfile(); updateWinTag(); }
 }
 
+// ============================== WEEKLY TWIST ==============================
+// The Daily Storm carries one extra rule that rotates every 7 days — same for
+// everyone (derived from the date), so the week has a shared flavor.
+const TWISTS = [
+  { id: 'swarm',  name: 'SWARM WEEK',  desc: '+1 extra enemy in every wave' },
+  { id: 'swift',  name: 'SWIFT WEEK',  desc: 'every shell flies 15% faster' },
+  { id: 'giants', name: 'GIANT WEEK',  desc: 'bosses wear +2 extra armor' },
+  { id: 'bounty', name: 'BOUNTY WEEK', desc: 'kills pay double scrap' },
+  { id: 'frenzy', name: 'FRENZY WEEK', desc: 'power-ups drop twice as often' },
+];
+function weeklyTwist() { return TWISTS[Math.floor(Date.now() / 86400000 / 7) % TWISTS.length]; }
+function twistOn(id) { return surv.on && surv.daily && weeklyTwist().id === id; }
+
 // ============================== DAILY LEADERBOARD ==============================
 // Same-origin API: per-day rotating board (tank-wars-daily-YYYYMMDD, expires in 3d).
 function dailyBoardId() { return 'tank-wars-daily-' + dailyKey(); }
@@ -1315,7 +1333,8 @@ function startSurvival(smode) {
 function survPlan(w) {
   if (surv.rush) return { boss: true };          // BOSS RUSH: no trash waves, ever
   if (w % 5 === 0) return { boss: true };
-  return { boss: false, count: w < 2 ? 1 : w < 4 ? 2 : w < 8 ? 3 : 4 };
+  const base = w < 2 ? 1 : w < 4 ? 2 : w < 8 ? 3 : 4;
+  return { boss: false, count: Math.min(5, base + (twistOn('swarm') ? 1 : 0)) };
 }
 function survTier(w) {
   if (w <= 2) return 'rookie';
@@ -1335,6 +1354,7 @@ function survKind(w) {
   if (w >= 14) pool.push('tempest');
   if (w >= 16) pool.push('hailstorm');
   if (w >= 18) pool.push('bulwark');
+  if (w >= 21) pool.push('aurora');
   return pool[(Math.random() * pool.length) | 0];
 }
 // far free cells for enemy spawns: away from the player, apart from each other, off pools
@@ -1387,7 +1407,7 @@ function survStartWaveInner(w) {
     const [[cx, cy]] = survSpawnCells(1, player.x, player.y);
     const boss = makeTank(tanks.length, cx, cy, kind);
     boss.isAI = true; boss.aiLv = surv.rush ? (w >= 3 ? 'ace' : 'officer') : (w >= 10 ? 'ace' : 'officer');
-    boss.boss = { type, maxHp: surv.rush ? 3 + w : 5 + 2 * Math.floor((w - 5) / 5), summoned: false };
+    boss.boss = { type, maxHp: (surv.rush ? 3 + w : 5 + 2 * Math.floor((w - 5) / 5)) + (twistOn('giants') ? 2 : 0), summoned: false };
     boss.hp = boss.boss.maxHp;
     boss.r = 18;                       // bigger hitbox to match the bigger silhouette
     boss.col = BOSS_COL; boss.glow = BOSS_GLOW;
@@ -1409,7 +1429,7 @@ function survStartWaveInner(w) {
 }
 function survEnemyDown(t) {
   surv.kills++;
-  survGain(t.boss ? 22 : 2);
+  survGain((t.boss ? 22 : 2) * (twistOn('bounty') ? 2 : 1));
 }
 function survSummonMinions(n) {
   // THE VORTEX calls for backup at half health — fresh rookies, far from the player
@@ -1777,7 +1797,9 @@ function updateWinTag() {
     const rushTxt = (profile.bestWave || 0) >= 10
       ? ('RUSH BEST: ' + Math.max(0, (profile.bestRush || 1) - 1) + ' bosses')
       : 'RUSH: survive wave 10 to unlock';
-    const stk = profile.streakN && profile.streakLast === String(dailyKey()) ? ('🔥 ' + profile.streakN + '-day streak · ') : '';
+    const tw2 = weeklyTwist();
+    const stk = (profile.streakN && profile.streakLast === String(dailyKey()) ? ('🔥 ' + profile.streakN + '-day streak · ') : '') +
+      '⭐ ' + tw2.name + ' (' + tw2.desc + ') · ';
     dt.textContent = stk + 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
       '  ·  ' + rushTxt;
   }
@@ -1945,9 +1967,20 @@ function updateShells(dt) {
       if (s.y < s.r) { s.y = s.r; s.vy = Math.abs(s.vy); if (!onBounce(s)) { dead = true; break; } }
       if (s.y > H - s.r) { s.y = H - s.r; s.vy = -Math.abs(s.vy); if (!onBounce(s)) { dead = true; break; } }
       // wall hit
+      let touchedWall = false;
       for (const r of wallRects) {
         const hit = circleRectPush(s.x, s.y, s.r, r);
         if (!hit) continue;
+        touchedWall = true;
+        // AURORA phase shell: ghosts straight through the FIRST wall it meets
+        if (s.phase && !s.phased) {
+          if (!s.ghosting) {
+            s.ghosting = true;
+            spawnParticles(s.x, s.y, 5, '#b48cff', 90, 0.2);
+            sfx.small && sfx.small();
+          }
+          break;   // no bounce, no death — keep flying through
+        }
         if (s.smash > 0) {   // big-shot powerup (2) or Mammoth shell (1) smashes through
           s.smash--;
           removeWallRect(r);
@@ -1963,6 +1996,11 @@ function updateShells(dt) {
         else s.vy = Math.abs(s.vy) * Math.sign(hit.ny);
         if (!onBounce(s)) { dead = true; }
         break;
+      }
+      // phase shell cleared the wall it was ghosting through → phased out for good
+      if (s.ghosting && !touchedWall && !s.phased) {
+        s.phased = true;
+        spawnParticles(s.x, s.y, 5, '#b48cff', 90, 0.2);
       }
       if (dead) break;
       // tank hits — NO FRIENDLY FIRE: your own shells never hurt you (user request;
@@ -2083,7 +2121,8 @@ function updatePowerups(dt) {
   } else {
     powerupTimer -= dt;
     if (powerupTimer <= 0) {
-      powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
+      powerupTimer = (POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]))
+                     * (twistOn('frenzy') ? 0.5 : 1);
       // FREEZE: offline + CO-OP STORM (frozenT now rides the snapshot). Still out of
       // versus — freezing the other human isn't the party vibe.
       const kinds = (matchCfg.mode === 'online' && !net.coop) ? ['triple', 'rapid', 'shield', 'big']
@@ -2655,8 +2694,9 @@ function render() {
       ctx.save();
       const mine = s.owner === myShellIdx;
       const col = s.big ? '#c792ea' : s.col;
-      ctx.shadowColor = col;
-      ctx.shadowBlur = (s.big || s.heavy) ? 18 : (mine ? 8 : 15);
+      ctx.shadowColor = (s.phase && !s.phased) ? '#b48cff' : col;
+      ctx.shadowBlur = (s.phase && !s.phased) ? 16 : (s.big || s.heavy) ? 18 : (mine ? 8 : 15);
+      if (s.phase && !s.phased) ctx.globalAlpha = 0.8;   // still charged: it can ghost a wall
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
       if (!mine) {
@@ -2719,7 +2759,8 @@ function render() {
         : (cbBoss ? ('BOSS: ' + matchCfg.battle.bossName + ' · ' + (ARENA_LABELS[roundArena] || ''))
                   : (ARENA_LABELS[roundArena] || '')),
         (surv.on && surv.bossName) || cbBoss ? BOSS_COL : '#8fa5cf', 20, H / 2 + 64);
-      const fxNote = roundArena === 'snow' ? 'deep snow — all tanks 15% slower'
+      const fxNote = (surv.on && surv.daily) ? ('⭐ ' + weeklyTwist().name + ': ' + weeklyTwist().desc)
+        : roundArena === 'snow' ? 'deep snow — all tanks 15% slower'
         : roundArena === 'lava' ? 'molten pools — tanks blocked, shells fly over'
         : roundArena === 'scrapyard' ? 'CRUSHER PADS — off the plate when it flashes!' : '';
       if (fxNote) drawBanner(fxNote, '#6b7ea3', 14, H / 2 + 92);
@@ -3159,11 +3200,14 @@ function renderGarage() {
       '<div class="gstats">SPEED <b>' + spd + '</b> &nbsp; RATE <b>' + rate + '</b> &nbsp; PUNCH <b>' + pwr + '</b></div>';
     const btn = document.createElement('button');
     // TEMPEST is earned, not just bought: prove yourself in the storm first
+    const medalCt = Object.values(profile.medals || {}).filter(Boolean).length;
+    const medalLocked = !owned && d.reqMedals && medalCt < d.reqMedals;
     const waveLocked = !owned && d.reqWave && (profile.bestWave || 0) < d.reqWave;
     const battleLocked = !owned && d.reqBattle && !profile.done[d.reqBattle];
     if (sel) { btn.className = 'cardBtn sel'; btn.textContent = 'SELECTED'; }
     else if (owned) { btn.className = 'cardBtn own'; btn.textContent = 'SELECT'; }
     else if (waveLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'SURVIVE WAVE ' + d.reqWave; }
+    else if (medalLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'EARN ' + d.reqMedals + ' MEDALS (' + medalCt + '/' + d.reqMedals + ')'; }
     else if (battleLocked) { btn.className = 'cardBtn cant'; btn.textContent = 'BEAT BATTLE ' + d.reqBattle; }
     else if (profile.scrap >= d.cost) { btn.className = 'cardBtn'; btn.textContent = 'BUY ' + d.cost; }
     else { btn.className = 'cardBtn cant'; btn.textContent = d.cost + ' SCRAP'; }
@@ -3172,6 +3216,7 @@ function renderGarage() {
       if (!profile.owned[k]) {
         if (d.reqWave && (profile.bestWave || 0) < d.reqWave) return;
         if (d.reqBattle && !profile.done[d.reqBattle]) return;
+        if (d.reqMedals && Object.values(profile.medals || {}).filter(Boolean).length < d.reqMedals) return;
         if (profile.scrap < d.cost) return;
         profile.scrap -= d.cost;
         profile.owned[k] = true;
@@ -4035,6 +4080,7 @@ window.__tw = {
   ensureQuests, questBump, QUEST_DEFS, get questToasts() { return questToasts; },
   bumpStreak, medalCheck, MEDALS, renderMedals, boardRowsHtml, dailyBoardId,
   get crushers() { return crushers; }, crusherPhase, genCrushers, CRUSH, updateCrushers,
+  weeklyTwist, twistOn, TWISTS, survPlan,
   get roundTime() { return roundTime; }, setRoundTime(v) { roundTime = v; },
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,
 };
