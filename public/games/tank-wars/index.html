@@ -456,6 +456,60 @@ function updateCrushers() {
   }
 }
 
+// THE NEXUS GATES: two pairs of teleport portals. Touch a ring, come out its twin
+// — tanks AND shells. Positions are static per round (ride the online round msg),
+// and the teleport rule is a pure function of position, so guests sync for free.
+let gates = [];   // { x, y, pair }
+const GATE = { r: 15, tankCd: 1.2, shellCd: 0.9 };
+function gateTwin(g) { return gates.find(o => o.pair === g.pair && o !== g); }
+function genGates() {
+  gates = [];
+  if (roundArena !== 'nexus') return;
+  for (let pair = 0; pair < 2; pair++) {
+    const placed = [];
+    for (let tries = 0; tries < 90 && placed.length < 2; tries++) {
+      const cx = 2 + ((Math.random() * (COLS - 4)) | 0);
+      const cy = 2 + ((Math.random() * (ROWS - 4)) | 0);
+      if ((cx <= 2 && cy <= 2) || (cx >= COLS - 3 && cy >= ROWS - 3) ||
+          (cx >= COLS - 3 && cy <= 2) || (cx <= 2 && cy >= ROWS - 3)) continue;   // spawn corners stay safe
+      const x = cx * CELL + CELL / 2, y = cy * CELL + CELL / 2;
+      if (gates.some(g => Math.hypot(g.x - x, g.y - y) < CELL * 2.4)) continue;
+      if (placed.length && Math.hypot(placed[0].x - x, placed[0].y - y) < CELL * 5) continue; // twin must be a real trip
+      placed.push({ x, y, pair });
+    }
+    if (placed.length === 2) gates.push(...placed);
+  }
+}
+function updateGates(dt) {
+  for (const t of tanks) t.gateCd = Math.max(0, (t.gateCd || 0) - dt);
+  for (const sh of shells) sh.gateCd = Math.max(0, (sh.gateCd || 0) - dt);
+  if (!gates.length || phase !== 'play') return;
+  for (const t of tanks) {
+    if (!t.alive || t.gateCd > 0) continue;
+    for (const g of gates) {
+      if (Math.hypot(t.x - g.x, t.y - g.y) < GATE.r) {
+        const tw = gateTwin(g);
+        if (!tw) break;
+        spawnParticles(t.x, t.y, 14, '#4fd8ff', 150, 0.35);
+        t.x = tw.x; t.y = tw.y; t.gateCd = GATE.tankCd;
+        spawnParticles(t.x, t.y, 14, '#c86bff', 150, 0.35);
+        sfx.laser();
+        break;
+      }
+    }
+  }
+  for (const sh of shells) {
+    if (sh.gateCd > 0) continue;
+    for (const g of gates) {
+      if (Math.hypot(sh.x - g.x, sh.y - g.y) < GATE.r) {
+        const tw = gateTwin(g);
+        if (tw) { sh.x = tw.x; sh.y = tw.y; sh.gateCd = GATE.shellCd; sh.grace = Math.max(sh.grace, 0.12); }
+        break;
+      }
+    }
+  }
+}
+
 function genPools() {
   pools = []; poolCells = new Set();
   if (roundArena !== 'lava') return;
@@ -476,9 +530,11 @@ function genPools() {
 const ARENA_LABELS = { maze: 'CLASSIC MAZE', dense: 'DENSE MAZE', pillars: 'PILLAR FIELD',
                        corridors: 'THE LONG HALLS', shifting: 'SHIFTING WALLS',
                        jungle: 'JUNGLE', city: 'CITY BLOCKS',
-                       snow: 'SNOW FORTRESS', lava: 'LAVA FIELD', scrapyard: 'SCRAPYARD' };
+                       snow: 'SNOW FORTRESS', lava: 'LAVA FIELD', scrapyard: 'SCRAPYARD',
+                       nexus: 'THE NEXUS' };
 // Themed arenas reuse proven layout generators — the theme is a rendering skin only.
-const LAYOUT_OF = { jungle: 'maze', city: 'dense', snow: 'corridors', lava: 'pillars', scrapyard: 'pillars' };
+const LAYOUT_OF = { jungle: 'maze', city: 'dense', snow: 'corridors', lava: 'pillars', scrapyard: 'pillars',
+                    nexus: 'maze' };
 function pickArena() {   // weighted rotation for quick/online play
   const r = Math.random();
   if (r < 0.14) return 'maze';
@@ -489,7 +545,8 @@ function pickArena() {   // weighted rotation for quick/online play
   if (r < 0.69) return 'city';
   if (r < 0.82) return 'snow';
   if (r < 0.90) return 'lava';
-  if (r < 0.96) return 'scrapyard';
+  if (r < 0.955) return 'scrapyard';
+  if (r < 0.985) return 'nexus';
   return 'shifting';
 }
 // Meshy theme art (tree canopy / rooftop sprites + floor tiles); neon fallback until loaded
@@ -500,7 +557,8 @@ if (typeof Image !== 'undefined') {
                              ['floorJungle', 'img/floor_jungle.jpg'], ['floorCity', 'img/floor_city.jpg'],
                              ['boulder', 'img/theme_boulder.png'], ['wallSnow', 'img/wall_snow.jpg'],
                              ['floorSnow', 'img/floor_snow.jpg'], ['floorLava', 'img/floor_lava.jpg'],
-                             ['junk', 'img/theme_junk.png'], ['floorScrap', 'img/floor_scrap.png']]) {
+                             ['junk', 'img/theme_junk.png'], ['floorScrap', 'img/floor_scrap.png'],
+                             ['floorNexus', 'img/floor_nexus.jpg'], ['gateRing', 'img/gate_ring.png']]) {
     const im = new Image();
     im.onload = () => { themeImgs[key] = im; layersDirty = true; };
     im.src = file;
@@ -1383,6 +1441,7 @@ function survStartWaveInner(w) {
   genMaze(roundArena);
   genPools();
   genCrushers();
+  genGates();
   const corners = [[0, 0], [COLS - 1, ROWS - 1], [COLS - 1, 0], [0, ROWS - 1]];
   const pc = corners[(Math.random() * 4) | 0];
   const player = makeTank(0, pc[0], pc[1], matchCfg.playerTank);
@@ -1401,8 +1460,9 @@ function survStartWaveInner(w) {
   surv.bossName = '';
   if (plan.boss) {
     const types = [['warlord', 'THE WARLORD', 'scout'], ['juggernaut', 'THE JUGGERNAUT', 'mammoth'],
-                   ['vortex', 'THE VORTEX', 'photon'], ['phantom', 'THE PHANTOM', 'ghost']];
-    const [type, name, kind] = surv.rush ? types[(w - 1) % 4] : types[(((w / 5) | 0) - 1) % 4];
+                   ['vortex', 'THE VORTEX', 'photon'], ['phantom', 'THE PHANTOM', 'ghost'],
+                   ['seraph', 'THE SERAPH', 'photon']];
+    const [type, name, kind] = surv.rush ? types[(w - 1) % types.length] : types[(((w / 5) | 0) - 1) % types.length];
     surv.bossName = name;
     const [[cx, cy]] = survSpawnCells(1, player.x, player.y);
     const boss = makeTank(tanks.length, cx, cy, kind);
@@ -1502,6 +1562,27 @@ function survBossThink(t, foe, dt) {
       t.cloakT = 0;                        // flash into view for the volley
       survFanBurst(t, foe, 3);
     }
+    aiThink(t, foe, dt);
+  } else if (B.type === 'seraph') {
+    // W25: twin energy beams sweep from the boss like clock hands. The beams stop
+    // at walls — cover is the whole fight. 2s warm-up telegraph, then live.
+    if (B.beamA === undefined) { B.beamA = t.a; B.warm = 2.0; }
+    B.warm = Math.max(0, B.warm - dt);
+    B.beamA += dt * (0.55 + Math.min(0.25, (surv.on ? surv.wave : 10) * 0.006));
+    if (phase === 'play' && B.warm <= 0) {
+      for (const off of [0, Math.PI]) {
+        const end = castRay(t.x, t.y, B.beamA + off, 900);
+        for (const o of tanks) {
+          if (o.team === t.team || !o.alive || (o.beamIfr || 0) > 0) continue;
+          if (segCircleHit(t.x, t.y, end.x, end.y, o.x, o.y, (o.r || TANK_R) + 2)) {
+            o.beamIfr = 1.1;               // one tick per pass — dodgeable, not a shredder
+            spawnParticles(o.x, o.y, 10, '#ffd34f', 160, 0.3);
+            damageTank(o);
+          }
+        }
+      }
+    }
+    for (const o of tanks) o.beamIfr = Math.max(0, (o.beamIfr || 0) - dt);
     aiThink(t, foe, dt);
   } else aiThink(t, foe, dt);   // VORTEX: photon AI; reinforcements arrive at half HP
 }
@@ -1688,6 +1769,7 @@ function startRound() {
   genMaze(roundArena);
   genPools();
   genCrushers();
+  genGates();
   spawnTanks();
   // Act II boss battles: dress the foe as a storm boss — HP bar, big silhouette,
   // and the same special-attack brain survival uses (survBossThink is generic).
@@ -2342,6 +2424,7 @@ function update(dt) {
   updateShells(dt);
   updateMines(dt);
   updateCrushers();
+  updateGates(dt);
   updateTrails();
   updatePowerups(dt);
   updateParticles(dt);
@@ -2412,6 +2495,9 @@ function ensureArenaLayers() {
     f.fillRect(0, 0, W, H);
   } else if (theme === 'scrapyard' && themeImgs.floorScrap) {
     f.fillStyle = f.createPattern(themeImgs.floorScrap, 'repeat');
+    f.fillRect(0, 0, W, H);
+  } else if (theme === 'nexus' && themeImgs.floorNexus) {
+    f.fillStyle = f.createPattern(themeImgs.floorNexus, 'repeat');
     f.fillRect(0, 0, W, H);
   } else {
     f.strokeStyle = 'rgba(70,100,160,0.07)';
@@ -2629,6 +2715,30 @@ function render() {
     }
     // SCRAPYARD crusher pads: base plate always; amber flash while telegraphing;
     // the press itself fills the pad on the slam frame
+    // NEXUS gates: swirling portal rings (pair 0 cyan, pair 1 violet)
+    for (const g of gates) {
+      const col = g.pair === 0 ? '#4fd8ff' : '#c86bff';
+      const spin = performance.now() / 700 + g.pair * 2;
+      ctx.save();
+      ctx.shadowColor = col; ctx.shadowBlur = 16;
+      if (themeImgs.gateRing) {
+        ctx.globalAlpha = 0.9;
+        const d = GATE.r * 2.5;
+        ctx.translate(g.x, g.y); ctx.rotate(spin);
+        ctx.drawImage(themeImgs.gateRing, -d / 2, -d / 2, d, d);
+        ctx.rotate(-spin); ctx.translate(-g.x, -g.y);
+      } else {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(g.x, g.y, GATE.r - 3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = col; ctx.lineWidth = 3;
+      ctx.setLineDash([10, 6]); ctx.lineDashOffset = -spin * 14;
+      ctx.beginPath(); ctx.arc(g.x, g.y, GATE.r + 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
     for (const c of crushers) {
       const st = crusherPhase(c);
       ctx.save();
@@ -2843,6 +2953,19 @@ function drawTankOverlays(t) {
     for (let i = 0; i < n; i++) {
       ctx.fillStyle = i < t.hp ? BOSS_COL : 'rgba(160,170,200,0.25)';
       ctx.fillRect(x0 + (i * w / n) + 1, y0, w / n - 2, 4);
+    }
+    ctx.restore();
+  }
+  if (t.boss && t.boss.type === 'seraph' && t.alive && t.boss.beamA !== undefined) {
+    const warm = t.boss.warm > 0;
+    ctx.save();
+    for (const off of [0, Math.PI]) {
+      const end = castRay(t.x, t.y, t.boss.beamA + off, 900);
+      ctx.globalAlpha = warm ? 0.25 + 0.2 * Math.sin(performance.now() / 70) : 0.85;
+      ctx.strokeStyle = warm ? '#ffd34f' : '#ffb028';
+      ctx.lineWidth = warm ? 2 : 5;
+      ctx.shadowColor = '#ffb028'; ctx.shadowBlur = warm ? 0 : 14;
+      ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(end.x, end.y); ctx.stroke();
     }
     ctx.restore();
   }
@@ -3614,6 +3737,7 @@ function netSendRound() {
     tr: [trailOf[0], trailOf[1]],
     pl: pools.map(pp => [r1(pp.x), r1(pp.y), r1(pp.r)]),
     cr: crushers.map(c => [r1(c.x), r1(c.y), r1(c.phase)]),
+    gt: gates.map(g => [r1(g.x), r1(g.y), g.pair]),
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind]),
   });
   net.wallsDirty = false;
@@ -3656,6 +3780,7 @@ function netSendSWave() {
     t: 'swave', wave: surv.wave, bn: surv.bossName, ar: roundArena,
     walls: packWalls(), pl: pools.map(pp => [r1(pp.x), r1(pp.y), r1(pp.r)]),
     cr: crushers.map(c => [r1(c.x), r1(c.y), r1(c.phase)]),
+    gt: gates.map(g => [r1(g.x), r1(g.y), g.pair]),
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind, t.team, t.r || TANK_R,
                         t.boss ? t.boss.maxHp : 0, t.hp || 1]),
     pk: surv.perks, run: surv.run, tr: [trailOf[0], trailOf[1]],
@@ -3674,6 +3799,7 @@ function gmGuestRound(m) {
   unpackWalls(m.walls);
   pools = (m.pl || []).map(pp => ({ x: pp[0], y: pp[1], r: pp[2] }));
   crushers = (m.cr || []).map(cc => ({ x: cc[0], y: cc[1], phase: cc[2], hitStamp: -1 }));
+  gates = (m.gt || []).map(gg => ({ x: gg[0], y: gg[1], pair: gg[2] }));
   poolCells = new Set();   // guest doesn't run BFS; circles alone drive its prediction
   tanks = [makeTank(0, 0, 0, m.tk[0][3]), makeTank(1, 0, 0, m.tk[1][3])];
   for (let i = 0; i < 2; i++) { tanks[i].x = m.tk[i][0]; tanks[i].y = m.tk[i][1]; tanks[i].a = m.tk[i][2]; }
@@ -3741,6 +3867,7 @@ function gmGuestSWave(m) {
   unpackWalls(m.walls);
   pools = (m.pl || []).map(pp => ({ x: pp[0], y: pp[1], r: pp[2] }));
   crushers = (m.cr || []).map(cc => ({ x: cc[0], y: cc[1], phase: cc[2], hitStamp: -1 }));
+  gates = (m.gt || []).map(gg => ({ x: gg[0], y: gg[1], pair: gg[2] }));
   poolCells = new Set();
   tanks = m.tk.map((tk, i) => {
     const t = makeTank(i, 0, 0, tk[3]);
@@ -4080,6 +4207,8 @@ window.__tw = {
   ensureQuests, questBump, QUEST_DEFS, get questToasts() { return questToasts; },
   bumpStreak, medalCheck, MEDALS, renderMedals, boardRowsHtml, dailyBoardId,
   get crushers() { return crushers; }, crusherPhase, genCrushers, CRUSH, updateCrushers,
+  get gates() { return gates; }, genGates, updateGates, GATE, survBossThink, castRay,
+  setRoundArena(v) { roundArena = v; },
   weeklyTwist, twistOn, TWISTS, survPlan,
   get roundTime() { return roundTime; }, setRoundTime(v) { roundTime = v; },
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,

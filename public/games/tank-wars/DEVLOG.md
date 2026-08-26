@@ -60,6 +60,11 @@ controls, music + autoplay-unlock, ONLINE MULTIPLAYER (room codes, TURN relay, p
 real dad↔son match verified; mines/cloak/trails all snapshot-synced).
 Test suites: tanktest 76 + netsim 29 + doortest 6 (scratchpad; recreate via DEVLOG/SPEC docs).
 
+## Session log — 2026-08-26
+| Ver | Commit | What |
+|---|---|---|
+| NEXUS | (this) | **THE NEXUS (11th arena) + THE SERAPH (5th boss)**, Meshy ~18cr: nexus = maze layout w/ 2 PAIRS of teleport gates (cyan/violet rings, Meshy gate_ring.png + hex-tech floor_nexus.jpg) — tanks AND shells teleport to the twin (tank cd 1.2s, shell cd 0.9s + re-grace 0.12s so a ported shell can't instakill at the exit); pure position rule + static gates ride BOTH net msgs (round `gt` + co-op swave `gt`) → guests sync free; rotation weight ~3%; spawn corners safe, twins forced >5 cells apart. SERAPH = W25/rush-W5 boss (cycle now 5, %types.length): twin rotating energy beams (castRay to walls = cover is the fight), 2s faint telegraph warm-up, per-tank 1.1s beam iframe, sweep speed scales w/ wave; overlay draws warm/live beams. Tests: storm 204 (was 183; +nexus §25, seraph §26; 2 stale 4-cycle asserts updated to 5-cycle) + deep 59 |
+
 ## Session log — 2026-07-25
 | Ver | Commit | What |
 |---|---|---|

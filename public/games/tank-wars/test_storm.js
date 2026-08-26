@@ -435,7 +435,7 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   const boss = tw.tanks.find(t => t.boss);
   check('phantom: wave 20 spawns THE PHANTOM', boss && boss.boss.type === 'phantom' && tw.surv.bossName === 'THE PHANTOM');
   check('phantom: rides the cloaking GHOST hull', boss.kind === 'ghost');
-  check('phantom: boss cycle is now 4 long (w25 = warlord again)', (() => { tw.survStartWave(25); const b = tw.tanks.find(t => t.boss); return b && b.boss.type === 'warlord'; })());
+  check('phantom: boss cycle is 5 long (w25 = seraph, w30 = warlord)', (() => { tw.survStartWave(25); const b = tw.tanks.find(t => t.boss); if (!b || b.boss.type !== 'seraph') return false; tw.survStartWave(30); const b2 = tw.tanks.find(t => t.boss); return b2 && b2.boss.type === 'warlord'; })());
   // spectral fan: 3 boss shells spread at the target
   tw.survStartWave(20);
   const b2 = tw.tanks.find(t => t.boss);
@@ -550,7 +550,7 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   check('rush: wave 2 cycles to juggernaut (5hp)', b && b.boss.type === 'juggernaut' && b.boss.maxHp === 5);
   tw.survStartWave(5);
   b = tw.tanks.find(x => x.boss);
-  check('rush: wave 5 wraps back to warlord (8hp)', b && b.boss.type === 'warlord' && b.boss.maxHp === 8);
+  check('rush: wave 5 is the new SERAPH (8hp)', b && b.boss.type === 'seraph' && b.boss.maxHp === 8);
   tw.surv.wave = 6; tw.profile.bestRush = 0;
   const bw = tw.profile.bestWave;
   tw.survOver();
@@ -822,6 +822,97 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.tanks[2].alive = false;
   tw.update(1 / 60);
   check('act2: round ends when the last minion falls', tw.phase === 'roundover');
+}
+
+// ---------- 25. THE NEXUS: teleport gates ----------
+{
+  check('nexus: labeled + layouted', m[1].includes("nexus: 'THE NEXUS'") && m[1].includes("nexus: 'maze'"));
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'nexus' });
+  check('nexus: 4 gates in 2 pairs', tw.gates.length === 4 &&
+    tw.gates.filter(g => g.pair === 0).length === 2 && tw.gates.filter(g => g.pair === 1).length === 2,
+    tw.gates.length);
+  check('nexus: gates clear of all four spawn corners', tw.gates.every(g =>
+    !(g.x < 190 && g.y < 190) && !(g.x > 770 && g.y > 450) && !(g.x > 770 && g.y < 190) && !(g.x < 190 && g.y > 450)));
+  const twinDist = p => { const gs = tw.gates.filter(g => g.pair === p); return Math.hypot(gs[0].x - gs[1].x, gs[0].y - gs[1].y); };
+  check('nexus: twins are a real trip apart (>250px)', twinDist(0) > 250 && twinDist(1) > 250,
+    twinDist(0).toFixed(0) + '/' + twinDist(1).toFixed(0));
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'maze' });
+  check('nexus: other arenas have no gates', tw.gates.length === 0);
+
+  // tank teleport + cooldown
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'nexus' });
+  tw.setPhase('play');
+  const g0 = tw.gates[0], g1 = tw.gates.find(g => g.pair === 0 && g !== g0);
+  const p = tw.tanks[0];
+  p.x = g0.x; p.y = g0.y; p.gateCd = 0; p.alive = true;
+  tw.updateGates(1 / 60);
+  check('gate: tank teleports to its twin', Math.hypot(p.x - g1.x, p.y - g1.y) < 2,
+    p.x.toFixed(0) + ',' + p.y.toFixed(0));
+  check('gate: teleport arms a cooldown', p.gateCd > 1);
+  const px = p.x, py = p.y;
+  tw.updateGates(1 / 60);
+  check('gate: no instant ping-pong back', Math.abs(p.x - px) < 1 && Math.abs(p.y - py) < 1);
+  p.x = g0.x; p.y = g0.y;
+  tw.updateGates(1.5);   // cooldown expires, standing on the ring again
+  tw.updateGates(1 / 60);
+  check('gate: after cooldown the ring works again', Math.hypot(p.x - g1.x, p.y - g1.y) < 2);
+
+  // shells ride the gates too
+  const sh = { x: g0.x, y: g0.y, vx: 100, vy: 0, r: 4, age: 0, grace: 0, gateCd: 0, owner: 0 };
+  tw.shells.push(sh);
+  tw.updateGates(1 / 60);
+  check('gate: shells teleport with velocity intact', Math.hypot(sh.x - g1.x, sh.y - g1.y) < 2 && sh.vx === 100);
+  check('gate: shell cooldown armed', sh.gateCd > 0.5);
+  tw.shells.length = 0;
+}
+
+// ---------- 26. THE SERAPH: 5th storm boss (wave 25) ----------
+{
+  tw.startSurvival();
+  tw.survStartWave(25);
+  const boss = tw.tanks.find(x => x.boss);
+  check('seraph: wave 25 boss is THE SERAPH', boss && boss.boss.type === 'seraph', boss && boss.boss.type);
+  check('seraph: announced by name', tw.surv.bossName === 'THE SERAPH', tw.surv.bossName);
+  tw.setPhase('play');
+  const player = tw.tanks[0];
+  // first think initializes the beam with a 2s warm-up telegraph
+  tw.survBossThink(boss, player, 1 / 60);
+  check('seraph: beam initialized with warm-up', boss.boss.beamA !== undefined && boss.boss.warm > 1.5);
+  // park the player IN the beam during warm-up: no damage yet
+  player.x = boss.x + Math.cos(boss.boss.beamA) * 34;
+  player.y = boss.y + Math.sin(boss.boss.beamA) * 34;
+  player.alive = true; player.shield = false; player.beamIfr = 0;
+  tw.survBossThink(boss, player, 1 / 60);
+  check('seraph: warm-up telegraph deals no damage', player.alive === true);
+  // burn the warm-up, re-park in the (rotated) beam: one tick of damage
+  tw.survBossThink(boss, player, 2.5);
+  player.x = boss.x + Math.cos(boss.boss.beamA) * 34;
+  player.y = boss.y + Math.sin(boss.boss.beamA) * 34;
+  player.alive = true; player.beamIfr = 0;
+  tw.survBossThink(boss, player, 1 / 60);
+  check('seraph: live beam hits the parked tank', player.alive === false);
+  // iframe: the same pass never double-taps
+  player.alive = true;
+  player.x = boss.x + Math.cos(boss.boss.beamA) * 34;
+  player.y = boss.y + Math.sin(boss.boss.beamA) * 34;
+  tw.survBossThink(boss, player, 1 / 60);
+  check('seraph: per-tank iframe blocks a double-tap', player.alive === true);
+  // opposite beam arm hits too (after iframe expires)
+  tw.survBossThink(boss, player, 1.3);
+  player.x = boss.x + Math.cos(boss.boss.beamA + Math.PI) * 34;
+  player.y = boss.y + Math.sin(boss.boss.beamA + Math.PI) * 34;
+  player.alive = true; player.beamIfr = 0;
+  tw.survBossThink(boss, player, 1 / 60);
+  check('seraph: twin beam (opposite arm) is live too', player.alive === false);
+  tw.tanks[0].alive = true;
+  // cycle regression: 20 still phantom, 30 wraps to warlord, rush wave 5 = seraph
+  tw.startSurvival(); tw.survStartWave(20);
+  check('seraph: wave 20 is still THE PHANTOM', tw.surv.bossName === 'THE PHANTOM', tw.surv.bossName);
+  tw.startSurvival(); tw.survStartWave(30);
+  check('seraph: wave 30 wraps to THE WARLORD', tw.surv.bossName === 'THE WARLORD', tw.surv.bossName);
+  tw.surv.rush = true; tw.survStartWave(5);
+  check('seraph: boss rush wave 5 is THE SERAPH', tw.surv.bossName === 'THE SERAPH', tw.surv.bossName);
+  tw.surv.rush = false; tw.surv.on = false;
 }
 
 console.log(`\n=== stormtest: ${pass} passed, ${fail} failed ===`);
