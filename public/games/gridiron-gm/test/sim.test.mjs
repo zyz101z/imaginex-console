@@ -325,5 +325,45 @@ const band = (name, val, lo, hi) =>
   check("calls sweep: at least 3 of 4 decision types observed", typesSeen.size >= 3, [...typesSeen].join());
 }
 
+// ---- §9 BLITZ DIAL (defAggression): back-compat + directional effects ----
+{
+  const mk = seed => { const r = makeRng(seed); return buildLeague(r); };
+  const league = mk(31337);
+  const A = "GB", B = "CHI";
+  // (a) back-compat: explicit 0.5 dial === no dial at all, bit for bit
+  const g1 = simGame(makeRng(5), { id: A, players: league[A], strategy: { passLean: 0.55, aggression: 0.5 } },
+    { id: B, players: league[B] }, A);
+  const g2 = simGame(makeRng(5), { id: A, players: league[A], strategy: { passLean: 0.55, aggression: 0.5, defAggression: 0.5 } },
+    { id: B, players: league[B], strategy: { passLean: 0.55, defAggression: 0.5 } }, A);
+  check("blitz: 50% dial is EXACTLY legacy behavior", g1.scoreA === g2.scoreA && g1.scoreB === g2.scoreB,
+    `${g1.scoreA}-${g1.scoreB} vs ${g2.scoreA}-${g2.scoreB}`);
+  // (b) paired-seed A/B: blitz-happy defense forces more sacks + turnovers
+  const N = 500;
+  const tally = defAgg => {
+    let sacks = 0, ints = 0, ptsAllowed = 0, lbSacks = 0, dlSacks = 0;
+    for (let i = 0; i < N; i++) {
+      const lg = mk(600 + (i % 5));
+      const rng = makeRng(9000 + i);
+      const defT = { id: B, players: lg[B], strategy: { passLean: 0.55, aggression: 0.5, defAggression: defAgg } };
+      const offT = { id: A, players: lg[A] };
+      const r = simGame(rng, offT, defT, A);
+      ptsAllowed += r.scoreA;
+      for (const p of lg[B]) { sacks += p.stats.sacks; ints += p.stats.defInts;
+        if (p.pos === "LB") lbSacks += p.stats.sacks; if (p.pos === "DL") dlSacks += p.stats.sacks; }
+    }
+    return { sacks, ints, ptsAllowed, lbShare: lbSacks / Math.max(1, lbSacks + dlSacks) };
+  };
+  const base = tally(0.5), hot = tally(0.8), bend = tally(0.2);
+  check("blitz-happy defense gets MORE sacks (≥15% up)", hot.sacks >= base.sacks * 1.15,
+    `${base.sacks} → ${hot.sacks}`);
+  check("blitz-happy defense forces more INTs", hot.ints > base.ints, `${base.ints} → ${hot.ints}`);
+  check("blitzing has a cost: gives up more points than bend-don't-break", hot.ptsAllowed > bend.ptsAllowed,
+    `hot ${(hot.ptsAllowed / N).toFixed(1)}/g vs bend ${(bend.ptsAllowed / N).toFixed(1)}/g`);
+  check("blitz funnels sacks to the LBs (share up ≥8pts)", hot.lbShare >= base.lbShare + 0.08,
+    `${(100 * base.lbShare).toFixed(0)}% → ${(100 * hot.lbShare).toFixed(0)}%`);
+  check("bend-don't-break trades takeaways away", bend.sacks < base.sacks && bend.ints <= base.ints,
+    `sacks ${base.sacks} → ${bend.sacks}`);
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail > 0 ? 1 : 0);

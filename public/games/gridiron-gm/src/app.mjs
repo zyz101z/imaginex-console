@@ -32,7 +32,7 @@ function newFranchise(teamId, capMode) {
     lastResults: [], bracket: null, history: [],
     deadMoney: {}, fa: null, draft: null,
     news: [], security: 60, goal: null, hof: [], lastAwards: null,
-    strategy: { passLean: 0.55, aggression: 0.5 },
+    strategy: { passLean: 0.55, aggression: 0.5, defAggression: 0.5 },
     coaches: {}, picks: null, coachMarket: [], tradeUI: null,
     rngTick: 1000,
   };
@@ -81,6 +81,7 @@ function load() {
       if (!S.picks) S.picks = freshPicks();
       if (!S.futurePicks) S.futurePicks = freshPicks();
       if (S.strategy.aggression == null) S.strategy.aggression = 0.5;
+      if (S.strategy.defAggression == null) S.strategy.defAggression = 0.5;
       if (S.draft && S.draft.order && !S.draft.slots) S.draft = null; // abandon mid-draft pre-P3b saves
       ensureAttrs(makeRng((S.seed ^ 0xa77) >>> 0), S.league);
       if (!S.training) S.training = [];
@@ -191,6 +192,7 @@ function viewRoster() {
   const u = teamUnits(S.league[S.teamId]);
   const lean = Math.round((S.strategy ? S.strategy.passLean : 0.55) * 100);
   const agg = Math.round(((S.strategy && S.strategy.aggression != null) ? S.strategy.aggression : 0.5) * 100);
+  const defAgg = Math.round(((S.strategy && S.strategy.defAggression != null) ? S.strategy.defAggression : 0.5) * 100);
   let html = `<div class="units dim">Off Pass ${u.offPass.toFixed(0)} · Off Run ${u.offRun.toFixed(0)} · Def Pass ${u.defPass.toFixed(0)} · Def Run ${u.defRun.toFixed(0)}</div>
   <div class="units"><label class="tt" title="Gameplan: how pass-heavy your offense plays. Lean toward your stronger unit and your opponent's weaker defense.">Gameplan — Pass lean: <b id="leanVal">${lean}%</b></label>
     <input type="range" min="30" max="75" value="${lean}" style="width:220px;vertical-align:middle"
@@ -201,7 +203,13 @@ function viewRoster() {
     <input type="range" min="20" max="80" value="${agg}" style="width:180px;vertical-align:middle"
       oninput="document.getElementById('aggVal').textContent=this.value+'%'"
       onchange="__gm.setAgg(this.value)">
-    <span class="dim small">${agg >= 62 ? "🎲 riverboat" : agg <= 38 ? "🛡️ conservative" : "balanced"}</span></div>`;
+    <span class="dim small">${agg >= 62 ? "🎲 riverboat" : agg <= 38 ? "🛡️ conservative" : "balanced"}</span>
+    <span style="margin-left:18px"></span>
+    <label class="tt" title="Defensive style. Blitz-happy (high): more sacks and forced turnovers — but a cool veteran QB will burn you for chunk touchdowns. Bend-don't-break (low): fewer big plays allowed either way. The payoff scales with YOUR blitzers: LB Blz and DL Rush ratings. 50% = base four-man rush.">Blitz rate: <b id="defAggVal">${defAgg}%</b></label>
+    <input type="range" min="20" max="80" value="${defAgg}" style="width:180px;vertical-align:middle"
+      oninput="document.getElementById('defAggVal').textContent=this.value+'%'"
+      onchange="__gm.setDefAgg(this.value)">
+    <span class="dim small">${defAgg >= 62 ? "🔥 blitz-happy" : defAgg <= 38 ? "🧘 bend-don't-break" : "base rush"}</span></div>`;
   const ATTR_LABEL = { arm: "Arm", accuracy: "Acc", decision: "Dec", speed: "Spd", power: "Pow",
     hands: "Hnd", route: "Rte", catching: "Cat", blocking: "Blk", passBlock: "PassBlk", runBlock: "RunBlk",
     passRush: "Rush", runStop: "RunStp", coverage: "Cov", tackling: "Tkl", blitz: "Blz",
@@ -1610,6 +1618,10 @@ function setAgg(v) {
   S.strategy.aggression = Math.max(0.2, Math.min(0.8, (+v) / 100));
   save(); render();
 }
+function setDefAgg(v) {
+  S.strategy.defAggression = Math.max(0.2, Math.min(0.8, (+v) / 100));
+  save(); render();
+}
 function hireCoach(i) {
   const cand = S.coachMarket[i];
   if (!cand || S.phase !== "freeagency") return;
@@ -1893,7 +1905,7 @@ function goRoster() { activeView = "roster"; render(); }
 function leadersFilter(cf) { leadersConf = cf; render(); }
 function prospectFilter(x) { prospectPos = x; render(); }
 
-window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
+window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, setDefAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
   tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard,
   exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag };
 
@@ -1926,7 +1938,8 @@ function aiStrategies() {
     if (t.id === S.teamId) continue;
     const sch = (S.coaches[t.id] || {}).scheme;
     strategies[t.id] = { passLean: sch === "AIR" ? 0.66 : sch === "GROUND" ? 0.44 : 0.55,
-      aggression: sch === "AIR" ? 0.58 : sch === "DEFENSE" ? 0.42 : sch === "GROUND" ? 0.46 : 0.5 };
+      aggression: sch === "AIR" ? 0.58 : sch === "DEFENSE" ? 0.42 : sch === "GROUND" ? 0.46 : 0.5,
+      defAggression: sch === "DEFENSE" ? 0.62 : sch === "GROUND" ? 0.46 : 0.5 };
   }
   return strategies;
 }

@@ -121,3 +121,8 @@ Pro Bowl, save slots/export, deeper glossary, per-quarter box lines, multi-team 
 
 ## 2026-08-26 (later) — League probe (audit round 2)
 - NEW test/league.probe.mjs (44 checks): game realism (scoring/home-field/OT/margins), season stat realism (schedule shape, leader bands, W-L bookkeeping), injuries (volume/heal-cap/rehab), playoff integrity (seeding rules, champion quality over 12 seasons), awards/All-Pro sanity, and a 10-season league-drift run through the REAL offseason pipeline (talent/age stability, cap legality, retirement flow, draft absorption, save-size growth, records, HOF). All pass; no game-code changes needed.
+
+## 2026-08-26 (later) — BLITZ DIAL: defensive identity
+- NEW "Blitz rate" gameplan slider (20-80%, roster view, next to pass lean / 4th-down aggression). 50% = the old base four-man rush, bit-for-bit. High: more sacks + forced turnovers, and sacks funnel to your best-Blz LBs — but a cool veteran QB (Dec rating) punishes over-blitzing with chunk TDs. Low = bend-don't-break: fewer big plays traded both ways. The payoff scales with YOUR blitzers (LB Blz + DL Rush), so a "blitzing team" is now a real roster build.
+- AI defenses play their coach's identity: Defense First schemes blitz at 62%, Ground teams sit back at 46%.
+- Engine changes are draw-count-neutral (probability shifts only) — replay determinism for Coach's Calls unaffected. sim battery now 3,006 (new §9: legacy-exact at 50%, +15% sacks when hot, INTs up, points-allowed cost vs bend, LB sack-share up ≥8pts).

@@ -151,12 +151,16 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
   return null;
 }
 
-function attributeDefense(rng, chart, sacks, ints, star = null) {
+function attributeDefense(rng, chart, sacks, ints, star = null, bz = 0) {
   const dl = chart.DL.slice(0, 4), lb = chart.LB.slice(0, 3);
+  // blitz-heavy: LBs come more often, and the best blitzer among them most of all
+  const lbPool = bz > 0.05 && lb.length
+    ? (() => { const s2 = [...lb].sort((a, b) => attr(b, "blitz") - attr(a, "blitz")); return [s2[0], ...s2]; })()
+    : lb;
   for (let i = 0; i < sacks; i++) {
     // a mismatch edge rusher wins his rep more often (tuned: season leaders stay <26)
     const p = (star && rng.chance(0.16)) ? star
-      : rng.chance(0.7) ? rng.pick(dl.length ? dl : lb) : rng.pick(lb.length ? lb : dl);
+      : rng.chance(0.7 - Math.max(0, bz) * 0.8) ? rng.pick(dl.length ? dl : lbPool) : rng.pick(lbPool.length ? lbPool : dl);
     if (p) p.stats.sacks += 1;
   }
   const dbs = [...chart.CB.slice(0, 3), ...chart.S.slice(0, 2)];
@@ -201,9 +205,20 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
   }
   const muA = matchupEdges(chartA, chartB); // A's offense vs B's defense
   const muB = matchupEdges(chartB, chartA);
+  // BLITZ DIAL (defense gameplan, 0.5 = base four-man rush → zero effect). Payoff
+  // scales with the blitzers themselves: LB blitz + DL passRush ratings.
+  const blitzDial = t => ((t.strategy && t.strategy.defAggression != null) ? t.strategy.defAggression : 0.5) - 0.5;
+  const blitzTalent = chart => {
+    const lbs = chart.LB.slice(0, 3), dls = chart.DL.slice(0, 4);
+    const a = lbs.length ? lbs.reduce((x, p) => x + attr(p, "blitz"), 0) / lbs.length : 70;
+    const b = dls.length ? dls.reduce((x, p) => x + attr(p, "passRush"), 0) / dls.length : 70;
+    return 0.55 * a + 0.45 * b;
+  };
   const sides = [
-    { t: teamA, u: ua, chart: chartA, mu: muA, score: 0, momentum: 0, drives: [], sacksFor: 0, intsFor: 0 },
-    { t: teamB, u: ub, chart: chartB, mu: muB, score: 0, momentum: 0, drives: [], sacksFor: 0, intsFor: 0 },
+    { t: teamA, u: ua, chart: chartA, mu: muA, score: 0, momentum: 0, drives: [], sacksFor: 0, intsFor: 0,
+      bz: blitzDial(teamA), bzTal: blitzTalent(chartA) },
+    { t: teamB, u: ub, chart: chartB, mu: muB, score: 0, momentum: 0, drives: [], sacksFor: 0, intsFor: 0,
+      bz: blitzDial(teamB), bzTal: blitzTalent(chartB) },
   ];
   if (homeId === teamA.id) { ua.offPass += TUNE.HOME_EDGE / 2; ua.offRun += TUNE.HOME_EDGE / 2; }
   if (homeId === teamB.id) { ub.offPass += TUNE.HOME_EDGE / 2; ub.offRun += TUNE.HOME_EDGE / 2; }
@@ -234,6 +249,15 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     if (off.mu.rushEdge > 5) p.to = Math.min(0.28, p.to + off.mu.rushEdge * 0.0028);
     // slick ball, numb hands: weather feeds the turnover column
     if (weather && weather.to) p.to = Math.min(0.28, p.to + weather.to);
+    // BLITZ DIAL: heat cooks turnovers (amplified by blitzer talent); over-blitzing a
+    // cool veteran QB gives up chunk TDs instead. Bend-don't-break runs it in reverse.
+    if (def.bz !== 0) {
+      const amp = Math.max(0.4, 1 + (def.bzTal - 76) / 25);
+      p.to = Math.max(0.03, Math.min(0.30, p.to + def.bz * 0.115 * amp));
+      const qb1 = off.chart.QB[0];
+      const cool = qb1 ? Math.max(0, (attr(qb1, "decision") - 74) / 30) : 0;
+      p.td = Math.max(0.04, Math.min(0.60, p.td + def.bz * (0.05 + cool * 0.12)));
+    }
 
     // SAFETY: pinned deep against a live pass rush, bad things happen (2 pts + free kick)
     if (start <= 8 && rng.chance(TUNE.SAFETY_BASE + (off.mu.rushEdge > 5 ? 0.03 : 0))) {
@@ -404,7 +428,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     }
     const tdText = attributeDrive(rng, off, result, yards, off.chart, off.mu);
     if (result === "TD") scorerText = tdText;
-    if (result === "TO" || rng.chance(0.40)) def.sacksFor += rng.chance(0.55) ? 1 : 0;
+    if (result === "TO" || rng.chance(0.40 + def.bz * 0.5)) def.sacksFor += rng.chance(0.55 + def.bz * 0.3) ? 1 : 0;
     log.push({ q: quarter, off: off.t.id, result, points, yards, scorer: scorerText, start,
       hurry: hurry || undefined, milk: milk || undefined, conv: conv || undefined,
       downs: downs || undefined, ask: askInfo || askIce || undefined,
@@ -412,8 +436,8 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     scorerText = null;
   }
   // defense stat attribution — the mismatch rusher (facing side's weak OL) eats first
-  attributeDefense(rng, chartB, sides[1].sacksFor, sides[1].intsFor, muA.rushEdge > 5 ? muA.topRusher : null);
-  attributeDefense(rng, chartA, sides[0].sacksFor, sides[0].intsFor, muB.rushEdge > 5 ? muB.topRusher : null);
+  attributeDefense(rng, chartB, sides[1].sacksFor, sides[1].intsFor, muA.rushEdge > 5 ? muA.topRusher : null, sides[1].bz);
+  attributeDefense(rng, chartA, sides[0].sacksFor, sides[0].intsFor, muB.rushEdge > 5 ? muB.topRusher : null, sides[0].bz);
 
   // game clock: assign each drive a duration (longer drives eat more clock), scale the
   // total to a 60-minute game, then stamp remaining time + quarter onto each log entry.
