@@ -132,3 +132,8 @@ Pro Bowl, save slots/export, deeper glossary, per-quarter box lines, multi-team 
 - 🏷 TEAM IDENTITY STRIP (roster view): coach scheme + star quality, live roster-fit %, what to build to raise it, and your Blitz unit number (LB Blz + DL Rush) so the blitz dial's payoff is visible while you build.
 - 👑 PLAYOFF PICTURE (standings, week 6+): live 7-seed table per conference "if the season ended today", division champs marked, bye noted, first-team-out row; your team highlighted.
 - All app-layer; batteries untouched at 3,006 / 17,543. Cache ?v=20260826d.
+
+## 2026-08-26 (later) — Rival GM personalities + award races
+- 🧑‍💼 RIVAL GM ARCHETYPES: every AI front office has a persistent, seeded personality shown in the Trade Center — 🏆 win-now (pays up for proven vets), 🌱 rebuilder (covets picks + U25 players), 🧮 cap hawk (prices trades by salary direction), 🎲 gambler (weekly moods swing harder). The archetype shifts the acceptance threshold ±15% based on WHAT you're offering, stacking with weekly mood and deadline fire sales — so shopping the right package to the right buyer is now real strategy. Verdicts explain it.
+- 🏅 AWARD RACES: from week 4, League Leaders shows the live MVP/OPOY/DPOY/ROY leaders.
+- App-layer only; batteries 3,006 / 17,543 green. Cache ?v=20260826e.

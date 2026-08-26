@@ -384,7 +384,14 @@ function viewLeaders() {
     for (const p of top) h += `<tr><td>${chip(p.teamId)}</td><td>${pn(p)}</td><td>${fmt(p.stats)}</td></tr>`;
     return h + "</table>";
   };
-  return `<h2>League Leaders <span style="margin-left:12px">${tabs}</span></h2><div class="divgrid">
+  let races = "";
+  if (S.phase === "season" && S.week >= 4) {
+    const aw = computeAwards(S.league);
+    const row = (label, w) => w ? `<tr><td>${label}</td><td>${chip(w.teamId)} ${w.name} (${w.pos})</td><td class="dim small">${w.line}</td></tr>` : "";
+    races = `<table style="margin-bottom:10px"><tr><th colspan=3>🏅 Award races — leaders through week ${S.week}</th></tr>
+      ${row("MVP", aw.mvp)}${row("OPOY", aw.opoy)}${row("DPOY", aw.dpoy)}${row("ROY", aw.roy)}</table>`;
+  }
+  return `<h2>League Leaders <span style="margin-left:12px">${tabs}</span></h2>${races}<div class="divgrid">
     ${cat("Passing Yards", "passYd", s => s.passYd + " yds, " + s.passTD + " TD")}
     ${cat("Rushing Yards", "rushYd", s => s.rushYd + " yds, " + s.rushTD + " TD")}
     ${cat("Receiving Yards", "recYd", s => s.recYd + " yds, " + s.recTD + " TD")}
@@ -1042,6 +1049,40 @@ function hash01(...parts) {
   }
   return (h % 100000) / 100000;
 }
+// 🧑‍💼 RIVAL GM PERSONALITIES: every front office has a persistent archetype
+// (seeded per franchise) that shifts WHAT they value in a package, on top of the
+// weekly mood. Shop the package to the right buyer.
+const GM_ARCHETYPES = {
+  winnow:  { icon: "🏆", name: "win-now",   desc: "covets proven veterans; draft picks bore him" },
+  rebuild: { icon: "🌱", name: "rebuilder", desc: "covets draft picks and players 25 and under" },
+  caphawk: { icon: "🧮", name: "cap hawk",  desc: "loves salary relief, hates taking on money" },
+  gambler: { icon: "🎲", name: "gambler",   desc: "streaky — his hot and cold weeks run hotter and colder" },
+};
+function gmArchetype(teamId) {
+  if (teamId === S.teamId) return null;
+  const keys = Object.keys(GM_ARCHETYPES);
+  return keys[Math.floor(hash01("gmArch", teamId) * keys.length)];
+}
+// multiplier on the acceptance threshold (<1 = easier sell) given MY outgoing package
+function archetypeLean(arch, myAssets, partnerId, mood, theirSalary) {
+  if (!arch) return 1;
+  const mine = myAssets.players.map(pid => S.league[S.teamId].find(p => p.id === pid)).filter(Boolean);
+  const pv = mine.reduce((s, p) => s + playerValue(p), 0);
+  const pickV = myAssets.picks.reduce((s, r) => s + (PICK_VALUE[r] || 0), 0)
+              + myAssets.fpicks.reduce((s, r) => s + (PICK_VALUE[r] || 0) * 0.6, 0);
+  const total = Math.max(1, pv + pickV);
+  const youngV = mine.filter(p => p.age <= 25).reduce((s, p) => s + playerValue(p), 0);
+  const vetV = mine.filter(p => p.age >= 27 && p.ovr >= 76).reduce((s, p) => s + playerValue(p), 0);
+  if (arch === "rebuild") return 1 - 0.12 * ((pickV + youngV * 0.7) / total) + 0.05 * (vetV / total);
+  if (arch === "winnow") return 1 - 0.12 * (vetV / total) + 0.06 * (pickV / total);
+  if (arch === "caphawk") {
+    const inSal = mine.reduce((s, p) => s + (p.contract ? p.contract.salary : 0), 0);
+    const net = inSal - (theirSalary || 0); // + = they take on money
+    return Math.max(0.9, Math.min(1.1, 1 + net * 0.004));
+  }
+  if (arch === "gambler") return 1 + (mood - 1) * 0.8; // amplifies the weekly mood swing
+  return 1;
+}
 function tradeMood(partnerId) {
   let h = (S.seed ^ (S.seasonNum * 2654435761) ^ ((S.week + 1) * 40503)) >>> 0;
   for (const ch of partnerId) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
@@ -1119,7 +1160,8 @@ function viewTrades() {
   let html = `<h2>Trade Center</h2>${offerHtml}<p>Partner:
     <select onchange="__gm.tradePartner(this.value)">` +
     partners.map(t => `<option value="${t.id}" ${t.id === T.partner ? "selected" : ""}>${t.city} ${t.name}</option>`).join("") +
-    `</select> <span class="dim small">${(() => { const m = moodLabel(tradeMood(T.partner)); return `${m.icon} front office is ${m.txt} this week`; })()}</span></p><div class="divgrid">`;
+    `</select> <span class="dim small">${(() => { const m = moodLabel(tradeMood(T.partner)); const ar = GM_ARCHETYPES[gmArchetype(T.partner)];
+      return `${m.icon} front office is ${m.txt} this week · GM: ${ar.icon} <b>${ar.name}</b> — ${ar.desc}`; })()}</span></p><div class="divgrid">`;
   const side = (teamId, sel, picksSel, tag) => {
     const roster = [...S.league[teamId]].sort((a, b) => b.ovr - a.ovr); // FULL roster
     let h = `<div><h3>${chip(teamId)} send: <span class="dim small">(${roster.length} players)</span></h3><div class="scrollbox"><table>`;
@@ -1743,10 +1785,16 @@ function tradePropose() {
   const theirAssets = { players: T.theirs, picks: T.theirPicks, fpicks: T.theirFPicks || [] };
   const sellerDiscount = deadlineWindow() && sellerTeams().includes(T.partner) ? 0.8 : 1;
   const mood = tradeMood(T.partner);
-  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, sellerDiscount * mood);
+  const arch = gmArchetype(T.partner);
+  const theirSalary = theirAssets.players.map(pid => S.league[T.partner].find(p => p.id === pid))
+    .filter(Boolean).reduce((s, p) => s + (p.contract ? p.contract.salary : 0), 0);
+  const lean = Math.max(0.85, Math.min(1.15, archetypeLean(arch, myAssets, T.partner, mood, theirSalary)));
+  const verdict = evalTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, sellerDiscount * mood * lean);
   if (verdict.accept && sellerDiscount < 1) verdict.reason = "Deal! (fire-sale price — they're sellers)";
   else if (verdict.accept && mood < 0.96) verdict.reason = "Deal! (they were motivated — you caught them at the right time)";
   else if (!verdict.accept && mood > 1.06) verdict.reason = verdict.reason + " (they're asking a premium this week — try another team, or wait)";
+  if (arch && verdict.accept && lean < 0.96) verdict.reason += ` (their ${GM_ARCHETYPES[arch].name} GM loved this package)`;
+  else if (arch && !verdict.accept && lean > 1.04) verdict.reason += ` (their ${GM_ARCHETYPES[arch].name} GM isn't buying what you're selling — reshape the package or call another team)`;
   // user-side legality too: don't let a trade break your own minimums or cap
   if (verdict.accept) {
     const incoming = theirAssets.players.map(pid => S.league[T.partner].find(p => p.id === pid)).filter(Boolean);
