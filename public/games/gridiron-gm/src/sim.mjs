@@ -210,6 +210,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
 
   const log = [];
   let scorerText = null;
+  let stealNext = false;   // a recovered onside kick steals the opponent's next slot
   const totalDrives = TUNE.DRIVES_PER_TEAM * 2;
   // FIELD POSITION: where each side's NEXT drive starts (yards from own goal; 25 = touchback).
   // Turnovers hand the defense the ball AT THE SPOT — a pick near your goal line is a gift.
@@ -279,9 +280,15 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     // LIVE COACH'S CALL (user team, trailing, crunch time): the app can pause the
     // ticker here and let the human pick the branch. hooks null (or decide->null)
     // = the automatic policy below runs exactly as it always has.
+    // ONSIDE recovery from the previous drive: the opponent's slot is consumed
+    if (stealNext) {
+      stealNext = false;
+      log.push({ q: quarter, off: off.t.id, result: 'ONSIDE', points: 0, yards: 0, scorer: null, start });
+      continue;
+    }
     let decision = null, askInfo;
     if (hooks && hooks.teamId === off.t.id && lateGame && diff < 0 && diff >= -9 && remaining >= 2) {
-      const ctx = { drive: d, quarter, diff, start, remaining };
+      const ctx = { drive: d, type: '4th', quarter, diff, start, remaining };
       decision = hooks.decide ? hooks.decide(ctx) : null;
       if (!decision) askInfo = ctx;   // mark the moment; the ticker may come back for it
     }
@@ -319,6 +326,16 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       milk = true;
     }
 
+    // 🧊 ICE THE KICKER (defensive coach's call): the opponent is close enough
+    // that a FG ties or wins — the human may burn a call slot to shake the kicker.
+    // Multiplies an existing make-probability, so the rng draw count NEVER changes.
+    let iced = false, askIce = null;
+    if (hooks && hooks.teamId === def.t.id && lateGame && remaining <= 3 && diff >= -3 && diff <= 0) {
+      const ctxI = { drive: d, type: 'ice', quarter, diff, remaining };
+      const decI = hooks.decide ? hooks.decide(ctxI) : null;
+      if (!decI) askIce = ctxI;
+      else if (decI === 'ice') iced = true;
+    }
     let roll = rng.f() * variance;
     // desperation: clutch variance must not leak the roll back into "punt"
     if (noPunt) roll = roll % (p.to + p.td + p.fgAtt);
@@ -337,11 +354,21 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       result = "TD";
       // 2-point decisions: classic chart, late game only (down 2/5/10/16 or up 1/4/12 after the 6)
       const lead6 = off.score + 6 - def.score;
+      let ask2 = null;
       if (lateGame && [-2, -5, -10, -16, 1, 4, 12].includes(lead6)) {
-        if (rng.chance(0.48)) { points = 8; conv = "2G"; }
+        let tp = null;
+        if (hooks && hooks.teamId === off.t.id) {
+          const ctx2 = { drive: d, type: 'twopt', quarter, lead6, remaining };
+          tp = hooks.decide ? hooks.decide(ctx2) : null;
+          if (!tp) ask2 = ctx2;
+        }
+        if (tp === 'kick') {
+          if (rng.chance(0.96)) { points = 7; } else { points = 6; conv = "XM"; }
+        } else if (rng.chance(0.48)) { points = 8; conv = "2G"; }
         else { points = 6; conv = "2F"; }
       } else if (rng.chance(0.96)) { points = 7; }
       else { points = 6; conv = "XM"; }
+      if (ask2) askInfo = askInfo || ask2;
       yards = Math.max(1, 100 - start); // drive length IS the field you actually crossed
       off.momentum = Math.min(TUNE.MOMENTUM_MAX, off.momentum + 0.7);
     } else if (roll < p.to + p.td + p.fgAtt) {
@@ -351,7 +378,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       const dist = 100 - spot + 17;
       const k = off.chart.K[0];
       const made = rng.chance(Math.max(0.2, Math.min(0.97,
-        1.06 - dist * 0.009 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))));
+        1.06 - dist * 0.009 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
       if (k) { k.stats.fga += 1; if (made) k.stats.fgm += 1; }
       result = made ? "FG" : "FG-MISS"; points = made ? 3 : 0;
       scorerText = k ? `${k.name}, ${dist}-yd attempt` : null;
@@ -363,12 +390,25 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       off.momentum *= 0.6;
     }
     off.score += points;
+    // 🏈 ONSIDE KICK: just scored, still trailing, clock dying — steal a possession?
+    // Only a made decision consumes a draw, and only from this point on (post-divergence).
+    let onsideRes = null;
+    if (hooks && hooks.teamId === off.t.id && lateGame && points > 0 && remaining >= 2 && (diff + points) < 0) {
+      const ctxO = { drive: d, type: 'onside', quarter, diff: diff + points, remaining };
+      const decO = hooks.decide ? hooks.decide(ctxO) : null;
+      if (!decO) askInfo = askInfo || ctxO;
+      else if (decO === 'onside') {
+        if (rng.chance(0.18)) { stealNext = true; nextStart[defIdx] = 45; onsideRes = 'win'; }
+        else { nextStart[defIdx] = Math.max(nextStart[defIdx], 55); onsideRes = 'lose'; }
+      }
+    }
     const tdText = attributeDrive(rng, off, result, yards, off.chart, off.mu);
     if (result === "TD") scorerText = tdText;
     if (result === "TO" || rng.chance(0.40)) def.sacksFor += rng.chance(0.55) ? 1 : 0;
     log.push({ q: quarter, off: off.t.id, result, points, yards, scorer: scorerText, start,
       hurry: hurry || undefined, milk: milk || undefined, conv: conv || undefined,
-      downs: downs || undefined, ask: askInfo });
+      downs: downs || undefined, ask: askInfo || askIce || undefined,
+      iced: iced || undefined, onside: onsideRes || undefined });
     scorerText = null;
   }
   // defense stat attribution — the mismatch rusher (facing side's weak OL) eats first

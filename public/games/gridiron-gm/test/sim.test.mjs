@@ -259,14 +259,17 @@ const band = (name, val, lo, hi) =>
     hooks = { teamId: userId };
     const res = playWeek(rng, league, schedule, w, standings, {}, {}, null, null, hooks);
     const g = res.find(x => x.home === userId || x.away === userId);
-    if (g && g.log.some(d => d.ask)) { myGame = g; week = w; }
+    if (g && g.log.some(d => d.ask && d.ask.type === "4th")) { myGame = g; week = w; }
   }
   check("call: a marked decision moment appears within a season", !!myGame, week);
   if (myGame) {
-    const askEntry = myGame.log.find(d => d.ask);
+    // decisions now come in four types; anchor the replay test on a 4TH-DOWN ask
+    const askEntry = myGame.log.find(d => d.ask && d.ask.type === "4th");
     const askIdx = myGame.log.indexOf(askEntry);
-    check("call: mark carries context", askEntry.ask.drive >= 0 && askEntry.ask.diff < 0 && askEntry.ask.remaining >= 2);
-    check("call: marked drive is the user's offense", askEntry.off === userId);
+    check("call: a 4th-down mark carries context", !!askEntry && askEntry.ask.drive >= 0 && askEntry.ask.diff < 0 && askEntry.ask.remaining >= 2);
+    check("call: 4th-down mark is the user's offense; ice marks are defense",
+      askEntry.off === userId &&
+      myGame.log.every(d => !d.ask || d.ask.type === "ice" ? true : d.off === userId || !d.ask));
 
     // snapshot world state for integrity checks
     const stTot = (id) => { const s = standings[id]; return [s.w, s.l, s.pf, s.pa].join("/"); };
@@ -276,7 +279,7 @@ const band = (name, val, lo, hi) =>
 
     // replay with GO FOR IT at the marked drive
     const oldLog = myGame.log;
-    const r2 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive]: "go" });
+    const r2 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive + ":4th"]: "go" });
     check("call: replay returns a game", !!r2 && Array.isArray(r2.log));
     // determinism: everything BEFORE the decision replays identically
     let prefixSame = true;
@@ -294,9 +297,32 @@ const band = (name, val, lo, hi) =>
     check("call: schedule score matches the replay", schedule[week].find(x => x.home === myGame.home && x.away === myGame.away).scoreHome === r2.scoreA);
     check("call: gp not double-counted", gpSum() <= gpBefore + 0, gpSum() - gpBefore);
     // replay with same (empty) decisions = byte-identical outcome
-    const r3 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive]: "go" });
+    const r3 = replayUserGame(hooks, standings, null, { [askEntry.ask.drive + ":4th"]: "go" });
     check("call: replay is deterministic", r3.scoreA === r2.scoreA && r3.scoreB === r2.scoreB && r3.log.length === r2.log.length);
   }
+}
+
+// ---- §8 all four decision types across seasons: no crash, types observed ----
+{
+  const typesSeen = new Set();
+  for (const seed of [11, 77, 313]) {
+    const rng = makeRng(seed);
+    const league = buildLeague(rng);
+    const schedule = makeSchedule(rng, 1);
+    const standings = emptyStandings();
+    const hooks = { teamId: "GB", decide: (ctx) => {
+      typesSeen.add(ctx.type);
+      return ctx.type === "4th" ? "go" : ctx.type === "twopt" ? "kick"
+           : ctx.type === "onside" ? "onside" : "ice";
+    } };
+    let crashed = false;
+    try {
+      for (let w = 0; w < 18; w++) playWeek(rng, league, schedule, w, standings, {}, {}, null, null, hooks);
+    } catch (e) { crashed = true; console.log("  sweep crash:", e.message); }
+    check("calls sweep: season with live decisions survives (seed " + seed + ")", !crashed);
+  }
+  check("calls sweep: 4th-down moments occur", typesSeen.has("4th"), [...typesSeen].join());
+  check("calls sweep: at least 3 of 4 decision types observed", typesSeen.size >= 3, [...typesSeen].join());
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

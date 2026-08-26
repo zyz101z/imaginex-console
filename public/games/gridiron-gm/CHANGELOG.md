@@ -1,5 +1,14 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-26 — Coach's Calls ×4 + Power Rankings
+1. **Three NEW live decisions** join the 4th-down call (same hooks pattern; every branch draw-count-aligned so pre-decision drives replay identically — the invariant that keeps 3,000 sim checks green):
+   - **💪 2-PT CALL** (`type:'twopt'`): when the auto-chart moment hits on YOUR late TD — GO FOR TWO (~48%) or KICK (~96%). Both paths consume exactly one rng draw.
+   - **🤯 ONSIDE KICK** (`'onside'`): scored late, still trailing — 18% to steal the next possession (`stealNext` consumes the opponent's slot with an ONSIDE log row + you get the ball at 45); fail hands them midfield. Only a MADE decision draws rng (post-divergence).
+   - **🧊 ICE THE KICKER** (`'ice'`): the one DEFENSIVE call — opponent driving to tie/win in the last ~3 drives: icing multiplies FG make-prob ×0.85 (zero extra draws). Cost = it burns one of your 2 call slots. Iced misses get their own ticker line.
+   - Decision keys now `drive:type` (sim/season/app aligned); ask marks carry `type`, ticker panel renders per-type buttons; ONSIDE/onside-fail/ICED copy added. sim battery §7 re-anchored on 4th-type asks + NEW §8: 3 full seasons swept with ALL types answered live — no crashes, ≥3 types observed.
+2. **📊 Weekly Power Rankings** atop the News view: computed at render (3·wins + diff/25), top 10 with seeded per-team-week blurbs (hot/cold pools), your rank called out when outside. No news-feed spam.
+- Batteries: sim **3,000** ✓ gm 17,543 ✓. Copies synced.
+
 ## 2026-08-23 (later 3) — backup moved to the nav (user: "why Finances? odd place")
 Export/import now lives as "💾 Backup / restore save" in the NAV FOOTER next to Reset franchise (save-level actions together); opens a chooser modal → export/import panels. Finances is clean again. Cache `?v=20260823c`.
 

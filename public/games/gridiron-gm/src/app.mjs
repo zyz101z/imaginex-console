@@ -522,9 +522,47 @@ function milestoneNews() {
   }
 }
 
+// 📊 Power Rankings — computed fresh at render (no news-feed spam), blurbs seeded
+// per team+week so they hold still until the next games change the story.
+const PR_BLURBS_HOT = [
+  "that defense travels", "quietly the best team in football", "the schedule softens from here",
+  "nobody wants this matchup in January", "the film doesn't lie — it's real",
+  "winning ugly still counts", "peaking at the right time",
+];
+const PR_BLURBS_COLD = [
+  "the locker room feels it slipping", "the point differential says fraud",
+  "winnable games keep getting away", "changes are coming if this holds",
+  "the tape is worse than the record", "a soft schedule flattered them",
+];
+function powerRankings() {
+  const rows = TEAMS.map(t => {
+    const st = S.standings[t.id];
+    return { id: t.id, st, score: (st.w + 0.5 * st.t) * 3 + (st.pf - st.pa) / 25 };
+  }).sort((x, y) => y.score - x.score);
+  return rows;
+}
+function prBlurb(id, rank) {
+  const h = ((id.charCodeAt(0) * 31 + (id.charCodeAt(1) || 7)) * 2654435761 ^ (S.week * 40503)) >>> 0;
+  const pool = rank <= 5 ? PR_BLURBS_HOT : PR_BLURBS_COLD;
+  return pool[h % pool.length];
+}
+function powerRankingsHtml() {
+  if (S.phase !== "season" || S.week === 0) return "";
+  const rows = powerRankings();
+  const myRank = rows.findIndex(r => r.id === S.teamId) + 1;
+  let h = `<div class="coachcard"><b>📊 WEEK ${S.week} POWER RANKINGS</b>` +
+    (myRank > 10 ? ` <span class="dim">— you: #${myRank}</span>` : "") + "<br>";
+  rows.slice(0, 10).forEach((r, i) => {
+    const mine = r.id === S.teamId;
+    h += `<span class="${mine ? "win" : "dim"}" style="display:inline-block;width:49%;${mine ? "font-weight:800;" : ""}">` +
+      `#${i + 1} ${chip(r.id)} ${r.st.w}-${r.st.l} <span class="dim small">· ${prBlurb(r.id, i + 1)}</span></span>`;
+  });
+  return h + "</div>";
+}
+
 function viewNews() {
-  if (!S.news.length) return "<p class='dim'>No news yet — play some games.</p>";
-  let html = "<h2>League News</h2>";
+  if (!S.news.length) return powerRankingsHtml() + "<p class='dim'>No news yet — play some games.</p>";
+  let html = powerRankingsHtml() + "<h2>League News</h2>";
   let lastWk = null;
   for (const n of S.news) {
     const wk = `S${n.season} · Week ${n.week}`;
@@ -1181,14 +1219,29 @@ function showDecisionPanel(ctx, onPick) {
   if (old) old.remove();
   const box = document.createElement("div");
   box.id = "decisionBox";
-  const spot = ctx.start >= 50 ? `their ${100 - ctx.start}` : `your own ${ctx.start}`;
-  box.innerHTML = `<div class="dim" style="letter-spacing:2px">🧠 COACH'S CALL</div>
-    <b>Q4 · down ${-ctx.diff} · ball at ${spot} · ~${ctx.remaining} drives left</b>
-    <div class="decBtns">
-      <button data-c="go">🎲 GO FOR IT<br><span>chase the TD — no punts, boom or bust</span></button>
+  let situation = "", btns = "";
+  if (ctx.type === "twopt") {
+    situation = `TOUCHDOWN! · that makes it ${ctx.lead6 > 0 ? "a " + ctx.lead6 + "-point lead" : ctx.lead6 < 0 ? "a " + (-ctx.lead6) + "-point deficit" : "a tie"} before the try`;
+    btns = `<button data-c="go2">💪 GO FOR TWO<br><span>~48% — chart says this is the moment</span></button>
+      <button data-c="kick">🦶 KICK THE XP<br><span>~96% — take the sure point</span></button>`;
+  } else if (ctx.type === "onside") {
+    situation = `you scored — still down ${-ctx.diff} · ~${ctx.remaining} drives left`;
+    btns = `<button data-c="onside">🤯 ONSIDE KICK!<br><span>~18% to steal the ball back — fail = they get midfield</span></button>
+      <button data-c="deep">🦵 KICK DEEP<br><span>trust the defense to get one stop</span></button>`;
+  } else if (ctx.type === "ice") {
+    situation = `they're driving to ${ctx.diff === 0 ? "WIN it" : "tie or win"} · crunch time`;
+    btns = `<button data-c="ice">🧊 ICE THE KICKER<br><span>call timeout — shaken kickers miss more</span></button>
+      <button data-c="hold">😤 LET THEM KICK<br><span>save the drama — no mind games</span></button>`;
+  } else {
+    const spot = ctx.start >= 50 ? `their ${100 - ctx.start}` : `your own ${ctx.start}`;
+    situation = `Q4 · down ${-ctx.diff} · ball at ${spot} · ~${ctx.remaining} drives left`;
+    btns = `<button data-c="go">🎲 GO FOR IT<br><span>chase the TD — no punts, boom or bust</span></button>
       <button data-c="fg">🎯 TAKE THE POINTS<br><span>work into field-goal range</span></button>
-      <button data-c="safe">🛡️ PLAY IT SAFE<br><span>trust the defense — punt and flip the field</span></button>
-    </div>`;
+      <button data-c="safe">🛡️ PLAY IT SAFE<br><span>trust the defense — punt and flip the field</span></button>`;
+  }
+  box.innerHTML = `<div class="dim" style="letter-spacing:2px">🧠 COACH'S CALL</div>
+    <b>${situation}</b>
+    <div class="decBtns">${btns}</div>`;
   for (const b of box.querySelectorAll("button")) {
     b.onclick = () => { box.remove(); onPick(b.dataset.c); };
   }
@@ -1239,7 +1292,7 @@ function runTicker(myGame, results, done) {
       const ctx = log[i].ask;
       decisionsLeft--;
       showDecisionPanel(ctx, (choice) => {
-        decisionsMade[ctx.drive] = choice;
+        decisionsMade[ctx.drive + ":" + (ctx.type || "4th")] = choice;
         const r2 = replayUserGame(weekHooks, S.standings, coachMods, decisionsMade);
         if (r2) {
           // determinism: entries before i are identical rolls — swap in the new tail
@@ -1274,7 +1327,9 @@ function runTicker(myGame, results, done) {
     const conv = d.conv === "2G" ? " +2-POINT CONVERSION!" : d.conv === "2F" ? " (2-pt try FAILS)"
       : d.conv === "XM" ? " (XP shanked!)" : "";
     const desc = ({
-      TD: "TOUCHDOWN!" + conv, FG: "Field goal is GOOD", "FG-MISS": "Field goal MISSES",
+      TD: "TOUCHDOWN!" + conv, FG: "Field goal is GOOD",
+      "FG-MISS": d.iced ? "ICED!! The rattled kicker pushes it wide!" : "Field goal MISSES",
+      ONSIDE: "🤯 ONSIDE KICK RECOVERED — they never get the ball back!",
       PUNT: "drive stalls — punt",
       TO: d.downs ? "TURNOVER ON DOWNS — the gamble fails!" : "TURNOVER!",
       "OT-WIN": "wins it in overtime!",
@@ -1289,7 +1344,8 @@ function runTicker(myGame, results, done) {
     }
     const who = d.scorer && (d.result === "TD" || d.result === "FG" || d.result === "FG-MISS")
       ? ` — ${d.scorer}` : "";
-    const sf = (d.hurry ? "HURRY-UP — " : d.milk ? "grinding clock — " : "") +
+    const sf = (d.onside === "win" ? "ONSIDE GAMBLE PAYS — " : d.onside === "lose" ? "onside fails, short field... " : "") +
+      (d.hurry ? "HURRY-UP — " : d.milk ? "grinding clock — " : "") +
       (d.start >= 50 ? "SHORT FIELD! " : d.start <= 10 ? "backed up... " : "");
     line.textContent = `${clockTxt} · ${teamName(d.off)} — ${sf}${d.yards ? d.yards + " yd drive, " : ""}${desc}${who}`;
     drivesEl.prepend(line);

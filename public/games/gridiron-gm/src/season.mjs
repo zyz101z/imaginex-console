@@ -215,7 +215,7 @@ export function replayUserGame(hooks, standings, coachModsFn, decisions) {
   const rng = makeRng(0);
   rng.setState(C.rngState);
   const r = simGame(rng, C.home, C.away, C.game.home, coachModsFn, C.wx,
-    { teamId: hooks.teamId, decide: ctx => decisions[ctx.drive] || null });
+    { teamId: hooks.teamId, decide: ctx => decisions[ctx.drive + ":" + ctx.type] || null });
   // 3) apply the new outcome + redo the weekly heal for these rosters
   C.game.scoreHome = r.scoreA; C.game.scoreAway = r.scoreB;
   applyGameToStandings(standings, C.game, r.scoreA, r.scoreB, +1);
