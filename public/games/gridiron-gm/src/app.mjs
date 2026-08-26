@@ -165,6 +165,22 @@ function renderTop() {
 
 function viewStandings() {
   let html = "";
+  if (S.phase === "season" && S.week >= 6) {
+    html += `<h3>Playoff picture — if the season ended today</h3><div class="divgrid">`;
+    for (const conf of ["NFC", "AFC"]) {
+      const s = seeds(S.standings, conf);
+      const inHunt = TEAMS.filter(t => t.conf === conf && !s.includes(t.id))
+        .sort((x, y) => (S.standings[y.id].w - S.standings[y.id].l) - (S.standings[x.id].w - S.standings[x.id].l))[0];
+      html += `<table><tr><th colspan=3>${conf}</th></tr>`;
+      s.forEach((id, i) => {
+        const st = S.standings[id];
+        html += `<tr${id === S.teamId ? ' class="me"' : ""}><td>${i + 1}${i < 4 ? " 👑" : ""}${i === 0 ? " (bye)" : ""}</td><td>${chip(id)} ${teamName(id)}</td><td>${st.w}-${st.l}</td></tr>`;
+      });
+      if (inHunt) html += `<tr class="dim"${inHunt.id === S.teamId ? ' style="color:var(--loss,#e66)"' : ""}><td>—</td><td>first out: ${chip(inHunt.id)} ${inHunt.name}</td><td>${S.standings[inHunt.id].w}-${S.standings[inHunt.id].l}</td></tr>`;
+      html += "</table>";
+    }
+    html += "</div>";
+  }
   for (const conf of ["NFC", "AFC"]) {
     html += `<div class="conf"><h3>${conf}</h3><div class="divgrid">`;
     for (const div of ["North", "East", "South", "West"]) {
@@ -210,6 +226,19 @@ function viewRoster() {
       oninput="document.getElementById('defAggVal').textContent=this.value+'%'"
       onchange="__gm.setDefAgg(this.value)">
     <span class="dim small">${defAgg >= 62 ? "🔥 blitz-happy" : defAgg <= 38 ? "🧘 bend-don't-break" : "base rush"}</span></div>`;
+  const hc = S.coaches[S.teamId];
+  if (hc) {
+    const fit = coachFit(hc, u);
+    const fitPct = Math.round(fit * 100);
+    const focus = hc.scheme === "AIR" ? "QB Acc/Arm, WR, OL PassBlk" : hc.scheme === "GROUND" ? "RB Pow, OL RunBlk, TE Blk"
+      : hc.scheme === "DEFENSE" ? "the whole defense" : "everything a little";
+    const lbs = chart.LB.slice(0, 3), dls = chart.DL.slice(0, 4);
+    const bzTal = Math.round(0.55 * (lbs.length ? lbs.reduce((x, p) => x + (p.attrs?.blitz ?? p.ovr), 0) / lbs.length : 70)
+                           + 0.45 * (dls.length ? dls.reduce((x, p) => x + (p.attrs?.passRush ?? p.ovr), 0) / dls.length : 70));
+    html += `<div class="units dim">🏷 Identity: <b>${SCHEMES[hc.scheme].name}</b> (${"★".repeat(hc.quality)}) — roster fit <b>${fitPct}%</b>
+      <span class="small">(fit amplifies the coach bonus; build up: ${focus})</span>
+      · Blitz unit <b>${bzTal}</b> <span class="small">(LB Blz + DL Rush — powers the blitz dial)</span></div>`;
+  }
   const ATTR_LABEL = { arm: "Arm", accuracy: "Acc", decision: "Dec", speed: "Spd", power: "Pow",
     hands: "Hnd", route: "Rte", catching: "Cat", blocking: "Blk", passBlock: "PassBlk", runBlock: "RunBlk",
     passRush: "Rush", runStop: "RunStp", coverage: "Cov", tackling: "Tkl", blitz: "Blz",
@@ -838,6 +867,15 @@ function viewDraft() {
     .filter(([pos, want]) => chart[pos].length < want || (chart[pos][0] && chart[pos][0].ovr < 74))
     .map(([pos]) => pos);
   html += `<p class="dim">Your needs: ${needs.length ? needs.join(", ") : "none — best available"}</p>`;
+  if (myClock && D.offerHandled !== D.idx && !D.offer) D.offer = genPickOffer();
+  if (myClock && D.offer) {
+    const o = D.offer;
+    html += `<div class="coachcard">📞 <b>${teamName(o.partner)} want to trade up</b> — they covet <b>${o.covet}</b>.
+      Their offer: your pick (R${o.round}P${(D.idx % 32) + 1}) for their <b>R${o.round}P${(o.backIdx % 32) + 1}</b>
+      <b>PLUS their R${D.slots[o.extraIdx].round}</b> later in this draft.
+      <button class="mini" onclick="__gm.acceptPickTrade()">ACCEPT — TRADE DOWN</button>
+      <button class="mini danger" onclick="__gm.declinePickTrade()">STAY PUT</button></div>`;
+  }
   const myRemainingPicks = D.slots.slice(D.idx).filter(sl => sl.owner === S.teamId);
   const rookiePool = myRemainingPicks.reduce((sum, sl) => sum + rookieContract(sl.round).salary, 0);
   const dRoom = capRoom(S.league[S.teamId], S.deadMoney[S.teamId], S.capMode);
@@ -996,6 +1034,14 @@ function setFranchiseTag(id) {
 // 🤝 NEGOTIATING MOOD: each front office prices trades a little differently each
 // week (seeded — no reroll-scumming). 0.90 = motivated seller, 1.12 = wants a premium.
 // This is where "a good deal now and then" lives for user-proposed trades.
+function hash01(...parts) {
+  let h = (S.seed >>> 0) || 1;
+  for (const part of parts) {
+    for (const ch of String(part)) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  }
+  return (h % 100000) / 100000;
+}
 function tradeMood(partnerId) {
   let h = (S.seed ^ (S.seasonNum * 2654435761) ^ ((S.week + 1) * 40503)) >>> 0;
   for (const ch of partnerId) h = (Math.imul(h, 31) + ch.charCodeAt(0)) >>> 0;
@@ -1545,6 +1591,45 @@ function advanceDraftAI() {
   finishOffseason();
 }
 
+// A rival covets the board's top name and calls to trade UP into your slot.
+// Deterministic per (seed, season, slot) — leaving the draft screen can't reroll it.
+function genPickOffer() {
+  const D = S.draft;
+  const slot = D.slots[D.idx];
+  if (!slot || slot.owner !== S.teamId || slot.round > 4 || !D.prospects.length) return null;
+  if (D.offerHandled === D.idx) return null;
+  if (hash01("pickOffer", S.seasonNum, D.idx) > 0.45) return null;
+  // partners: own a later slot in this round (3-14 back) AND a sweetener slot later on
+  const cands = [];
+  for (let j = D.idx + 3; j < Math.min(D.idx + 15, D.slots.length); j++) {
+    const s2 = D.slots[j];
+    if (s2.round !== slot.round || s2.owner === S.teamId) continue;
+    const extra = D.slots.findIndex((s3, k) => k > j && s3.owner === s2.owner && s3.round > slot.round);
+    if (extra !== -1 && S.league[s2.owner].length < ROSTER_MAX) cands.push({ partner: s2.owner, backIdx: j, extraIdx: extra });
+  }
+  if (!cands.length) return null;
+  const pick = cands[Math.floor(hash01("pickPartner", S.seasonNum, D.idx) * cands.length)];
+  return { ...pick, covet: D.prospects[0].name, round: slot.round };
+}
+function acceptPickTrade() {
+  const D = S.draft, o = D.offer;
+  if (!o) return;
+  D.slots[D.idx].owner = o.partner;
+  D.slots[o.backIdx].owner = S.teamId;
+  D.slots[o.extraIdx].owner = S.teamId;
+  const backPick = (o.backIdx % 32) + 1, exSlot = D.slots[o.extraIdx];
+  D.log.unshift({ round: o.round, pick: (D.idx % 32) + 1, team: o.partner, name: "TRADE ⬇ " + teamName(S.teamId) + " move back to P" + backPick + " (+R" + exSlot.round + ")", pos: "—" });
+  S.news.unshift({ week: 0, season: S.seasonNum, text: `Draft-day deal: ${teamName(S.teamId)} trade down R${o.round}P${(D.idx % 32) + 1} → P${backPick}, adding a R${exSlot.round} from ${teamName(o.partner)}` });
+  D.offer = null; D.offerHandled = D.idx;
+  advanceDraftAI();
+  save(); render();
+}
+function declinePickTrade() {
+  const D = S.draft;
+  D.offer = null; D.offerHandled = D.idx;
+  save(); render();
+}
+
 function userDraftPickById(id) {
   const i = S.draft.prospects.findIndex(x => x.id === id);
   if (i !== -1) userDraftPick(i);
@@ -1906,7 +1991,7 @@ function leadersFilter(cf) { leadersConf = cf; render(); }
 function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, setDefAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
-  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard,
+  tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard, acceptPickTrade, declinePickTrade,
   exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag };
 
 function startOffseasonPipeline() {

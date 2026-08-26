@@ -126,3 +126,9 @@ Pro Bowl, save slots/export, deeper glossary, per-quarter box lines, multi-team 
 - NEW "Blitz rate" gameplan slider (20-80%, roster view, next to pass lean / 4th-down aggression). 50% = the old base four-man rush, bit-for-bit. High: more sacks + forced turnovers, and sacks funnel to your best-Blz LBs — but a cool veteran QB (Dec rating) punishes over-blitzing with chunk TDs. Low = bend-don't-break: fewer big plays traded both ways. The payoff scales with YOUR blitzers (LB Blz + DL Rush), so a "blitzing team" is now a real roster build.
 - AI defenses play their coach's identity: Defense First schemes blitz at 62%, Ground teams sit back at 46%.
 - Engine changes are draw-count-neutral (probability shifts only) — replay determinism for Coach's Calls unaffected. sim battery now 3,006 (new §9: legacy-exact at 50%, +15% sacks when hot, INTs up, points-allowed cost vs bend, LB sack-share up ≥8pts).
+
+## 2026-08-26 (later) — Draft-day trades + identity strip + playoff picture
+- 📞 DRAFT-DAY TRADE-DOWN OFFERS: in rounds 1-4, rivals coveting the board's top name sometimes call to trade up into your slot — you get their later pick in the round PLUS an extra later-round pick. Deterministic per slot (seeded hash — leaving the screen can't reroll it); offer banner with ACCEPT/STAY PUT; deal logged in draft ticker + news.
+- 🏷 TEAM IDENTITY STRIP (roster view): coach scheme + star quality, live roster-fit %, what to build to raise it, and your Blitz unit number (LB Blz + DL Rush) so the blitz dial's payoff is visible while you build.
+- 👑 PLAYOFF PICTURE (standings, week 6+): live 7-seed table per conference "if the season ended today", division champs marked, bye noted, first-team-out row; your team highlighted.
+- All app-layer; batteries untouched at 3,006 / 17,543. Cache ?v=20260826d.
