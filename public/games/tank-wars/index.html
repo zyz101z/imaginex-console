@@ -80,6 +80,7 @@
     <div class="row">
       <button class="btn" id="btnDaily" style="background:linear-gradient(180deg,#9fd8ff,#5aa8e8);">&#128197; DAILY STORM</button>
       <button class="btn" id="btnRush" style="background:linear-gradient(180deg,#ff9a9a,#d9534f);">&#9760; BOSS RUSH</button>
+      <button class="btn" id="btnEscort" style="background:linear-gradient(180deg,#9fe8b8,#4aa86a);">&#128666; CONVOY</button>
     </div>
     <p class="tag" id="dailyTag" style="margin:2px 0 0;"></p>
     <p class="tag" id="questTag" style="margin:2px 0 0;white-space:pre-line;"></p>
@@ -118,6 +119,8 @@
   <div class="panel">
     <h1>&#127758; DAILY STORM &mdash; TODAY'S TOP 10</h1>
     <div id="boardList" style="min-height:120px;text-align:left;"></div>
+    <h1 style="margin-top:14px;">&#129309; CO-OP STORM &mdash; BEST DUOS</h1>
+    <div id="coopList" style="min-height:60px;text-align:left;"></div>
     <button class="btn ghost" id="btnBoardBack">BACK</button>
   </div>
 </div>
@@ -185,6 +188,7 @@
       <p id="rtcNote" class="tag" style="margin-top:4px;"></p>
       <button class="btn teal hidden" id="btnRtcStart" style="margin-top:12px;">&#9658;&nbsp; START BATTLE</button>
       <button class="btn gold hidden" id="btnRtcCoop" style="margin-top:8px;">&#9889;&nbsp; CO-OP STORM</button>
+      <button class="btn hidden" id="btnRtcConvoy" style="margin-top:8px;background:linear-gradient(180deg,#9fe8b8,#4aa86a);">&#128666;&nbsp; CO-OP CONVOY</button>
     </div>
     <button class="btn ghost" id="btnOnlineBack">BACK</button>
   </div>
@@ -485,7 +489,7 @@ function updateGates(dt) {
   for (const sh of shells) sh.gateCd = Math.max(0, (sh.gateCd || 0) - dt);
   if (!gates.length || phase !== 'play') return;
   for (const t of tanks) {
-    if (!t.alive || t.gateCd > 0) continue;
+    if (!t.alive || t.gateCd > 0 || t.isDrone) continue;
     for (const g of gates) {
       if (Math.hypot(t.x - g.x, t.y - g.y) < GATE.r) {
         const tw = gateTwin(g);
@@ -1314,6 +1318,37 @@ function submitDailyBoard(wave, cb) {
     }).then(r => { if (cb) cb(r.ok); }).catch(() => { if (cb) cb(false); });
   } catch (e) { if (cb) cb(false); }
 }
+// lifetime CO-OP duo board — the host posts "HOST + GUEST" after a co-op storm
+function duoName() {
+  return (profile.pilot || '').slice(0, 8) + ' + ' + (net.guestPilot || 'ALLY').slice(0, 8);
+}
+function submitCoopBoard(wave, cb) {
+  if (!profile.pilot || !wave) { if (cb) cb(false); return; }
+  try {
+    fetch('/api/leaderboard', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId: 'tank-wars-coop', nickname: duoName(), score: wave }),
+    }).then(r => { if (cb) cb(r.ok); }).catch(() => { if (cb) cb(false); });
+  } catch (e) { if (cb) cb(false); }
+}
+function fetchCoopBoard(cb) {
+  try {
+    fetch('/api/leaderboard?gameId=tank-wars-coop')
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => cb(Array.isArray(rows) ? rows : []))
+      .catch(() => cb(null));
+  } catch (e) { cb(null); }
+}
+function showCoopBoardOnVictory(wave) {
+  const box = document.getElementById('dailyBoard');
+  if (!box) return;
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="tag" style="text-align:center">🤝 BEST DUOS — ALL TIME</p><p class="tag" style="text-align:center">…</p>';
+  const done = () => fetchCoopBoard(rows =>
+    { box.innerHTML = '<p class="tag" style="text-align:center">🤝 BEST DUOS — ALL TIME</p>' + boardRowsHtml(rows); });
+  if (net.role === 'host' && profile.pilot && wave >= 2 && !surv.escort) submitCoopBoard(wave, done);
+  else done();
+}
 function boardRowsHtml(rows) {
   if (rows === null) return '<p class="tag">couldn\'t reach the board — try again later</p>';
   if (!rows.length) return '<p class="tag">no runs yet today — set the bar!</p>';
@@ -1374,7 +1409,7 @@ function startSurvival(smode) {
   // ⚠ param must NOT be named 'mode' — it would shadow the global game-state
   // variable and the 'mode = play' below would silently do nothing (2026-08-23 bug)
   surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
-  surv.daily = smode === 'daily'; surv.rush = smode === 'rush';
+  surv.daily = smode === 'daily'; surv.rush = smode === 'rush'; surv.escort = smode === 'escort';
   matchCfg = { mode: 'survival', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
                playerTank: profile.owned[profile.tank] ? profile.tank : 'scout', foeTank: 'scout', battle: null };
   aiParams = AI_LEVELS.officer;
@@ -1416,6 +1451,70 @@ function survKind(w) {
   return pool[(Math.random() * pool.length) | 0];
 }
 // far free cells for enemy spawns: away from the player, apart from each other, off pools
+// ============================== CONVOY ESCORT ==============================
+// A cargo drone crosses the arena leg by leg; it only rolls while a pilot is
+// close. Enemies trickle in and hunt the NEAREST team-0 target — which is
+// usually the drone. Drone down = run over. Each delivered leg = perk draft.
+const ESCORT = { speed: 46, zone: 115, hp: 4, cap: 4 };
+const ESCORT_ARENAS = ['maze', 'dense', 'pillars', 'corridors', 'jungle', 'city', 'snow', 'lava'];
+function gridPath(sx, sy, tx, ty) {   // BFS cell path -> waypoint centers
+  const prev = new Map();
+  const q = [[sx, sy]];
+  prev.set(sx + ',' + sy, null);
+  while (q.length) {
+    const [cx, cy] = q.shift();
+    if (cx === tx && cy === ty) break;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+      const k = nx + ',' + ny;
+      if (prev.has(k) || !cellOpen(cx, cy, nx, ny)) continue;
+      prev.set(k, cx + ',' + cy);
+      q.push([nx, ny]);
+    }
+  }
+  if (!prev.has(tx + ',' + ty)) return null;
+  const path = [];
+  let cur = tx + ',' + ty;
+  while (cur) {
+    const [cx, cy] = cur.split(',').map(Number);
+    path.unshift({ x: cx * CELL + CELL / 2, y: cy * CELL + CELL / 2 });
+    cur = prev.get(cur);
+  }
+  return path;
+}
+function theDrone() { return tanks.find(t => t.isDrone); }
+function updateDrone(dt) {
+  if (!surv.on || !surv.escort || phase !== 'play') return;
+  if (matchCfg.mode === 'online' && net.role === 'guest') return;   // host-authoritative
+  const d = theDrone();
+  if (!d || !d.alive || !surv.path) return;
+  // trickle reinforcements while the leg runs (hard cap on concurrent enemies)
+  surv.trickleT = (surv.trickleT || 0) - dt;
+  if (surv.trickleT <= 0 && tanks.filter(t => t.team === 1 && t.alive).length < ESCORT.cap) {
+    surv.trickleT = Math.max(4.5, 8.5 - surv.wave * 0.35);
+    const [[cx, cy]] = survSpawnCells(1, d.x, d.y);
+    const e = makeTank(tanks.length, cx, cy, survKind(surv.wave + 1));
+    e.isAI = true; e.aiLv = survTier(surv.wave + 1);
+    tanks.push(e);
+    spawnParticles(e.x, e.y, 18, BOSS_COL, 160, 0.4);
+  }
+  // the drone only rolls with an escort alongside — "stay close" is the mode
+  d.moving = tanks.some(t => t.team === 0 && !t.isDrone && t.alive &&
+    Math.hypot(t.x - d.x, t.y - d.y) < ESCORT.zone);
+  if (!d.moving) return;
+  const wp = surv.path[d.pathI || 0];
+  if (!wp) { survWaveCleared(); return; }
+  const dx = wp.x - d.x, dy = wp.y - d.y, dist = Math.hypot(dx, dy);
+  if (dist < 4) {
+    d.pathI = (d.pathI || 0) + 1;
+    if (d.pathI >= surv.path.length) { banner = 'DELIVERED!'; bannerCol = '#9fe8b8'; survWaveCleared(); }
+    return;
+  }
+  const sp = ESCORT.speed * dt;
+  d.x += (dx / dist) * sp; d.y += (dy / dist) * sp;
+  d.a = Math.atan2(dy, dx);
+}
 function survSpawnCells(n, px, py) {
   const pcx = (px / CELL) | 0, pcy = (py / CELL) | 0;
   const picked = [];
@@ -1437,7 +1536,7 @@ function survStartWave(w) {
   return withDailyRng(0x51ee7, () => survStartWaveInner(w));
 }
 function survStartWaveInner(w) {
-  roundArena = pickArena();
+  roundArena = surv.escort ? ESCORT_ARENAS[(Math.random() * ESCORT_ARENAS.length) | 0] : pickArena();
   genMaze(roundArena);
   genPools();
   genCrushers();
@@ -1455,6 +1554,33 @@ function survStartWaveInner(w) {
     buddy.isRemote = true; buddy.isAI = false;
     if (surv.perks.aegis) buddy.shield = true;
     tanks.push(buddy);
+  }
+  if (surv.escort) {
+    // convoy leg: fresh route each leg, drone starts beside the pilots,
+    // delivery point is the opposite corner
+    surv.bossName = '';
+    const sx2 = pc[0], sy2 = pc[1] === 0 ? 1 : ROWS - 2;
+    const gx2 = COLS - 1 - pc[0], gy2 = ROWS - 1 - pc[1];
+    surv.path = gridPath(sx2, sy2, gx2, gy2) || [{ x: gx2 * CELL + CELL / 2, y: gy2 * CELL + CELL / 2 }];
+    const drone = makeTank(tanks.length, sx2, sy2, 'scout');
+    drone.isDrone = true; drone.team = 0; drone.isAI = false; drone.isRemote = true;
+    drone.hp = ESCORT.hp; drone.r = 12; drone.pathI = 0; drone.moving = false;
+    tanks.push(drone);
+    const count = Math.min(3, 1 + Math.ceil(w / 3));
+    const cells2 = survSpawnCells(count, drone.x, drone.y);
+    for (let k = 0; k < count; k++) {
+      const e = makeTank(tanks.length, cells2[k][0], cells2[k][1], survKind(w));
+      e.isAI = true; e.aiLv = survTier(w);
+      tanks.push(e);
+    }
+    surv.trickleT = 7;
+    surv.enemiesAtStart = tanks.filter(t => t.team === 1).length;
+    shells = []; beams = []; mines = []; particles = []; treads = []; powerup = null; confetti = [];
+    powerupTimer = POWERUP_EVERY[0] + Math.random() * (POWERUP_EVERY[1] - POWERUP_EVERY[0]);
+    roundTime = 0; suddenDeath = false; sdTimer = 0; shiftTimer = 6;
+    phase = 'countdown'; phaseT = 0; banner = ''; shake = 0; hitstop = 0;
+    netSendSWave();
+    return;
   }
   const plan = survPlan(w);
   surv.bossName = '';
@@ -1666,7 +1792,12 @@ function survOver() {
     netSendGame({ t: 'sover', w: surv.wave, k: surv.kills, run: surv.run });
   }
   let newBest = false;
-  if (surv.rush) {
+  if (surv.escort) {
+    const legs = Math.max(0, surv.wave - 1);   // legs fully DELIVERED
+    newBest = legs > (profile.bestEscort || 0);
+    profile.bestEscort = Math.max(profile.bestEscort || 0, legs);
+    surv.run += legs * 12;                     // hazard pay per delivery
+  } else if (surv.rush) {
     newBest = surv.wave > (profile.bestRush || 0);
     if (newBest) profile.bestRush = surv.wave;
     surv.run += surv.wave * 15;   // rush pay: every boss down is worth a bounty
@@ -1689,11 +1820,13 @@ function survOver() {
   const db = document.getElementById('dailyBoard');
   if (db) { db.classList.add('hidden'); db.innerHTML = ''; }
   if (surv.daily) showDailyBoardOnVictory();
+  else if (net.coop) showCoopBoardOnVictory(surv.wave);
   document.getElementById('winName').textContent =
-    surv.rush ? 'THE RUSH ENDS' : surv.daily ? 'DAILY STORM COMPLETE' : 'THE STORM ENDS';
+    surv.escort ? 'THE CONVOY FALLS' : surv.rush ? 'THE RUSH ENDS' : surv.daily ? 'DAILY STORM COMPLETE' : 'THE STORM ENDS';
   document.getElementById('winName').style.color = BOSS_COL;
   document.getElementById('winScore').textContent =
-    (surv.rush ? (surv.wave - 1) + ' BOSSES DOWN' : 'WAVE ' + surv.wave + '  ·  ' + surv.kills + ' TANKS DESTROYED')
+    (surv.escort ? (surv.wave - 1) + ' LEGS DELIVERED  ·  ' + surv.kills + ' TANKS DESTROYED'
+     : surv.rush ? (surv.wave - 1) + ' BOSSES DOWN' : 'WAVE ' + surv.wave + '  ·  ' + surv.kills + ' TANKS DESTROYED')
     + (newBest ? '  ·  ★ NEW BEST!' : '')
     + (surv.daily ? '  ·  today\'s best: ' + profile.daily.best : '');
   document.getElementById('winScrap').textContent = '+' + surv.run + ' SCRAP EARNED';
@@ -2362,7 +2495,7 @@ function update(dt) {
     }
   }
   // sudden death: crumble walls
-  if (!suddenDeath && roundTime > (surv.on ? 45 : SUDDEN_DEATH_AT)) { suddenDeath = true; sdTimer = 0; banner = ''; }
+  if (!suddenDeath && !(surv.on && surv.escort) && roundTime > (surv.on ? 45 : SUDDEN_DEATH_AT)) { suddenDeath = true; sdTimer = 0; banner = ''; }
   if (suddenDeath) {
     sdTimer -= dt;
     if (sdTimer <= 0 && wallRects.length > 6) {
@@ -2433,10 +2566,12 @@ function update(dt) {
   questToasts = questToasts.filter(q => q.t > 0);
   while (treads.length && treads[0].life <= 0) treads.shift();
 
+  updateDrone(dt);
   if (surv.on) {
     if (phase === 'play') {
-      if (!tanks.some(t => t.team === 0 && t.alive)) survOver();
-      else if (!tanks.some(t => t.team === 1 && t.alive)) survWaveCleared();
+      if (!tanks.some(t => t.team === 0 && !t.isDrone && t.alive)) survOver();
+      else if (surv.escort && !tanks.some(t => t.isDrone && t.alive)) survOver();
+      else if (!surv.escort && !tanks.some(t => t.team === 1 && t.alive)) survWaveCleared();
     }
   } else if (phase === 'play' &&
              (!tanks[0].alive || !tanks.some(t => t.i > 0 && t.team === 1 && t.alive))) endRound();
@@ -2863,7 +2998,7 @@ function render() {
       drawBanner(label, label === 'GO!' ? '#4de3c2' : '#ffd166', 74);
       const cbBoss = matchCfg.mode === 'campaign' && matchCfg.battle && matchCfg.battle.boss;
       drawBanner(surv.on
-        ? ((surv.rush ? '☠ RUSH ' : surv.daily ? '📅 DAILY ' : '') + 'WAVE ' + surv.wave + ' · ' + (surv.bossName ? 'BOSS: ' + surv.bossName
+        ? ((surv.escort ? '🚚 CONVOY LEG ' + surv.wave + ' · ' + (() => { const d = theDrone(); return d && surv.path ? Math.min(100, Math.round(100 * (d.pathI || 0) / surv.path.length)) + '% delivered' : ''; })() + ' · ' : (surv.rush ? '☠ RUSH ' : surv.daily ? '📅 DAILY ' : '') + 'WAVE ' + surv.wave + ' · ') + (surv.bossName ? 'BOSS: ' + surv.bossName
             : surv.enemiesAtStart + (surv.enemiesAtStart > 1 ? ' ENEMIES' : ' ENEMY'))
             + ' · ' + (ARENA_LABELS[roundArena] || ''))
         : (cbBoss ? ('BOSS: ' + matchCfg.battle.bossName + ' · ' + (ARENA_LABELS[roundArena] || ''))
@@ -2934,6 +3069,47 @@ function render() {
 }
 // World-space add-ons that must not rotate with the hull: boss armor pips, the hurt
 // flash, and the FREEZE ice block.
+function drawDrone(t) {
+  ctx.save();
+  // escort zone ring — green while rolling, amber pulse while stranded
+  ctx.globalAlpha = t.moving ? 0.10 : 0.16 + 0.1 * Math.sin(performance.now() / 160);
+  ctx.strokeStyle = t.moving ? '#9fe8b8' : '#ffd166';
+  ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+  ctx.beginPath(); ctx.arc(t.x, t.y, ESCORT.zone, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.translate(t.x, t.y); ctx.rotate(t.a);
+  ctx.shadowColor = '#9fe8b8'; ctx.shadowBlur = 12;
+  ctx.fillStyle = '#2a4436';                                    // hull
+  roundRect2(ctx, -13, -9, 26, 18, 5);
+  ctx.fillStyle = '#c9a86a';                                    // cargo crate
+  ctx.fillRect(-7, -6, 12, 12);
+  ctx.strokeStyle = '#7a6238'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(-7, -6, 12, 12);
+  ctx.beginPath(); ctx.moveTo(-1, -6); ctx.lineTo(-1, 6); ctx.stroke();
+  ctx.fillStyle = (performance.now() % 900) < 450 ? '#9fe8b8' : '#2a6a48';   // beacon
+  ctx.beginPath(); ctx.arc(9, 0, 2.6, 0, Math.PI * 2); ctx.fill();
+  ctx.rotate(-t.a);
+  // hp pips
+  const n = ESCORT.hp;
+  ctx.shadowBlur = 0;
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = i < (t.hp || 0) ? '#9fe8b8' : 'rgba(160,170,200,0.25)';
+    ctx.fillRect(-n * 5 + i * 10 + 1, -t.r - 14, 8, 4);
+  }
+  if (!t.moving && phase === 'play') {
+    ctx.fillStyle = '#ffd166'; ctx.font = '800 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('STAY CLOSE!', 0, -t.r - 20);
+  }
+  ctx.restore();
+}
+function roundRect2(c, x, y, w2, h2, r2) {
+  c.beginPath();
+  c.moveTo(x + r2, y);
+  c.arcTo(x + w2, y, x + w2, y + h2, r2); c.arcTo(x + w2, y + h2, x, y + h2, r2);
+  c.arcTo(x, y + h2, x, y, r2); c.arcTo(x, y, x + w2, y, r2);
+  c.closePath(); c.fill();
+}
 function drawTankOverlays(t) {
   if (t.hurtT > 0) {
     t.hurtT -= 1 / 60;
@@ -2993,6 +3169,7 @@ function drawTankOverlays(t) {
   }
 }
 function drawTank(t) {
+  if (t.isDrone) { drawDrone(t); return; }
   ctx.save();
   // GHOST cloak: fades after ~1.2s without firing. Your own ghost stays readable to you;
   // the ENEMY's fades to a whisper (tread marks remain — that's the counterplay).
@@ -3438,6 +3615,7 @@ function renderCampaign() {
 document.getElementById('btnRookie').onclick = () => { audioInit(); startMatch({ mode: 'quick', aiLevel: 'rookie' }); };
 document.getElementById('btnSurvival').onclick = () => { audioInit(); startSurvival(); };
 document.getElementById('btnDaily').onclick = () => { audioInit(); startSurvival('daily'); };
+document.getElementById('btnEscort').onclick = () => { audioInit(); startSurvival('escort'); };
 document.getElementById('btnRush').onclick = () => {
   if ((profile.bestWave || 0) < 10) {
     const dt = document.getElementById('dailyTag');
@@ -3458,6 +3636,9 @@ document.getElementById('btnBoard').onclick = () => {
   const bl = document.getElementById('boardList');
   bl.innerHTML = '<p class="tag">loading…</p>';
   fetchDailyBoard(rows => { bl.innerHTML = boardRowsHtml(rows); });
+  const cl = document.getElementById('coopList');
+  if (cl) { cl.innerHTML = '<p class="tag">…</p>';
+    fetchCoopBoard(rows => { cl.innerHTML = boardRowsHtml(rows); }); }
 };
 document.getElementById('btnBoardBack').onclick = () => { show('boardBox', false); show('menu', true); };
 document.getElementById('btnGarageBack').onclick = () => { show('garage', false); show('menu', true); };
@@ -3503,6 +3684,8 @@ function rtcCleanup() {
   if (sb) sb.classList.add('hidden');
   const cb = document.getElementById('btnRtcCoop');
   if (cb) cb.classList.add('hidden');
+  const cv = document.getElementById('btnRtcConvoy');
+  if (cv) cv.classList.add('hidden');
   rtcPings = [];
   rtcEl('onlineHome').classList.remove('hidden');
   rtcEl('onlineStatus').classList.add('hidden');
@@ -3594,11 +3777,12 @@ function rtcWireChannel(dc) {
     rtcSetState('CONNECTED! Measuring ping…');
     sfx.powerup();
     if (net.role === 'guest') {
-      try { dc.send(JSON.stringify({ t: 'hello', kind: profile.owned[profile.tank] ? profile.tank : 'scout', trail: profile.trail || '' })); } catch (e) {}
+      try { dc.send(JSON.stringify({ t: 'hello', kind: profile.owned[profile.tank] ? profile.tank : 'scout', trail: profile.trail || '', pilot: (profile.pilot || '').slice(0, 12) })); } catch (e) {}
       rtcEl('rtcNote').textContent = 'Connected! The host starts the battle.';
     } else if (net.role === 'host') {
       rtcEl('btnRtcStart').classList.remove('hidden');
       rtcEl('btnRtcCoop').classList.remove('hidden');
+      rtcEl('btnRtcConvoy').classList.remove('hidden');
     }
     rtcPingTimer = setInterval(() => {
       if (dc.readyState === 'open') { try { dc.send(JSON.stringify({ t: 'ping', ts: performance.now() })); } catch (e) {} }
@@ -3758,10 +3942,10 @@ function netHostTick() {
   });
 }
 // ---- CO-OP STORM (host) ----
-function startCoopStorm() {
+function startCoopStorm(variant) {
   net.coop = true;
   surv.on = true; surv.wave = 0; surv.kills = 0; surv.run = 0; surv.perks = {}; surv.draft = [];
-  surv.daily = false; surv.rush = false;
+  surv.daily = false; surv.rush = false; surv.escort = variant === 'escort';
   matchCfg = { mode: 'online', aiLevel: 'officer', roundsToWin: 999, arena: 'mix',
                playerTank: profile.owned[profile.tank] ? profile.tank : 'scout',
                foeTank: net.guestKind || 'scout', battle: null };
@@ -3777,12 +3961,12 @@ function startCoopStorm() {
 function netSendSWave() {
   if (!net.coop || net.role !== 'host' || matchCfg.mode !== 'online') return;
   netSendGame({
-    t: 'swave', wave: surv.wave, bn: surv.bossName, ar: roundArena,
+    t: 'swave', wave: surv.wave, bn: surv.bossName, ar: roundArena, es: surv.escort ? 1 : 0,
     walls: packWalls(), pl: pools.map(pp => [r1(pp.x), r1(pp.y), r1(pp.r)]),
     cr: crushers.map(c => [r1(c.x), r1(c.y), r1(c.phase)]),
     gt: gates.map(g => [r1(g.x), r1(g.y), g.pair]),
     tk: tanks.map(t => [r1(t.x), r1(t.y), r2(t.a), t.kind, t.team, t.r || TANK_R,
-                        t.boss ? t.boss.maxHp : 0, t.hp || 1]),
+                        t.boss ? t.boss.maxHp : 0, t.hp || 1, t.isDrone ? 1 : 0]),
     pk: surv.perks, run: surv.run, tr: [trailOf[0], trailOf[1]],
   });
   net.wallsDirty = false;
@@ -3858,6 +4042,7 @@ function gmGuestGover(m) {
 function gmGuestSWave(m) {
   net.coop = true;
   surv.on = true; surv.wave = m.wave; surv.bossName = m.bn || '';
+  surv.escort = !!m.es;
   surv.perks = m.pk || {}; surv.run = m.run || 0; surv.draft = []; surv.picker = 0;
   matchCfg = { mode: 'online', aiLevel: 'rookie', roundsToWin: 999, arena: 'net',
                playerTank: (m.tk[1] && m.tk[1][3]) || 'scout', foeTank: 'scout', battle: null };
@@ -3873,6 +4058,7 @@ function gmGuestSWave(m) {
     const t = makeTank(i, 0, 0, tk[3]);
     t.x = tk[0]; t.y = tk[1]; t.a = tk[2];
     t.team = tk[4]; t.r = tk[5]; t.hp = tk[7] || 1;
+    if (tk[8]) { t.isDrone = true; t.isAI = false; t.isRemote = true; }
     if (tk[6]) { t.boss = { type: 'net', maxHp: tk[6] }; t.col = BOSS_COL; t.glow = BOSS_GLOW; }
     return t;
   });
@@ -3898,6 +4084,7 @@ function gmGuestSDraft(m) {
 function gmGuestSOver(m) {
   phase = 'survover'; phaseT = 0;
   musicStop(true);
+  showCoopBoardOnVictory(0);   // guest never posts — the host already did
   const newBest = m.w > (profile.bestWave || 0);
   if (newBest) profile.bestWave = m.w;   // TEMPEST gate opens for the guest too
   profile.scrap += m.run;
@@ -4029,6 +4216,7 @@ function netHandleMsg(m) {
     case 'hello':
       net.guestKind = TANKS[m.kind] ? m.kind : 'scout';
       net.guestTrail = TRAILS[m.trail] ? m.trail : '';
+      net.guestPilot = String(m.pilot || '').slice(0, 12);
       break;
     case 'in':
       if (net.role === 'host' && m.q > net.lastInSeq) {
@@ -4106,6 +4294,7 @@ document.getElementById('btnOnlineBack').onclick = () => { rtcCleanup(); show('o
 document.getElementById('btnRtcHost').onclick = () => { musicUnlock(); rtcHost(); };
 document.getElementById('btnRtcStart').onclick = () => { musicUnlock(); startOnlineMatch(); };
 document.getElementById('btnRtcCoop').onclick = () => { musicUnlock(); startCoopStorm(); };
+document.getElementById('btnRtcConvoy').onclick = () => { musicUnlock(); startCoopStorm('escort'); };
 document.getElementById('btnRtcJoin').onclick = () => {
   musicUnlock();
   const code = (rtcEl('rtcJoinCode').value || '').toUpperCase().trim();
@@ -4210,6 +4399,7 @@ window.__tw = {
   get gates() { return gates; }, genGates, updateGates, GATE, survBossThink, castRay,
   setRoundArena(v) { roundArena = v; },
   weeklyTwist, twistOn, TWISTS, survPlan,
+  gridPath, updateDrone, theDrone, ESCORT, ESCORT_ARENAS, duoName, submitCoopBoard, fetchCoopBoard,
   get roundTime() { return roundTime; }, setRoundTime(v) { roundTime = v; },
   gmGuestSWave, gmGuestSDraft, gmGuestSOver, netHandleMsg, applyInterp,
 };

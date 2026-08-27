@@ -915,5 +915,87 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.surv.rush = false; tw.surv.on = false;
 }
 
+// ---------- 27. CONVOY ESCORT ----------
+{
+  check('escort: arena pool excludes shifting/nexus/scrapyard',
+    !tw.ESCORT_ARENAS.includes('shifting') && !tw.ESCORT_ARENAS.includes('nexus') && !tw.ESCORT_ARENAS.includes('scrapyard'));
+  tw.startSurvival('escort');
+  check('escort: mode flags set', tw.surv.on && tw.surv.escort === true && !tw.surv.rush && !tw.surv.daily);
+  const d = tw.theDrone();
+  check('escort: drone spawned (team 0, 4hp)', d && d.team === 0 && d.hp === tw.ESCORT.hp && d.isDrone);
+  check('escort: a route exists (≥ 8 waypoints)', Array.isArray(tw.surv.path) && tw.surv.path.length >= 8, tw.surv.path && tw.surv.path.length);
+  check('escort: enemies on the field', tw.tanks.filter(x => x.team === 1 && x.alive).length >= 1);
+  check('escort: arena from the escort pool', tw.ESCORT_ARENAS.includes(tw.roundArena), tw.roundArena);
+  tw.setPhase('play');
+
+  // stranded drone: nobody close -> it will not roll
+  const p = tw.tanks[0];
+  p.x = d.x + 400 > 900 ? d.x - 400 : d.x + 400; p.y = d.y;
+  const dx0 = d.x, dy0 = d.y;
+  for (let i = 0; i < 30; i++) tw.updateDrone(1 / 30);
+  check('escort: drone waits without an escort', Math.hypot(d.x - dx0, d.y - dy0) < 1 && d.moving === false);
+
+  // pilot alongside: it rolls along the route
+  p.x = d.x; p.y = d.y; p.alive = true;
+  for (let i = 0; i < 60; i++) { tw.updateDrone(1 / 30); p.x = d.x; p.y = d.y; }
+  check('escort: drone rolls with a pilot alongside', Math.hypot(d.x - dx0, d.y - dy0) > 30, Math.hypot(d.x - dx0, d.y - dy0).toFixed(0));
+  check('escort: no sudden death during a leg', (() => { tw.setRoundTime(60); tw.update(1 / 60); return tw.surv.on; })());
+
+  // final waypoint -> DELIVERED -> perk draft
+  d.pathI = tw.surv.path.length - 1;
+  const last = tw.surv.path[tw.surv.path.length - 1];
+  d.x = last.x - 6; d.y = last.y; p.x = d.x; p.y = d.y;
+  for (let i = 0; i < 20 && tw.phase !== 'draft'; i++) tw.updateDrone(1 / 30);
+  check('escort: delivery triggers the perk draft', tw.phase === 'draft', tw.phase);
+
+  // trickle: reinforcements arrive on the timer
+  tw.startSurvival('escort'); tw.setPhase('play');
+  const d2 = tw.theDrone(), p2 = tw.tanks[0];
+  for (const e of tw.tanks) if (e.team === 1) e.alive = false;
+  tw.surv.trickleT = 0;
+  p2.x = d2.x; p2.y = d2.y;
+  tw.updateDrone(1 / 30);
+  check('escort: enemies trickle back in', tw.tanks.some(x => x.team === 1 && x.alive));
+
+  // drone destroyed -> the run is over
+  d2.alive = false;
+  tw.update(1 / 60);
+  check('escort: drone down = run over', tw.phase === 'survover', tw.phase);
+  check('escort: bestEscort recorded (legs delivered)', typeof tw.profile.bestEscort === 'number');
+
+  // players down (drone still alive) also ends it — the drone can't win alone
+  tw.startSurvival('escort'); tw.setPhase('play');
+  for (const x of tw.tanks) if (x.team === 0 && !x.isDrone) x.alive = false;
+  tw.update(1 / 60);
+  check('escort: pilots down = run over even with the drone alive', tw.phase === 'survover');
+  tw.surv.on = false;
+}
+
+// ---------- 28. CO-OP DUO BOARD + escort over the wire ----------
+{
+  const oldPilot = tw.profile.pilot;
+  tw.profile.pilot = 'DADCOMMANDER99'; tw.net.guestPilot = 'SONNYBOY12345';
+  check('duo: name is "HOST + GUEST", each capped at 8', tw.duoName() === 'DADCOMMA + SONNYBOY', tw.duoName());
+  check('duo: fits the API 20-char nickname cap', tw.duoName().length <= 20, tw.duoName().length);
+  tw.net.guestPilot = '';
+  check('duo: missing guest name falls back to ALLY', tw.duoName().endsWith('+ ALLY'), tw.duoName());
+  tw.profile.pilot = oldPilot;
+
+  // guest rebuilds an escort wave from the swave message (drone flag rides index 8)
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'maze' });   // gives us real walls to pack
+  const msg = { t: 'swave', wave: 3, bn: '', ar: 'maze', es: 1, walls: tw.packWalls(),
+    pl: [], cr: [], gt: [],
+    tk: [[100, 100, 0, 'scout', 0, 14, 0, 1, 0], [140, 100, 0, 'scout', 0, 12, 0, 4, 1],
+         [700, 400, 0, 'viper', 1, 14, 0, 1, 0]],
+    pk: {}, run: 0, tr: ['', ''] };
+  tw.gmGuestSWave(msg);
+  check('duo: guest learns it is an escort wave', tw.surv.escort === true);
+  const gd = tw.tanks.find(x => x.isDrone);
+  check('duo: guest rebuilds the drone (4hp, team 0)', gd && gd.team === 0 && gd.hp === 4, gd && gd.hp);
+  tw.net.role = 'guest';
+  check('duo: guest never simulates the drone', (() => { const x0 = gd.x; tw.setPhase('play'); tw.updateDrone(1 / 30); return gd.x === x0; })());
+  tw.net.coop = false; tw.net.role = null; tw.surv.on = false; tw.surv.escort = false;
+}
+
 console.log(`\n=== stormtest: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

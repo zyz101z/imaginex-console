@@ -60,6 +60,11 @@ controls, music + autoplay-unlock, ONLINE MULTIPLAYER (room codes, TURN relay, p
 real dad↔son match verified; mines/cloak/trails all snapshot-synced).
 Test suites: tanktest 76 + netsim 29 + doortest 6 (scratchpad; recreate via DEVLOG/SPEC docs).
 
+## Session log — 2026-08-26 (later)
+| Ver | Commit | What |
+|---|---|---|
+| CONVOY | (this) | **🚚 CONVOY ESCORT mode + 🤝 CO-OP DUO LEADERBOARD**. Escort: cargo drone crosses the arena leg-by-leg on a BFS route (gridPath over cellOpen), rolls ONLY with a pilot within 115px ("STAY CLOSE!" + amber ring when stranded), 4hp pips, enemies trickle in (cap 4 concurrent, interval shrinks per leg) and hunt nearest team-0 = usually the drone; delivery → perk draft → new maze/leg; drone down OR pilots down = run over; legs*12 hazard pay + profile.bestEscort; sudden death disabled during legs; arena pool excludes shifting/nexus/scrapyard (no wall-shifts/portals/crushers under the payload); solo (🚚 CONVOY btn) + co-op (CO-OP CONVOY in online panel; swave gains `es` flag + tk[8]=isDrone; guest never simulates the drone). Duo board: route.ts accepts lifetime `tank-wars-coop` (fdf0728, strip-danced); pilot name rides the hello msg (net.guestPilot); host posts "HOST8 + GUEST8" (≤20 chars) on co-op storm end wave≥2 (escort excluded — different metric); victory overlay + menu board page show 🤝 BEST DUOS. Tests: storm 204→**224** (§27 escort: waits/rolls/delivers/trickle/drone-down/pilots-down/no-SD; §28 duo name caps + guest swave rebuild) + deep 59 |
+
 ## Session log — 2026-08-26
 | Ver | Commit | What |
 |---|---|---|
