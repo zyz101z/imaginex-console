@@ -27,8 +27,11 @@ function key(gameId: string) {
 // Rotating per-day boards (Tank Wars DAILY STORM): tank-wars-daily-YYYYMMDD.
 // Excluded from the all-games aggregate; keys expire on the write side.
 const DAILY_ID = /^tank-wars-daily-\d{8}$/;
+// Lifetime co-op duo board (Tank Wars CO-OP STORM): excluded from the aggregate,
+// never expires. Nicknames are "HOST + GUEST" duo strings.
+const COOP_ID = "tank-wars-coop";
 function validGame(gameId: string) {
-  return KNOWN_GAMES.has(gameId) || DAILY_ID.test(gameId);
+  return KNOWN_GAMES.has(gameId) || DAILY_ID.test(gameId) || gameId === COOP_ID;
 }
 
 export async function GET(req: NextRequest) {
