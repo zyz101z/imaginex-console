@@ -531,11 +531,16 @@ const WIN_MODES = [
   { key: "regions", label: "Region Rush" },
   { key: "turnlimit", label: "Blitz" },
 ];
-const WIN_MODE_HINT = {
-  domination: "Domination — conquer everything. Last commander (or team) standing wins.",
-  regions: "Region Rush — first to control 4 full regions wins. Faster, objective-driven games.",
-  turnlimit: "Blitz — 15 rounds, then whoever holds the most states wins. Great for a quick match.",
-};
+function winModeHint(mode, rushTarget, blitzRounds) {
+  switch (mode) {
+    case "regions":
+      return `Region Rush — first to control ${rushTarget} full regions wins. Faster, objective-driven games.`;
+    case "turnlimit":
+      return `Blitz — ${blitzRounds} rounds, then whoever holds the most states wins. Great for a quick match.`;
+    default:
+      return "Domination — conquer everything. Last commander (or team) standing wins.";
+  }
+}
 // Eyebrow + subtitle text per way-the-game-ended.
 function methodEyebrow(state) {
   switch (state && state.winMethod) {
@@ -656,6 +661,8 @@ export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) 
     let difficulty = "officer";
     let setup = "random";
     let winMode = "domination";
+    let rushTarget = 4; // Region Rush: regions needed to win
+    let blitzRounds = 15; // Blitz: round limit
     let teamsOn = false;
     const teams = [0, 1, 2, 3, 4, 5];
     const names = ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"];
@@ -819,7 +826,33 @@ export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) 
           (v) => { winMode = v; renderWinMode(); }
         )
       );
-      winModeField.appendChild(el("div", { class: "ds-hint", text: WIN_MODE_HINT[winMode] }));
+      // Mode-specific tuning: how many regions / how many rounds.
+      if (winMode === "regions") {
+        const sub = el("div", { class: "ds-field", style: "margin:10px 0 0;" });
+        sub.appendChild(el("span", { class: "ds-label", text: "Regions to win" }));
+        sub.appendChild(
+          segmented(
+            [3, 4, 5].map((n) => ({ value: n, label: String(n) })),
+            rushTarget,
+            (n) => { rushTarget = n; renderWinMode(); }
+          )
+        );
+        winModeField.appendChild(sub);
+      } else if (winMode === "turnlimit") {
+        const sub = el("div", { class: "ds-field", style: "margin:10px 0 0;" });
+        sub.appendChild(el("span", { class: "ds-label", text: "Rounds" }));
+        sub.appendChild(
+          segmented(
+            [10, 15, 20].map((n) => ({ value: n, label: String(n) })),
+            blitzRounds,
+            (n) => { blitzRounds = n; renderWinMode(); }
+          )
+        );
+        winModeField.appendChild(sub);
+      }
+      winModeField.appendChild(
+        el("div", { class: "ds-hint", text: winModeHint(winMode, rushTarget, blitzRounds) })
+      );
     }
 
     function renderDifficulty() {
@@ -857,6 +890,8 @@ export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) 
           difficulty,
           setup,
           winMode,
+          winTarget: rushTarget,
+          turnLimit: blitzRounds,
           names: names.slice(0, humanCount),
           teams: teamsOn ? teams.slice(0, playerCount) : null,
         }),
@@ -1033,11 +1068,11 @@ export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) 
       <ul>
         <li><b>Domination</b> — the classic. Be the last commander (or team)
             standing by conquering <b>all 49 states</b>.</li>
-        <li><b>Region Rush</b> — first to control <b>4 full regions</b> at once
-            wins. Faster, objective-driven games.</li>
-        <li><b>Blitz</b> — the war lasts <b>15 rounds</b>; whoever holds the
-            <b>most states</b> when time runs out wins (total armies break ties).
-            The top bar counts the rounds down.</li>
+        <li><b>Region Rush</b> — first to control <b>3–5 full regions</b> at once
+            (you pick the target) wins. Faster, objective-driven games.</li>
+        <li><b>Blitz</b> — the war lasts <b>10–20 rounds</b> (your choice); whoever
+            holds the <b>most states</b> when time runs out wins (total armies
+            break ties). The top bar counts the rounds down.</li>
       </ul>
       <p class="ds-note">Your game saves automatically as you play — leave any time
          and pick "Resume Saved Game" on the start screen to continue.</p>
@@ -1051,11 +1086,15 @@ export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) 
           <span class="ds-chip">max(3, your states ÷ 3 rounded down)</span>
           <b>+</b> any full <b>Region</b> bonuses you hold
           <b>+</b> any <b>Mandate</b> card set you trade in.
+          <div class="ds-note">Misclicked? <b>↩ Undo Placement</b> takes armies back one at a
+          time — nothing is final until you press End Reinforcement.</div>
         </li>
         <li>
           <span class="ds-step-name"><b>Attack</b></span>
           Click one of your states (it needs <b>2+ armies</b>), then click an
-          <b>adjacent enemy state</b> to strike it. Attack as many times as you
+          <b>adjacent enemy state</b> to strike it. Each target shows a
+          <b>battle forecast</b> — your odds of taking it with an all-in attack
+          (green = favored, red = long shot). Attack as many times as you
           like before moving on. (How the dice decide it is below.)
         </li>
         <li>

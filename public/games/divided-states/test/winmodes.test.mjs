@@ -21,6 +21,10 @@ function ok(cond, msg) { if (cond) pass++; else { fail++; fails.push(msg); } }
   ok(s.winMode === "domination", "default win mode is domination");
   ok(s.winTarget === null && s.turnLimit === null, "no target/limit in domination");
   ok(s.round === 1, "round counter starts at 1");
+  const custom = createGame({ playerCount: 2, seed: 1, winMode: "regions", winTarget: 3 });
+  ok(custom.winTarget === 3, "custom region target honored");
+  const blitz = createGame({ playerCount: 2, seed: 1, winMode: "turnlimit", turnLimit: 10 });
+  ok(blitz.turnLimit === 10, "custom turn limit honored");
   ok(s.players.every((p) => p.stats && p.stats.captures === 0), "players start with zeroed stats");
 }
 

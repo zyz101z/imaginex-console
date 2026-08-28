@@ -5,6 +5,21 @@ Hawaii out of play). Lives in the ImagineX console; deploys to www.imaginex.game
 
 ---
 
+## 2026-08-27 — Battle Forecasts, Undo, Victory Tuning
+
+- **Battle forecast** — select an attacker and every red-highlighted target now
+  shows a pill with your odds of taking it in an all-in attack (green ≥65%,
+  amber 40–64%, red <40%). Uses the engine's exact dice math.
+- **Undo Placement** — a new button during Reinforce takes back placed armies one
+  at a time. To make the last army undoable too, the phase no longer auto-ends
+  when you place your final army — press **End Reinforcement** to confirm. On
+  iPad the pinned bar lays Undo/End side-by-side so it stays one row tall.
+- **Victory tuning** — Region Rush now offers a **3 / 4 / 5 region** target and
+  Blitz a **10 / 15 / 20 round** limit, picked on the start screen.
+- Tests: 102 checks across 5 suites, all green.
+
+---
+
 ## 2026-08-27 — Win Variants, Save & Resume, Match Stats
 
 ### Two new ways to win

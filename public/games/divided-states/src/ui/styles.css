@@ -131,7 +131,7 @@ html, body {
   }
   #log-root { display: none; }
   /* extra space at the bottom so the last content scrolls clear of the fixed bar */
-  #hud-side { padding-bottom: 76px; }
+  #hud-side { padding-bottom: 84px; }
   /* Pin the phase action buttons to the bottom of the side panel — ALWAYS visible
      (fixed, not sticky, so it stays put no matter where you've scrolled). */
   #hud-side .hud-actions {
@@ -146,8 +146,12 @@ html, body {
     box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.45);
     z-index: 50;
   }
-  /* Slightly larger touch targets for the action buttons on touch screens. */
-  #hud-side .hud-actions button { padding: 14px 14px; }
+  /* Buttons sit side-by-side on mobile so the bar stays one row tall even when
+     Undo + End Reinforcement show together (a tall bar would cover Florida).
+     (#side prefix out-specifies the hud.js runtime stylesheet, which loads later.) */
+  #side #hud-side .hud-actions { flex-direction: row; }
+  #side #hud-side .hud-actions button { flex: 1 1 0; min-width: 0; width: auto;
+    padding: 14px 8px; font-size: 12px; }
 
   /* The map-expand toggle (bottom-left; End Turn bar is bottom-right, so no clash). */
   #panel-toggle {

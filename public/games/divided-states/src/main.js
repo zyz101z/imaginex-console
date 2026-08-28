@@ -28,6 +28,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let state = null;
 let selFrom = null; // selected source state during attack/fortify
+// Armies the human placed this reinforce phase, in order — lets them undo a
+// misclick before ending the phase. UI-level only (not saved; cleared on resume).
+const placeStack = [];
 const ui = {};
 let busy = false; // true while AI/animation runs — blocks input
 let winReported = false; // guard so a win is reported to the host (ImagineX) only once
@@ -55,6 +58,7 @@ function resumeGame() {
   if (!s) { ui.menus.showStart(); return; }
   state = s;
   selFrom = null;
+  placeStack.length = 0;
   winReported = false;
   busy = false;
   ui.menus.hide();
@@ -107,6 +111,8 @@ function init() {
     sideEl: $("hud-side"),
     handlers: {
       onEndReinforce: () => { if (humanActive()) finishReinforce(); },
+      onUndoPlace: () => { if (humanActive() && state.phase === "reinforce") undoPlacement(); },
+      canUndoPlace: () => placeStack.length > 0,
       onEndAttack: () => { if (humanActive() && state.phase === "attack") { selFrom = null; state.phase = "fortify"; refresh(); } },
       onEndFortify: () => { if (humanActive()) doEndTurn(); },
       onEndTurn: () => { if (humanActive()) doEndTurn(); },
@@ -175,7 +181,7 @@ function playElimJuice() {
   }
 }
 
-function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random", teams = null, winMode = "domination" } = {}) {
+function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random", teams = null, winMode = "domination", winTarget, turnLimit } = {}) {
   const players = Array.from({ length: playerCount }, (_, i) => {
     let name;
     if (i < humanCount) {
@@ -188,9 +194,13 @@ function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer",
     const team = Array.isArray(teams) && teams[i] != null ? teams[i] : i;
     return { name, isAI: i >= humanCount, difficulty, team };
   });
-  state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players, winMode });
+  const opts = { playerCount, seed: (Date.now() & 0x7fffffff) || 1, players, winMode };
+  if (winTarget != null) opts.winTarget = winTarget;
+  if (turnLimit != null) opts.turnLimit = turnLimit;
+  state = createGame(opts);
   winReported = false;
   selFrom = null;
+  placeStack.length = 0;
   clearSave();
   ui.menus.hide();
   if (setup === "draft") {
@@ -292,6 +302,7 @@ const humanActive = () => state && !busy && !currentPlayer(state).isAI && state.
 function updateSelectable() {
   if (!state) return;
   ui.map.setHighlights([], "selected");
+  ui.map.setBadges(null);
   if (state.phase === "draft") {
     const p = currentPlayer(state);
     ui.map.setSelectable(!busy && p && !p.isAI ? unclaimedStates(state) : null);
@@ -312,6 +323,14 @@ function updateSelectable() {
       ui.map.setSelectable([selFrom, ...targets]);
       ui.map.setHighlights(targets, "attack");
       ui.map.setHighlights([selFrom], "selected");
+      // Battle forecast: odds of an all-in attack from selFrom taking each target.
+      const badges = {};
+      for (const c of targets) {
+        const p = winProbability(state.armies[selFrom], state.armies[c]);
+        const pct = Math.round(p * 100);
+        badges[c] = { text: `${pct}%`, tone: pct >= 65 ? "good" : pct >= 40 ? "warn" : "bad" };
+      }
+      ui.map.setBadges(badges);
     } else {
       ui.map.setSelectable(statesOf(state, pid).filter((c) => state.armies[c] >= 2 &&
         ADJACENCY[c].some((n) => !sameTeam(state, state.owner[n], pid))));
@@ -358,8 +377,11 @@ function handleStateClick(code) {
   if (state.phase === "reinforce") {
     if (state.owner[code] !== pid || state.reinforcementsRemaining <= 0) return;
     placeArmies(state, pid, code, 1);
+    placeStack.push(code);
     ui.audio.play("reinforce");
-    if (state.reinforcementsRemaining <= 0) finishReinforce(); else refresh();
+    // No auto-advance at 0 — the player confirms with End Reinforcement, so a
+    // misclicked final army can still be undone.
+    refresh();
   } else if (state.phase === "attack") {
     if (!selFrom) {
       if (state.owner[code] === pid && state.armies[code] >= 2) { selFrom = code; updateSelectable(); }
@@ -388,6 +410,17 @@ function handleStateClick(code) {
 function finishReinforce() {
   endReinforcement(state);
   selFrom = null;
+  placeStack.length = 0;
+  refresh();
+}
+
+// Take back the human's most recent reinforcement placement.
+function undoPlacement() {
+  const code = placeStack.pop();
+  if (!code || state.armies[code] <= 1) return;
+  state.armies[code] -= 1;
+  state.reinforcementsRemaining += 1;
+  ui.audio.play("click");
   refresh();
 }
 

@@ -200,6 +200,14 @@ const HUD_CSS = `
 #hud-side .hud-actions button:disabled {
   background: var(--panel-2); color: var(--ink-dim); border-color: var(--line);
   box-shadow: none; }
+/* Undo is a quiet secondary action — outline style so End Reinforcement stays primary. */
+#hud-side .hud-actions button.hud-undo {
+  background: transparent; color: var(--accent); border-color: var(--accent-line);
+  box-shadow: none; }
+#hud-side .hud-actions button.hud-undo:hover:not(:disabled) {
+  background: var(--accent-soft); border-color: var(--accent); }
+#hud-side .hud-actions button.hud-undo:disabled {
+  background: transparent; color: var(--ink-dim); border-color: var(--line); }
 #hud-side .hud-wait { color: var(--ink-dim); font-style: italic; font-size: 13px;
   text-align: center; padding: 12px; background: var(--panel-2); border: 1px dashed var(--line);
   border-radius: var(--radius-sm); }
@@ -377,10 +385,12 @@ export function createHud({ topEl, sideEl, handlers }) {
     });
     return b;
   };
+  const undoPlaceBtn = mkBtn("↩ Undo Placement", () => h.onUndoPlace && h.onUndoPlace());
+  undoPlaceBtn.classList.add("hud-undo");
   const endReinforceBtn = mkBtn("End Reinforcement", () => h.onEndReinforce && h.onEndReinforce());
   const endAttackBtn = mkBtn("End Attack", () => h.onEndAttack && h.onEndAttack());
   const endFortifyBtn = mkBtn("End Turn (skip fortify)", () => h.onEndFortify && h.onEndFortify());
-  actions.append(endReinforceBtn, endAttackBtn, endFortifyBtn);
+  actions.append(undoPlaceBtn, endReinforceBtn, endAttackBtn, endFortifyBtn);
   actionsBlock.append(actions, wait);
 
   sideEl.append(cardsBlock, regionBlock, playersBlock, actionsBlock);
@@ -659,10 +669,12 @@ export function createHud({ topEl, sideEl, handlers }) {
     }
 
     // ---- Phase action buttons ----
+    undoPlaceBtn.style.display = phase === "reinforce" ? "" : "none";
     endReinforceBtn.style.display = phase === "reinforce" ? "" : "none";
     endAttackBtn.style.display = phase === "attack" ? "" : "none";
     endFortifyBtn.style.display = phase === "fortify" ? "" : "none";
 
+    undoPlaceBtn.disabled = passive || !(h.canUndoPlace && h.canUndoPlace());
     endReinforceBtn.disabled = passive || (state.reinforcementsRemaining | 0) !== 0;
     endAttackBtn.disabled = passive;
     endFortifyBtn.disabled = passive;

@@ -72,10 +72,12 @@ export function createMap({ svg, onStateClick }) {
   const leaderLayer = el("g", { class: "leader-layer" });
   const tokenLayer = el("g", { class: "token-layer" });
   const labelLayer = el("g", { class: "label-layer" });
+  const badgeLayer = el("g", { class: "badge-layer" }); // battle-forecast pills
   svg.appendChild(landGroup);
   svg.appendChild(leaderLayer);
   svg.appendChild(tokenLayer);
   svg.appendChild(labelLayer);
+  svg.appendChild(badgeLayer);
 
   const tiles = {}; // code -> render handles
   const selectable = new Set();
@@ -232,7 +234,30 @@ export function createMap({ svg, onStateClick }) {
     }
   }
 
-  return { render, setHighlights, setSelectable };
+  // Battle-forecast pills: entries = { CODE: { text, tone } } (tone: good/warn/bad),
+  // or null/empty to clear. Drawn just below each state's counter, above everything.
+  function setBadges(entries) {
+    badgeLayer.innerHTML = "";
+    if (!entries) return;
+    for (const code of Object.keys(entries)) {
+      const t = tiles[code];
+      if (!t) continue;
+      const { text, tone } = entries[code];
+      const wide = (t.tiny ? 9.5 : 12) + 2; // sit just under the counter rim
+      const bx = t.cx, by = t.cy + wide + 9;
+      const w = text.length * 6.6 + 10;
+      const g = el("g", { class: `map-badge tone-${tone || "warn"}` });
+      g.appendChild(el("rect", {
+        x: bx - w / 2, y: by - 8, width: w, height: 16, rx: 8,
+      }));
+      const label = el("text", { x: bx, y: by + 0.5 });
+      label.textContent = text;
+      g.appendChild(label);
+      badgeLayer.appendChild(g);
+    }
+  }
+
+  return { render, setHighlights, setSelectable, setBadges };
 }
 
 // SVG <defs>: ocean gradient, faint grid pattern, landmass drop shadow, counter bevel,
@@ -403,6 +428,23 @@ function injectStyle() {
 
     /* Selectable markers lift + glow on hover for clear feedback. */
     #map-svg .token.selectable:hover { transform: scale(1.18); filter: url(#ds-token-glow); }
+
+    /* ---- Battle-forecast pills (win % under attackable targets) ---- */
+    #map-svg .map-badge { pointer-events: none; }
+    #map-svg .map-badge rect {
+      fill: rgba(6,12,18,.92); stroke-width: 1.2;
+      filter: drop-shadow(0 1.5px 2px rgba(0,0,0,.6));
+    }
+    #map-svg .map-badge text {
+      font-size: 10.5px; font-weight: 800; text-anchor: middle;
+      dominant-baseline: central; letter-spacing: .3px;
+    }
+    #map-svg .map-badge.tone-good rect { stroke: #4fd27a; }
+    #map-svg .map-badge.tone-good text { fill: #7fe8a5; }
+    #map-svg .map-badge.tone-warn rect { stroke: #f0c850; }
+    #map-svg .map-badge.tone-warn text { fill: #f6d97e; }
+    #map-svg .map-badge.tone-bad rect { stroke: #ff5252; }
+    #map-svg .map-badge.tone-bad text { fill: #ff8a8a; }
 
     /* Highlighted markers recolor the rim to the action color + add a glow. */
     #map-svg .token.hl-attack   .token-rim { stroke: #ff5252 !important; stroke-width: 2.6; filter: none; }
