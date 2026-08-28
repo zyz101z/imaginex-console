@@ -4,6 +4,6 @@
   "description": "Risk-like browser strategy game on the US map (49 states).",
   "type": "module",
   "scripts": {
-    "test": "node test/engine.test.mjs"
+    "test": "node test/engine.test.mjs && node test/ai.test.mjs && node test/team.test.mjs && node test/ai-coord.test.mjs && node test/winmodes.test.mjs"
   }
 }

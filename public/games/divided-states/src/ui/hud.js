@@ -2,7 +2,7 @@
 // Read-only on GameState. Calls back via handlers. No external deps.
 import { currentPlayerId, playerById, statesOf, sameTeam } from "../engine/gamestate.js";
 import { findSet } from "../engine/cards.js";
-import { regionStatus, regionBonus } from "../engine/rules.js";
+import { regionStatus, regionBonus, teamRegionCount } from "../engine/rules.js";
 import { REGIONS } from "../data/regions.js";
 
 const STYLE_ID = "hud-style";
@@ -33,6 +33,12 @@ const HUD_CSS = `
   text-transform: uppercase; opacity: 0.85; }
 #hud-top .hud-reinforce .rf-num { font-size: 21px; font-weight: 800; line-height: 1;
   font-variant-numeric: tabular-nums; }
+#hud-top .hud-mode { display: none; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--warn, #f0c850);
+  color: var(--warn, #f0c850); border-radius: 999px; padding: 4px 13px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
 #hud-top .hud-spacer { flex: 1 1 auto; }
 #hud-top .hud-turn { color: var(--ink-dim); font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.1em; text-align: right; }
@@ -249,6 +255,10 @@ export function createHud({ topEl, sideEl, handlers }) {
   const rfNum = el("span", "rf-num", "0");
   tReinforce.append(rfLbl, rfNum);
 
+  // Objective chip — only visible in Region Rush ("⚑ Regions 2/4") and
+  // Blitz ("⏳ Round 8/15") so the alternate win condition stays in view.
+  const tMode = el("span", "hud-mode");
+
   const tSpacer = el("div", "hud-spacer");
 
   const tTurn = el("span", "hud-turn");
@@ -271,7 +281,7 @@ export function createHud({ topEl, sideEl, handlers }) {
     muteBtn.textContent = muted ? "🔇 Muted" : "🔊 Sound";
     if (h.onToggleMute) h.onToggleMute(muted);
   });
-  topEl.append(idWrap, tPhase, tReinforce, tSpacer, tTurn, helpBtn, muteBtn);
+  topEl.append(idWrap, tPhase, tReinforce, tMode, tSpacer, tTurn, helpBtn, muteBtn);
 
   // ---- Build side panel DOM once ----
   sideEl.innerHTML = "";
@@ -401,6 +411,18 @@ export function createHud({ topEl, sideEl, handlers }) {
       tReinforce.style.display = "inline-flex";
     } else {
       tReinforce.style.display = "none";
+    }
+
+    // Objective chip (alternate win modes only).
+    if (state.winMode === "regions" && cur) {
+      const mine = teamRegionCount(state, cur.team);
+      tMode.textContent = `⚑ Regions ${mine}/${state.winTarget}`;
+      tMode.style.display = "inline-flex";
+    } else if (state.winMode === "turnlimit") {
+      tMode.textContent = `⏳ Round ${Math.min(state.round, state.turnLimit)}/${state.turnLimit}`;
+      tMode.style.display = "inline-flex";
+    } else {
+      tMode.style.display = "none";
     }
 
     // ---- Cards ----

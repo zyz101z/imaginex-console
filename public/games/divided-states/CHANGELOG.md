@@ -5,6 +5,46 @@ Hawaii out of play). Lives in the ImagineX console; deploys to www.imaginex.game
 
 ---
 
+## 2026-08-27 — Win Variants, Save & Resume, Match Stats
+
+### Two new ways to win
+A **Victory** selector on the start screen picks the mode:
+- **Domination** — the classic; last commander (or team) standing. Unchanged, still
+  the default.
+- **Region Rush** — first player/team to control **4 full regions at once** wins.
+  The win triggers the instant the 4th region is completed (mid-attack included).
+  A gold **⚑ Regions 2/4** chip in the top bar tracks your progress.
+- **Blitz** — the war lasts **15 rounds**; whoever holds the most states when time
+  runs out wins (total armies break ties, so a stalemate still resolves). A
+  **⏳ Round 8/15** chip counts down. In team games both modes score at the
+  alliance level.
+- Losing to an objective now shows a proper **Defeat** screen naming who out-raced
+  you and how — an AI can beat you without wiping you off the map.
+
+### Save & Resume
+- The game **autosaves after every action** (including mid-draft and mid-placement).
+  Close the tab any time; the start screen offers **⟳ Resume Saved Game** and the
+  match continues exactly where it left off — same board, same hand, and the same
+  dice you would have rolled (the RNG's internal state is saved too). The save
+  clears when a match ends or a new one starts.
+
+### Match stats
+- Victory and Defeat screens now show a **scoreboard**: states held, captures,
+  eliminations, and Mandate sets traded per commander, plus how many turns the
+  war took. The headline also says *how* the game was won.
+
+### Juice
+- Eliminating a commander now fires a **full-screen red flash and board shake**
+  on top of the existing capture effects (skipped for reduced-motion users).
+
+*Under the hood:* engine gained `winMode`/`winTarget`/`turnLimit`, a round
+counter, per-player stats, and `serializeGame`/`deserializeGame`; new
+`test/winmodes.test.mjs` (32 checks — region/blitz wins, team scoring, RNG-exact
+save round-trip, full greedy-bot Region Rush games). `npm test` now runs all five
+suites (100 checks).
+
+---
+
 ## 2026-06-12 — Touch fix: region highlight on iPad
 - Region Control rows now **tap-to-pin** on touch devices (iPad has no hover, so tapping
   a region previously highlighted nothing). Tap a region to highlight its states on the

@@ -149,6 +149,8 @@ export function executeAttackRound(s, from, to, moveIfCaptured = null) {
     s.armies[to] = move;
     s.armies[from] -= move;
     s.conqueredThisTurn = true;
+    const aStats = playerById(s, attacker).stats;
+    if (aStats) aStats.captures++;
     logEvent(s, `${playerById(s, attacker).name} captured ${to}`);
     // Elimination: defender lost their last territory.
     if (statesOf(s, defender).length === 0) {
@@ -158,6 +160,7 @@ export function executeAttackRound(s, from, to, moveIfCaptured = null) {
       // Attacker seizes the victim's cards.
       playerById(s, attacker).cards.push(...victim.cards);
       victim.cards = [];
+      if (aStats) aStats.eliminations++;
       logEvent(s, `${victim.name} was eliminated by ${playerById(s, attacker).name}`);
     }
   }
@@ -238,24 +241,80 @@ export function turnInSet(s, playerId, indices = null) {
     s.discard.push(player.cards[i]);
     player.cards.splice(i, 1);
   });
+  if (player.stats) player.stats.setsTraded++;
   logEvent(s, `${player.name} traded a Mandate set for +${bonus}`);
   return bonus;
 }
 
 // --- Win / turn advance ---
 
-// Last team standing — only one team still has a living player. (With no neutral
-// territories this is identical to "one team owns all 49"; in a free-for-all each
-// player is their own team, so it's the classic last-player-standing.)
+// How many regions a TEAM fully controls (regionStatus is null unless one team
+// owns the whole region).
+export function teamRegionCount(s, team) {
+  let n = 0;
+  for (const key of Object.keys(REGIONS)) {
+    const st = regionStatus(s, key);
+    if (st && st.team === team) n++;
+  }
+  return n;
+}
+
+// The living member of `team` holding the most states — the "champion" credited
+// with a team win (in FFA the team has one member, so it's just them).
+function teamChampion(s, team) {
+  let champ = null, best = -1;
+  for (const p of s.players) {
+    if (!p.alive || p.team !== team) continue;
+    const n = statesOf(s, p.id).length;
+    if (n > best) { best = n; champ = p; }
+  }
+  return champ || alivePlayers(s)[0] || null;
+}
+
+function declareWinner(s, team, method) {
+  s.winningTeam = team;
+  const champ = teamChampion(s, team);
+  s.winner = champ ? champ.id : null;
+  s.winMethod = method;
+  return s.winner;
+}
+
+// Winner check for the always-on and immediate conditions:
+// - Last team standing (all modes — with no neutral territories this is identical
+//   to "one team owns all 49"; in FFA it's the classic last-player-standing).
+// - Region Rush: a team controls `winTarget` full regions.
+// The Blitz turn-limit adjudication only happens at end of round — see endTurn.
 export function checkWinner(s) {
   const teams = teamsAlive(s);
-  if (teams.length === 1) {
-    s.winningTeam = teams[0];
-    const champ = s.players.find((p) => p.alive && p.team === teams[0]) || alivePlayers(s)[0];
-    s.winner = champ ? champ.id : null;
-    return s.winner;
+  if (teams.length === 1) return declareWinner(s, teams[0], "domination");
+  if (s.winMode === "regions") {
+    for (const t of teams) {
+      if (teamRegionCount(s, t) >= s.winTarget) return declareWinner(s, t, "regions");
+    }
   }
   return null;
+}
+
+// Blitz: the leading team when the turn limit expires. Most states wins;
+// total armies breaks a tie (then lowest team id, for determinism).
+function adjudicateTurnLimit(s) {
+  const totals = {}; // team -> { states, armies }
+  for (const t of teamsAlive(s)) totals[t] = { states: 0, armies: 0 };
+  for (const c of STATE_CODES) {
+    const o = s.owner[c];
+    if (o == null) continue;
+    const t = s.players[o].team;
+    if (!totals[t]) continue; // dead team shouldn't own states, but be safe
+    totals[t].states++;
+    totals[t].armies += s.armies[c];
+  }
+  let bestTeam = null;
+  for (const t of Object.keys(totals).map(Number)) {
+    if (bestTeam === null) { bestTeam = t; continue; }
+    const a = totals[t], b = totals[bestTeam];
+    if (a.states > b.states || (a.states === b.states && a.armies > b.armies)) bestTeam = t;
+  }
+  return declareWinner(s, bestTeam, "turnlimit");
 }
 
 // Grant end-of-turn card if a capture happened, then advance to next alive player.
@@ -268,8 +327,19 @@ export function endTurn(s) {
     return;
   }
   // advance to next alive player
+  const prev = s.turnPointer;
   do {
     s.turnPointer = (s.turnPointer + 1) % s.order.length;
   } while (!playerById(s, currentPlayerId(s)).alive);
+  if (s.turnPointer <= prev) {
+    // wrapped past the top of the order — a full round has finished
+    s.round++;
+    if (s.turnLimit && s.round > s.turnLimit) {
+      adjudicateTurnLimit(s);
+      s.phase = "gameover";
+      logEvent(s, `Turn limit reached — ${playerById(s, s.winner).name} holds the most territory and wins!`);
+      return;
+    }
+  }
   beginTurn(s);
 }

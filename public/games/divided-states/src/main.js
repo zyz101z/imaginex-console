@@ -4,10 +4,11 @@
 import {
   createGame, autoDistribute, currentPlayer, currentPlayerId, playerById, statesOf,
   allStatesClaimed, unclaimedStates, draftPick, STARTING_ARMIES, playerCount, sameTeam,
+  serializeGame, deserializeGame,
 } from "./engine/gamestate.js";
 import {
   beginTurn, placeArmies, endReinforcement, legalAttacks, executeAttackRound,
-  reachableOwned, fortify, turnInSet, endTurn, reinforcementCount,
+  reachableOwned, fortify, turnInSet, endTurn, reinforcementCount, checkWinner,
 } from "./engine/rules.js";
 import { winProbability } from "./engine/combat.js";
 import { findSet } from "./engine/cards.js";
@@ -31,6 +32,43 @@ const ui = {};
 let busy = false; // true while AI/animation runs — blocks input
 let winReported = false; // guard so a win is reported to the host (ImagineX) only once
 
+// ---- Autosave: the game persists after every render so closing the tab mid-match
+// loses nothing; the start menu offers to resume. Cleared when a match ends. ----
+const SAVE_KEY = "ds_save_v1";
+function autosave() {
+  if (!state || state.phase === "setup" || state.phase === "gameover") return;
+  try { localStorage.setItem(SAVE_KEY, serializeGame(state)); } catch {}
+}
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
+}
+function loadSave() {
+  try {
+    const json = localStorage.getItem(SAVE_KEY);
+    return json ? deserializeGame(json) : null;
+  } catch { return null; }
+}
+const hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
+
+function resumeGame() {
+  const s = loadSave();
+  if (!s) { ui.menus.showStart(); return; }
+  state = s;
+  selFrom = null;
+  winReported = false;
+  busy = false;
+  ui.menus.hide();
+  refresh();
+  if (state.phase === "draft") runDraft();
+  else if (state.phase === "placement") {
+    // A human mid-placement already has reinforcementsRemaining in the save —
+    // re-entering runPlacement would recompute (and refund) it, so just wait for
+    // their clicks. AI placement is atomic, so re-entering is safe there.
+    const p = currentPlayer(state);
+    if (p && !p.isAI) refresh(); else runPlacement();
+  } else runTurn();
+}
+
 // When a HUMAN wins, bump a local cumulative win count and report it to the host
 // page (ImagineX leaderboard). Standalone, window.parent is self and this is a no-op.
 function finishGame() {
@@ -47,6 +85,18 @@ function finishGame() {
   }
   ui.audio.play("win");
   ui.menus.showWin(state);
+}
+
+// Route a finished match to the right overlay. A human "wins" if any human shares
+// the winning team; otherwise it's a Defeat even when the humans are still on the
+// map (an AI can now out-race you in Region Rush / Blitz).
+function finishMatch() {
+  clearSave();
+  const humanWon =
+    state.winner != null &&
+    state.players.some((p) => !p.isAI && p.team === state.winningTeam);
+  if (humanWon) finishGame();
+  else finishDefeat();
 }
 
 function init() {
@@ -68,8 +118,15 @@ function init() {
   });
   ui.log = createLog({ root: $("log-root") });
   ui.fx = createCombatFx({ layer: $("fx-layer"), svg: $("map-svg") });
-  ui.menus = createMenus({ root: $("menu-root"), onNewGame: startNewGame, onShowHelp: () => ui.menus.showHelp() });
+  ui.menus = createMenus({
+    root: $("menu-root"),
+    onNewGame: startNewGame,
+    onShowHelp: () => ui.menus.showHelp(),
+    onResume: resumeGame,
+    hasSave,
+  });
   setupPanelToggle();
+  setupElimFlash();
   ui.menus.showStart();
 }
 
@@ -100,7 +157,25 @@ function setupPanelToggle() {
   });
 }
 
-function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random", teams = null } = {}) {
+// Full-screen red flash + board shake when a commander is eliminated — a bigger
+// payoff than the per-state capture effect. Honors prefers-reduced-motion via CSS.
+let elimFlashEl = null;
+function setupElimFlash() {
+  elimFlashEl = document.createElement("div");
+  elimFlashEl.id = "elim-flash";
+  document.body.appendChild(elimFlashEl);
+}
+function playElimJuice() {
+  const app = $("app");
+  for (const node of [app, elimFlashEl]) {
+    if (!node) continue;
+    node.classList.remove(node === app ? "elim-shake" : "on");
+    void node.offsetWidth; // restart the animation
+    node.classList.add(node === app ? "elim-shake" : "on");
+  }
+}
+
+function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer", names = [], setup = "random", teams = null, winMode = "domination" } = {}) {
   const players = Array.from({ length: playerCount }, (_, i) => {
     let name;
     if (i < humanCount) {
@@ -113,8 +188,10 @@ function startNewGame({ playerCount = 4, humanCount = 1, difficulty = "officer",
     const team = Array.isArray(teams) && teams[i] != null ? teams[i] : i;
     return { name, isAI: i >= humanCount, difficulty, team };
   });
-  state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players });
+  state = createGame({ playerCount, seed: (Date.now() & 0x7fffffff) || 1, players, winMode });
   winReported = false;
+  selFrom = null;
+  clearSave();
   ui.menus.hide();
   if (setup === "draft") {
     // Interactive claim: players take turns picking unclaimed states, then armies
@@ -207,6 +284,7 @@ function refresh() {
   ui.hud.render(state);
   ui.log.render(state);
   updateSelectable();
+  autosave();
 }
 
 const humanActive = () => state && !busy && !currentPlayer(state).isAI && state.phase !== "gameover";
@@ -329,6 +407,8 @@ async function humanAttack(from, to) {
   selFrom = null;
   busy = false;
   refresh();
+  // Region Rush (or a domination sweep) can end the game on this very capture.
+  if (state.phase === "gameover") finishMatch();
 }
 
 async function doEndTurn() {
@@ -346,7 +426,12 @@ function resolveAttack(from, to, moveIfCaptured) {
     rounds.push({ attackerRolls: r.attackerRolls, defenderRolls: r.defenderRolls });
     if (r.captured) { captured = true; eliminated = r.eliminated; break; }
   }
-  if (eliminated) ui.audio.play("eliminate");
+  if (eliminated) { ui.audio.play("eliminate"); playElimJuice(); }
+  // A capture can end the game on the spot (Region Rush target reached, or the
+  // last rival team wiped out) — no need to wait for End Turn.
+  if (captured && state.phase !== "gameover" && checkWinner(state) != null) {
+    state.phase = "gameover";
+  }
   return { rounds, captured, eliminated };
 }
 
@@ -356,7 +441,7 @@ async function runTurn() {
   // Human-wipeout takes priority over an AI "win": if the CPU that eliminated the last
   // human is also the sole survivor, the player should see Defeat, not the CPU's Victory.
   if (humansWipedOut()) { busy = false; refresh(); finishDefeat(); return; }
-  if (state.phase === "gameover") { if (state.winner != null) finishGame(); return; }
+  if (state.phase === "gameover") { if (state.winner != null) finishMatch(); return; }
   const p = currentPlayer(state);
   if (!p.isAI) { refresh(); return; } // hand control to the human
   busy = true;
@@ -365,7 +450,7 @@ async function runTurn() {
   await aiTurn();
   busy = false;
   if (humansWipedOut()) { refresh(); finishDefeat(); return; }
-  if (state.phase === "gameover") { refresh(); finishGame(); return; }
+  if (state.phase === "gameover") { refresh(); finishMatch(); return; }
   endTurn(state); refresh(); await runTurn();
 }
 
@@ -374,6 +459,7 @@ const humansWipedOut = () =>
   !!state && state.players.some((p) => !p.isAI) && !state.players.some((p) => !p.isAI && p.alive);
 
 function finishDefeat() {
+  clearSave();
   ui.audio.play("eliminate");
   ui.menus.showDefeat(state);
 }

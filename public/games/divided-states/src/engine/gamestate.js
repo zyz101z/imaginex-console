@@ -10,19 +10,26 @@ const DEFAULT_COLORS = ["#d64550", "#3b7dd8", "#46a758", "#e0a93b", "#9c5bd6", "
 export const STARTING_ARMIES = { 2: 45, 3: 38, 4: 32, 5: 27, 6: 23 };
 
 // mulberry32 — small, fast, seedable PRNG for reproducible games/tests.
-function mulberry32(seed) {
-  let a = seed >>> 0;
+// The generator's internal word lives on the state object (`_rngState`) so a
+// serialized game resumes with the exact same dice it would have rolled.
+function makeRng(s) {
   return function () {
-    a = (a + 0x6d2b79f5) | 0;
+    s._rngState = (s._rngState + 0x6d2b79f5) | 0;
+    const a = s._rngState;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
+// Win modes: "domination" (classic last-team-standing), "regions" (first team to
+// control `winTarget` full regions), "turnlimit" (most territory when round
+// `turnLimit` ends — a shorter "Blitz" game).
+export function createGame({
+  playerCount = 4, seed = 1, players = null,
+  winMode = "domination", winTarget = 4, turnLimit = 15,
+} = {}) {
   if (playerCount < 2 || playerCount > 6) throw new Error("playerCount must be 2-6");
-  const rng = mulberry32(seed);
 
   const playerList =
     players ||
@@ -34,7 +41,8 @@ export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
 
   const state = {
     seed,
-    _rng: rng,
+    _rngState: seed >>> 0,
+    _rng: null, // attached below (reads/writes _rngState so saves stay exact)
     players: playerList.map((p, i) => ({
       id: i,
       name: p.name || `Player ${i + 1}`,
@@ -45,6 +53,7 @@ export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
       team: p.team !== undefined && p.team !== null ? p.team : i,
       cards: [],
       alive: true,
+      stats: { captures: 0, eliminations: 0, setsTraded: 0 },
     })),
     order: playerList.map((_, i) => i),
     turnPointer: 0,
@@ -53,15 +62,36 @@ export function createGame({ playerCount = 4, seed = 1, players = null } = {}) {
     armies: Object.fromEntries(STATE_CODES.map((c) => [c, 0])),
     reinforcementsRemaining: 0,
     conqueredThisTurn: false,
-    deck: shuffle(buildDeck(), rng),
+    deck: [],
     discard: [],
     setsTurnedIn: 0,
     winner: null,
     winningTeam: null,
+    winMode,
+    winTarget: winMode === "regions" ? winTarget : null,
+    turnLimit: winMode === "turnlimit" ? turnLimit : null,
+    winMethod: null, // set at gameover: "domination" | "regions" | "turnlimit"
+    round: 1, // full cycles through the turn order (drives the Blitz limit)
     turnNumber: 0,
     log: [],
   };
+  state._rng = makeRng(state);
+  state.deck = shuffle(buildDeck(), state._rng);
   return state;
+}
+
+// --- Save / resume ---
+// Everything in the state is plain JSON except _rng (a closure over _rngState,
+// which IS serialized) — so a round-trip resumes mid-game with identical dice.
+export function serializeGame(s) {
+  const { _rng, ...rest } = s;
+  return JSON.stringify(rest);
+}
+
+export function deserializeGame(json) {
+  const s = typeof json === "string" ? JSON.parse(json) : json;
+  s._rng = makeRng(s);
+  return s;
 }
 
 export const playerCount = (s) => s.players.length;

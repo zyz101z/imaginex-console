@@ -202,6 +202,70 @@ const CSS = `
   transition: color 0.14s;
 }
 #menu-root .ds-link:hover { color: var(--accent); }
+#menu-root .ds-secondary {
+  background: transparent;
+  border: 1px solid var(--accent-line, rgba(79,195,247,0.4));
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 12px 14px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-radius: 10px;
+  transition: background 0.14s, box-shadow 0.14s;
+}
+#menu-root .ds-secondary:hover {
+  background: rgba(79,195,247,0.1);
+  box-shadow: 0 4px 16px rgba(79,195,247,0.15);
+}
+
+/* ----- End-of-match stats table ----- */
+#menu-root .ds-stats {
+  margin: 20px 0 2px;
+  text-align: left;
+  animation: ds-fade-up 0.45s 0.32s ease-out both;
+}
+#menu-root .ds-stats table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+#menu-root .ds-stats th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-dim);
+  font-weight: 800;
+  text-align: right;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+#menu-root .ds-stats th:first-child { text-align: left; }
+#menu-root .ds-stats td {
+  padding: 5px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+#menu-root .ds-stats td:first-child { text-align: left; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+#menu-root .ds-stats tr.dead td { opacity: 0.45; }
+#menu-root .ds-stats tr.dead td:first-child { text-decoration: line-through; }
+#menu-root .ds-stats .ds-stat-dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: baseline;
+}
+#menu-root .ds-stats .ds-stats-turns {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  text-align: center;
+}
 
 /* ----- Team assignment rows ----- */
 #menu-root .ds-team-row {
@@ -462,6 +526,36 @@ const DIFFICULTIES = [
   { key: "general", label: "General" },
 ];
 
+const WIN_MODES = [
+  { key: "domination", label: "Domination" },
+  { key: "regions", label: "Region Rush" },
+  { key: "turnlimit", label: "Blitz" },
+];
+const WIN_MODE_HINT = {
+  domination: "Domination — conquer everything. Last commander (or team) standing wins.",
+  regions: "Region Rush — first to control 4 full regions wins. Faster, objective-driven games.",
+  turnlimit: "Blitz — 15 rounds, then whoever holds the most states wins. Great for a quick match.",
+};
+// Eyebrow + subtitle text per way-the-game-ended.
+function methodEyebrow(state) {
+  switch (state && state.winMethod) {
+    case "regions": return "Region Rush Complete";
+    case "turnlimit": return "Turn Limit Reached";
+    default: return "Total Domination";
+  }
+}
+function methodSub(state, winnerPhrase) {
+  // "You control…" / "You & CPU 1 hold…" vs "CPU 2 controls…"
+  const plural = winnerPhrase === "You" || /[&,]/.test(winnerPhrase);
+  switch (state && state.winMethod) {
+    case "regions":
+      return `${winnerPhrase} ${plural ? "control" : "controls"} ${state.winTarget} full regions!`;
+    case "turnlimit":
+      return `${winnerPhrase} ${plural ? "hold" : "holds"} the most territory after ${state.turnLimit} rounds!`;
+    default: return null; // callers keep their classic domination line
+  }
+}
+
 function injectStyle() {
   if (document.getElementById(STYLE_ID)) return;
   const el = document.createElement("style");
@@ -503,7 +597,7 @@ function segmented(options, current, onPick) {
   return wrap;
 }
 
-export function createMenus({ root, onNewGame, onShowHelp }) {
+export function createMenus({ root, onNewGame, onShowHelp, onResume, hasSave }) {
   injectStyle();
 
   function clear() {
@@ -515,12 +609,53 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     root.appendChild(card);
   }
 
+  // End-of-match scoreboard: one row per commander with the stats the engine
+  // tracks (states held at the end, captures, eliminations, sets traded).
+  function statsTable(state) {
+    if (!state || !state.players || !state.players.some((p) => p.stats)) return null;
+    const counts = {};
+    for (const code in state.owner) {
+      const o = state.owner[code];
+      if (o != null) counts[o] = (counts[o] || 0) + 1;
+    }
+    const wrap = el("div", { class: "ds-stats" });
+    const table = el("table");
+    const head = el("tr", {}, [
+      el("th", { text: "Commander" }),
+      el("th", { text: "States" }),
+      el("th", { text: "Captures" }),
+      el("th", { text: "Elims" }),
+      el("th", { text: "Sets" }),
+    ]);
+    table.appendChild(head);
+    const ranked = [...state.players].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+    for (const p of ranked) {
+      const st = p.stats || {};
+      const dot = el("span", { class: "ds-stat-dot" });
+      dot.style.background = p.color || "var(--accent)";
+      const row = el("tr", { class: p.alive === false ? "dead" : "" }, [
+        el("td", {}, [dot, p.name || "Unknown"]),
+        el("td", { text: String(counts[p.id] || 0) }),
+        el("td", { text: String(st.captures || 0) }),
+        el("td", { text: String(st.eliminations || 0) }),
+        el("td", { text: String(st.setsTraded || 0) }),
+      ]);
+      table.appendChild(row);
+    }
+    wrap.appendChild(table);
+    wrap.appendChild(
+      el("p", { class: "ds-stats-turns", text: `Decided in ${state.turnNumber} turns.` })
+    );
+    return wrap;
+  }
+
   function showStart() {
     // Local selection state.
     let playerCount = 4;
     let humanCount = 1;
     let difficulty = "officer";
     let setup = "random";
+    let winMode = "domination";
     let teamsOn = false;
     const teams = [0, 1, 2, 3, 4, 5];
     const names = ["Player 1", "Player 2", "Player 3", "Player 4", "Player 5", "Player 6"];
@@ -538,6 +673,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     const teamsField = el("div", { class: "ds-field" });
     const diffField = el("div", { class: "ds-field" });
     const setupField = el("div", { class: "ds-field" });
+    const winModeField = el("div", { class: "ds-field" });
 
     function renderPlayers() {
       playersField.innerHTML = "";
@@ -673,6 +809,19 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       );
     }
 
+    function renderWinMode() {
+      winModeField.innerHTML = "";
+      winModeField.appendChild(el("span", { class: "ds-label", text: "Victory" }));
+      winModeField.appendChild(
+        segmented(
+          WIN_MODES.map((m) => ({ value: m.key, label: m.label })),
+          winMode,
+          (v) => { winMode = v; renderWinMode(); }
+        )
+      );
+      winModeField.appendChild(el("div", { class: "ds-hint", text: WIN_MODE_HINT[winMode] }));
+    }
+
     function renderDifficulty() {
       diffField.innerHTML = "";
       diffField.appendChild(el("span", { class: "ds-label", text: "AI difficulty" }));
@@ -694,6 +843,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     renderTeams();
     renderDifficulty();
     renderSetup();
+    renderWinMode();
 
     const startBtn = el("button", {
       type: "button",
@@ -706,10 +856,21 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           humanCount,
           difficulty,
           setup,
+          winMode,
           names: names.slice(0, humanCount),
           teams: teamsOn ? teams.slice(0, playerCount) : null,
         }),
     });
+    // Offer to resume a saved match (the game autosaves as you play).
+    const resumeBtn =
+      onResume && typeof hasSave === "function" && hasSave()
+        ? el("button", {
+            type: "button",
+            class: "ds-secondary",
+            text: "⟳ Resume Saved Game",
+            onClick: () => onResume(),
+          })
+        : null;
     const helpBtn = el("button", {
       type: "button",
       class: "ds-link",
@@ -728,7 +889,8 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(teamsField);
     card.appendChild(diffField);
     card.appendChild(setupField);
-    card.appendChild(el("div", { class: "ds-actions" }, [startBtn, helpBtn]));
+    card.appendChild(winModeField);
+    card.appendChild(el("div", { class: "ds-actions" }, [startBtn, resumeBtn, helpBtn]));
 
     mount(card);
   }
@@ -746,7 +908,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       const distinct = [...new Set(state.players.map((p) => p.team))];
       const letter = String.fromCharCode(65 + distinct.indexOf(state.winningTeam));
 
-      card.appendChild(el("p", { class: "ds-win-eyebrow", text: "Total Domination" }));
+      card.appendChild(el("p", { class: "ds-win-eyebrow", text: methodEyebrow(state) }));
       card.appendChild(el("h1", { class: "ds-win-banner", text: "Team " + letter + " Victory" }));
 
       const list = el("ul", { class: "ds-win-members" });
@@ -767,8 +929,10 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
           ? memberNames.join(" & ")
           : memberNames.slice(0, -1).join(", ") + " & " + memberNames[memberNames.length - 1];
       card.appendChild(
-        el("p", { class: "ds-win-sub", text: phrase + " conquer the nation!" })
+        el("p", { class: "ds-win-sub", text: methodSub(state, phrase) || phrase + " conquer the nation!" })
       );
+      const teamStats = statsTable(state);
+      if (teamStats) card.appendChild(teamStats);
       card.appendChild(
         el("div", { class: "ds-actions" }, [
           el("button", {
@@ -790,7 +954,7 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     const name = winner && winner.name ? winner.name : "Unknown";
     const color = (winner && winner.color) || "var(--accent)";
 
-    card.appendChild(el("p", { class: "ds-win-eyebrow", text: "Total Domination" }));
+    card.appendChild(el("p", { class: "ds-win-eyebrow", text: methodEyebrow(state) }));
     card.appendChild(el("h1", { class: "ds-win-banner", text: "Victory" }));
 
     const dot = el("span", { class: "ds-win-dot" });
@@ -801,8 +965,13 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(nameEl);
 
     card.appendChild(
-      el("p", { class: "ds-win-sub", text: "All 49 states united under one banner." })
+      el("p", {
+        class: "ds-win-sub",
+        text: methodSub(state, name) || "All 49 states united under one banner.",
+      })
     );
+    const soloStats = statsTable(state);
+    if (soloStats) card.appendChild(soloStats);
     card.appendChild(
       el("div", { class: "ds-actions" }, [
         el("button", {
@@ -824,7 +993,11 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
     card.appendChild(el("h1", { class: "ds-win-banner", text: "Defeat" }));
 
     let sub = "Your forces have been driven from the map.";
-    if (state && state.players && state.owner) {
+    if (state && state.winner != null && state.winMethod && state.winMethod !== "domination") {
+      // Lost to an objective, not annihilation (Region Rush / Blitz).
+      const w = state.players.find((p) => p && p.id === state.winner);
+      sub = methodSub(state, (w && w.name) || "The enemy") || sub;
+    } else if (state && state.players && state.owner) {
       const counts = {};
       for (const code in state.owner) counts[state.owner[code]] = (counts[state.owner[code]] || 0) + 1;
       const top = state.players
@@ -833,6 +1006,8 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       if (top) sub = `${top.name || "The enemy"} commands the most territory now.`;
     }
     card.appendChild(el("p", { class: "ds-win-sub", text: sub }));
+    const defeatStats = statsTable(state);
+    if (defeatStats) card.appendChild(defeatStats);
     card.appendChild(
       el("div", { class: "ds-actions" }, [
         el("button", {
@@ -853,9 +1028,19 @@ export function createMenus({ root, onNewGame, onShowHelp }) {
       <span class="ds-help-rule"></span>
       <p class="ds-help-lede">Divided States is a war of conquest fought across the real US map.</p>
 
-      <h3>The Goal</h3>
-      <p><b>Domination.</b> Be the last commander standing — conquer the whole
-         country by owning <b>all 49 states</b>. (Hawaii is not in play.)</p>
+      <h3>The Goal — 3 Ways to Play</h3>
+      <p>Pick a <b>Victory</b> mode on the start screen. (Hawaii is not in play.)</p>
+      <ul>
+        <li><b>Domination</b> — the classic. Be the last commander (or team)
+            standing by conquering <b>all 49 states</b>.</li>
+        <li><b>Region Rush</b> — first to control <b>4 full regions</b> at once
+            wins. Faster, objective-driven games.</li>
+        <li><b>Blitz</b> — the war lasts <b>15 rounds</b>; whoever holds the
+            <b>most states</b> when time runs out wins (total armies break ties).
+            The top bar counts the rounds down.</li>
+      </ul>
+      <p class="ds-note">Your game saves automatically as you play — leave any time
+         and pick "Resume Saved Game" on the start screen to continue.</p>
 
       <h3>Your Turn — 3 Phases</h3>
       <ol class="ds-steps">
