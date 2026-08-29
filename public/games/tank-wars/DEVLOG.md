@@ -11,6 +11,11 @@
 2. (carried) Multiplayer reconnect grace on connection blips. RTT indicator ✅ DONE 2026-08-22.
 3. (carried) Metered dashboard Secret Key 401 loose end.
 
+## Session log — 2026-08-29
+| Ver | Commit | What |
+|---|---|---|
+| HELP | (this) | **📖 HOW TO PLAY rewrite + menu tooltips** (user: players don't know what the modes are, e.g. Convoy). Help box gains a GAME MODES section covering all 8 entry points (Campaign / Storm / Daily+weekly twist / Boss Rush + its wave-10 gate / Convoy stay-close rules / Quick / Online VS incl. both co-ops / Daily Quests) followed by a COMBAT BASICS header over the existing content; native `title` hover tooltips added to every menu button (desktop hover explainer; touch users get the help box). Facts cross-checked vs DEVLOG (11 tanks, 14 medals w/ 8-medal AURORA gate, rush gate, first-to-3 vs boss first-to-2). No engine changes — storm 224 + deep green (note: deep's check COUNT varies run-to-run 57-59 by fuzz path; 0 failed is the signal). |
+
 ## Session log — 2026-08-25
 | Ver | Commit | What |
 |---|---|---|

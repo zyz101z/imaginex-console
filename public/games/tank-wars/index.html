@@ -74,25 +74,25 @@
     <h1 class="title">TANK WARS</h1>
     <p class="subtitle">BOUNCING-SHELL MAZE BATTLE</p>
     <p class="scrapBadge">&#128296; <span id="scrapMenu">0</span> SCRAP</p>
-    <button class="btn teal" id="btnCampaign">&#9658;&nbsp; CAMPAIGN</button>
-    <button class="btn" id="btnSurvival" style="background:linear-gradient(180deg,#ffd97a,#f0973a);">&#9889; SURVIVAL &mdash; TANK STORM</button>
+    <button class="btn teal" id="btnCampaign" title="20 battles across two acts — first to 3 rounds each (boss showdowns are first to 2). Stars + the biggest scrap rewards.">&#9658;&nbsp; CAMPAIGN</button>
+    <button class="btn" id="btnSurvival" style="background:linear-gradient(180deg,#ffd97a,#f0973a);" title="Endless waves, up to 4 enemies at once, a BOSS every 5th wave. Pick a stacking upgrade after each wave — how deep can you go?">&#9889; SURVIVAL &mdash; TANK STORM</button>
     <p class="tag" id="survTag" style="margin:2px 0 0;"></p>
     <div class="row">
-      <button class="btn" id="btnDaily" style="background:linear-gradient(180deg,#9fd8ff,#5aa8e8);">&#128197; DAILY STORM</button>
-      <button class="btn" id="btnRush" style="background:linear-gradient(180deg,#ff9a9a,#d9534f);">&#9760; BOSS RUSH</button>
-      <button class="btn" id="btnEscort" style="background:linear-gradient(180deg,#9fe8b8,#4aa86a);">&#128666; CONVOY</button>
+      <button class="btn" id="btnDaily" style="background:linear-gradient(180deg,#9fd8ff,#5aa8e8);" title="Everyone gets the SAME storm today — your best run goes on the worldwide Top 10. A weekly twist rule shakes things up.">&#128197; DAILY STORM</button>
+      <button class="btn" id="btnRush" style="background:linear-gradient(180deg,#ff9a9a,#d9534f);" title="Every wave is a boss, back to back. Unlocks at Storm wave 10.">&#9760; BOSS RUSH</button>
+      <button class="btn" id="btnEscort" style="background:linear-gradient(180deg,#9fe8b8,#4aa86a);" title="Escort the cargo drone — it only rolls while you're close, has 4 HP, and the enemies hunt IT. Deliver each leg for hazard pay; the run ends if the drone (or you) goes down.">&#128666; CONVOY</button>
     </div>
     <p class="tag" id="dailyTag" style="margin:2px 0 0;"></p>
-    <p class="tag" id="questTag" style="margin:2px 0 0;white-space:pre-line;"></p>
+    <p class="tag" id="questTag" style="margin:2px 0 0;white-space:pre-line;" title="Three fresh goals every day — scrap pays out instantly when each one completes."></p>
     <div class="row">
-      <button class="btn" id="btnRookie">QUICK &bull; ROOKIE</button>
-      <button class="btn" id="btnAce">QUICK &bull; ACE</button>
+      <button class="btn" id="btnRookie" title="One fast match vs an easy AI. First to 5 rounds.">QUICK &bull; ROOKIE</button>
+      <button class="btn" id="btnAce" title="One fast match vs an expert AI. First to 5 rounds.">QUICK &bull; ACE</button>
     </div>
-    <button class="btn" id="btnOnline" style="background:linear-gradient(180deg,#b3bcff,#8a96f5);">ONLINE VS &nbsp;<span style="font-size:11px;vertical-align:2px;">BETA</span></button>
+    <button class="btn" id="btnOnline" style="background:linear-gradient(180deg,#b3bcff,#8a96f5);" title="Play family by room code — head-to-head VS, Co-op Storm (fight the waves together), and Co-op Convoy (two escorts, one drone).">ONLINE VS &nbsp;<span style="font-size:11px;vertical-align:2px;">BETA</span></button>
     <div class="row">
-      <button class="btn ghost" id="btnGarage">GARAGE &mdash; TANKS</button>
-      <button class="btn ghost" id="btnMedals">&#127942; MEDALS</button>
-      <button class="btn ghost" id="btnBoard">&#127758; TODAY'S TOP 10</button>
+      <button class="btn ghost" id="btnGarage" title="Spend scrap on 11 tanks with totally different weapons, plus shell trails and victory styles.">GARAGE &mdash; TANKS</button>
+      <button class="btn ghost" id="btnMedals" title="14 lifetime goals — each pays scrap once, and 8 medals unlock the AURORA tank.">&#127942; MEDALS</button>
+      <button class="btn ghost" id="btnBoard" title="Today's Daily Storm Top 10 and the best Co-op Storm duos.">&#127758; TODAY'S TOP 10</button>
     </div>
     <button class="btn ghost" id="btnHelp">HOW TO PLAY</button>
     <p class="tag" id="winTag"></p>
@@ -137,9 +137,30 @@
   <div class="panel">
     <h1 class="title" style="font-size:30px;">HOW TO PLAY</h1>
     <div class="help">
+      <p style="text-align:center;color:#7fd8c8;letter-spacing:2px;font-weight:800;font-size:13px;margin:0 0 8px;">GAME MODES</p>
+      <p><b style="color:#4de3c2">&#9658; CAMPAIGN:</b> 20 battles across two acts against ever-smarter
+      tanks — first to 3 rounds each (the big <b style="color:#ff5d73">BOSS SHOWDOWNS</b> are first to 2).
+      Earn stars and the biggest scrap purses.</p>
       <p><b style="color:#ffd166">&#9889; SURVIVAL — TANK STORM:</b> endless waves, up to 4 tanks at once.
       Every 5th wave is a <b style="color:#ff5d73">BOSS</b> with an armor bar — watch for its special attack.
       Clear a wave, pick 1 of 3 upgrades; they stack for the whole run. How deep can you go?</p>
+      <p><b style="color:#9fd8ff">&#128197; DAILY STORM:</b> everyone in the world gets the <b>same</b> storm
+      each day — same arenas, same waves. Your best run today goes on <b>TODAY'S TOP 10</b>.
+      Each week adds one twist rule (shown on the menu) that shakes up the whole week.</p>
+      <p><b style="color:#ff9a9a">&#9760; BOSS RUSH:</b> no small fry — <b>every wave is a boss</b>, back to
+      back, and they get tougher fast. Unlocks once you've reached wave 10 in the Storm.</p>
+      <p><b style="color:#9fe8b8">&#128666; CONVOY:</b> escort the cargo drone across the maze. It only rolls
+      while you're <b>close by</b> — stray too far and it stops and calls for you. It has 4 hit points and
+      the enemies hunt <b>it</b>, not just you. Deliver it to finish a leg, grab an upgrade, and start the
+      next. The run ends if the drone — or you — goes down. Hazard pay for every leg delivered.</p>
+      <p><b>QUICK &bull; ROOKIE / ACE:</b> one fast match against an easy or expert AI. First to 5 rounds.</p>
+      <p><b style="color:#b3bcff">ONLINE VS:</b> play family by room code — head-to-head battles,
+      <b style="color:#ffd166">&#9889; CO-OP STORM</b> (fight the waves together; a downed teammate revives
+      next wave; best duos hit the &#129309; board) and <b style="color:#9fe8b8">CO-OP CONVOY</b> (two escorts,
+      one drone).</p>
+      <p><b style="color:#ffd166">&#127941; DAILY QUESTS:</b> three fresh goals every day (listed on the menu) —
+      scrap pays out the moment each one pops.</p>
+      <p style="text-align:center;color:#7fd8c8;letter-spacing:2px;font-weight:800;font-size:13px;margin:14px 0 8px;">COMBAT BASICS</p>
       <p><b style="color:#7fd8ff">&#10052; FREEZE</b> power-up (solo + co-op storm): grab it to freeze every enemy
       solid for 3.5 seconds. The AI can grab it too — don't let it.</p>
       <p><b>Destroy the other tank!</b> Shells <b>bounce off walls</b> — and yes, your own shell
