@@ -679,7 +679,14 @@ try { muted = localStorage.getItem('tankwars_muted') === '1'; } catch (e) {}
 // ============================== AUDIO (procedural) ==============================
 let AC = null, masterGain = null;
 function audioInit() {
-  if (AC) return;
+  if (AC) {
+    // iOS suspends ("interrupts") the context when audio focus changes — e.g.
+    // around a WebRTC co-op session ending — and it never un-suspends itself,
+    // leaving every SFX a silent no-op until reload. audioInit runs on every
+    // keydown/touch (user gestures), so nudge it back to life here.
+    if (AC.state !== 'running') { try { AC.resume().catch(() => {}); } catch (e) {} }
+    return;
+  }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = AC.createGain();
@@ -3510,12 +3517,23 @@ function resumeGame() {
   if (mode !== 'play' || !paused || matchCfg.mode === 'online') return false;
   paused = false;
   touchState.fire = 0;   // the resuming tap must not also fire the cannon
+  audioInit();           // the tap is a user gesture — revive a suspended AudioContext
+  // Blur-pause stops the music; the P-key resume restarts it but this tap path
+  // didn't — on iPad (no P key) the music stayed dead for the rest of the match.
+  if (music && music.paused && phase !== 'matchover' && phase !== 'survover') {
+    music.play().catch(() => {});
+  }
   return true;
 }
 canvas.addEventListener('pointerdown', () => { resumeGame(); });
 window.addEventListener('blur', () => {
   if (mode === 'play' && matchCfg.mode !== 'online') { paused = true; if (music) music.pause(); }
   for (const k in keys) keys[k] = false;
+});
+// Coming back to the tab: best-effort revive of a suspended AudioContext (some
+// platforms allow it here; the next tap/keypress covers the ones that don't).
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && AC && AC.state !== 'running') { try { AC.resume().catch(() => {}); } catch (e) {} }
 });
 
 // touch: left half steer (angle from touch start OR relative to tank), right half fire
