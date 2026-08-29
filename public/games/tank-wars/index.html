@@ -36,6 +36,9 @@
   #soundBtn { position:fixed; top:10px; right:12px; z-index:20; background:rgba(15,22,40,0.85); color:#9fb3d9;
     border:1px solid #2a3b5e; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:700; cursor:pointer; }
   #soundBtn:hover { color:#dfe8ff; border-color:#4de3c2; }
+  #fxBtn { position:fixed; top:10px; right:86px; z-index:20; background:rgba(15,22,40,0.85); color:#9fb3d9;
+    border:1px solid #2a3b5e; border-radius:8px; padding:6px 12px; font-size:13px; font-weight:700; cursor:pointer; }
+  #fxBtn:hover { color:#dfe8ff; border-color:#4de3c2; }
   .tag { font-size:12px; color:#5f7099; margin-top:18px; }
   .panel.wide { max-width:640px; width:92vw; text-align:left; }
   .scrapBadge { display:inline-block; background:#1a2440; border:1px solid #3a4a70; border-radius:20px;
@@ -68,6 +71,7 @@
 <body>
 <div id="wrap"><canvas id="game" width="960" height="640"></canvas></div>
 <button id="soundBtn">&#9834; ON</button>
+<button id="fxBtn" title="Graphics effects. AUTO trims them by itself if this device runs slow; LOW forces the smooth/fast look; FULL forces all the glow.">FX AUTO</button>
 
 <div id="menu" class="overlay">
   <div class="panel">
@@ -410,9 +414,22 @@ try {
       profile.life = (p.life && typeof p.life === 'object') ? p.life : {};
       profile.medals = (p.medals && typeof p.medals === 'object') ? p.medals : {};
       profile.pilot = typeof p.pilot === 'string' ? p.pilot.slice(0, 16) : null;
+      profile.fxMode = ['auto', 'low', 'full'].includes(p.fxMode) ? p.fxMode : 'auto';
+      profile.fxAutoLow = !!p.fxAutoLow;
     }
   }
 } catch (e) {}
+if (!profile.fxMode) profile.fxMode = 'auto';
+// ---- Performance (FX) mode: on weak devices (older iPads especially) the glow
+// effects + retina canvas tank the frame rate, which FEELS like network lag in
+// co-op. fxLow trims glows/particles and renders at 1x. 'auto' latches it when
+// the FPS watchdog in frame() sees sustained slowness; the latch persists per
+// device. The FX button (top-right) forces low/full.
+let fxLow = false;
+function computeFx() {
+  fxLow = profile.fxMode === 'low' || (profile.fxMode === 'auto' && !!profile.fxAutoLow);
+}
+computeFx();
 if (!profile.owned[profile.tank]) profile.tank = 'scout';
 function saveProfile() { try { localStorage.setItem('tankwars_profile', JSON.stringify(profile)); } catch (e) {} }
 function campaignUnlockedThrough() {   // highest battle id the player may attempt
@@ -1134,6 +1151,7 @@ function fireLaser(t) {
   spawnParticles(t.x + Math.cos(t.a) * (TANK_R + 8), t.y + Math.sin(t.a) * (TANK_R + 8), 8, '#ffffff', 120, 0.2);
 }
 function spawnParticles(x, y, n, col, speed, life) {
+  if (fxLow) n = Math.max(1, Math.ceil(n * 0.4));   // performance mode: fewer sparks
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = (0.3 + Math.random() * 0.7) * speed;
     particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: life * (0.5 + Math.random()), max: life, col, r: 1.5 + Math.random() * 2.5 });
@@ -1921,10 +1939,10 @@ function drawDraft() {
     survDraftRects.push({ x, y, w: cw, h: ch, i });
     ctx.fillStyle = '#101a30';
     ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2.5;
-    ctx.shadowColor = 'rgba(255,209,102,0.35)'; ctx.shadowBlur = 16;
+    ctx.shadowColor = 'rgba(255,209,102,0.35)'; ctx.shadowBlur = fxLow ? 0 :16;
     roundRect(x, y, cw, ch, 14);
     ctx.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
-    ctx.shadowBlur = 0;
+    ctx.shadowBlur = fxLow ? 0 :0;
     ctx.font = '46px serif';
     ctx.fillText(pk.icon, x + cw / 2, y + 52);
     ctx.fillStyle = '#ffd166'; ctx.font = '900 19px sans-serif';
@@ -2903,7 +2921,7 @@ function render() {
       grad.addColorStop(0.55, 'rgba(255,110,30,' + (0.85 * pulse) + ')');
       grad.addColorStop(1, 'rgba(120,30,5,0.9)');
       ctx.save();
-      ctx.shadowColor = '#ff7a20'; ctx.shadowBlur = 18 * pulse;
+      ctx.shadowColor = '#ff7a20'; ctx.shadowBlur = fxLow ? 0 :18 * pulse;
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = 'rgba(40,12,4,0.9)'; ctx.lineWidth = 2.5;
@@ -2918,7 +2936,7 @@ function render() {
       const col = g.pair === 0 ? '#4fd8ff' : '#c86bff';
       const spin = performance.now() / 700 + g.pair * 2;
       ctx.save();
-      ctx.shadowColor = col; ctx.shadowBlur = 16;
+      ctx.shadowColor = col; ctx.shadowBlur = fxLow ? 0 :16;
       if (themeImgs.gateRing) {
         ctx.globalAlpha = 0.9;
         const d = GATE.r * 2.5;
@@ -2990,7 +3008,7 @@ function render() {
       ctx.strokeStyle = m.col; ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(m.x, m.y, 7, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = armed ? '#ff5b5b' : '#ffd166';
-      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 6;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = fxLow ? 0 :6;
       ctx.beginPath(); ctx.arc(m.x, m.y, 2.2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
@@ -3003,12 +3021,12 @@ function render() {
       const mine = s.owner === myShellIdx;
       const col = s.big ? '#c792ea' : s.col;
       ctx.shadowColor = (s.phase && !s.phased) ? '#b48cff' : col;
-      ctx.shadowBlur = (s.phase && !s.phased) ? 16 : (s.big || s.heavy) ? 18 : (mine ? 8 : 15);
+      ctx.shadowBlur = fxLow ? 0 :(s.phase && !s.phased) ? 16 : (s.big || s.heavy) ? 18 : (mine ? 8 : 15);
       if (s.phase && !s.phased) ctx.globalAlpha = 0.8;   // still charged: it can ghost a wall
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
       if (!mine) {
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = fxLow ? 0 :0;
         ctx.fillStyle = '#ffffff';
         ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(1.6, s.r * 0.45), 0, Math.PI * 2); ctx.fill();
       }
@@ -3019,11 +3037,11 @@ function render() {
       ctx.save();
       ctx.globalAlpha = Math.max(0, b.t / b.max);
       ctx.lineCap = 'round';
-      ctx.strokeStyle = b.col; ctx.lineWidth = 3.5; ctx.shadowColor = b.col; ctx.shadowBlur = 14;
+      ctx.strokeStyle = b.col; ctx.lineWidth = 3.5; ctx.shadowColor = b.col; ctx.shadowBlur = fxLow ? 0 :14;
       ctx.beginPath();
       for (const [x1, y1, x2, y2] of b.segs) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
       ctx.stroke();
-      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.3; ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.3; ctx.shadowBlur = fxLow ? 0 :0;
       ctx.stroke();
       ctx.restore();
     }
@@ -3045,7 +3063,7 @@ function render() {
   else {
     ctx.save();
     ctx.shadowColor = 'rgba(90,140,220,0.55)';
-    ctx.shadowBlur = 7;
+    ctx.shadowBlur = fxLow ? 0 :7;
     ctx.fillStyle = '#3d4a66';
     for (const r of wallRects || []) ctx.fillRect(r.x, r.y, r.w, r.h);
     ctx.restore();
@@ -3101,7 +3119,7 @@ function render() {
         ctx.fillStyle = '#9fb3d9';
         ctx.beginPath(); ctx.arc(touchState.ax, touchState.ay, JOY_MAX, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 0.75;
-        ctx.fillStyle = P1_COL; ctx.shadowColor = P1_COL; ctx.shadowBlur = 10;
+        ctx.fillStyle = P1_COL; ctx.shadowColor = P1_COL; ctx.shadowBlur = fxLow ? 0 :10;
         ctx.beginPath(); ctx.arc(touchState.ax + touchState.kx, touchState.ay + touchState.ky, 22, 0, Math.PI * 2); ctx.fill();
       } else {
         // idle hint ring, bottom-left
@@ -3116,9 +3134,9 @@ function render() {
       ctx.globalAlpha = pressed ? 0.85 : 0.3;
       ctx.fillStyle = pressed ? '#ff6b6b' : '#1a2440';
       ctx.strokeStyle = '#ff6b6b'; ctx.lineWidth = 3;
-      if (pressed) { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = 18; }
+      if (pressed) { ctx.shadowColor = '#ff6b6b'; ctx.shadowBlur = fxLow ? 0 :18; }
       ctx.beginPath(); ctx.arc(fx, fy, 52, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.shadowBlur = fxLow ? 0 :0;
       ctx.beginPath(); ctx.arc(fx, fy, 52, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = pressed ? 1 : 0.55;
       ctx.fillStyle = pressed ? '#ffffff' : '#ff8f8f';
@@ -3142,7 +3160,7 @@ function drawDrone(t) {
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
   ctx.translate(t.x, t.y); ctx.rotate(t.a);
-  ctx.shadowColor = '#9fe8b8'; ctx.shadowBlur = 12;
+  ctx.shadowColor = '#9fe8b8'; ctx.shadowBlur = fxLow ? 0 :12;
   ctx.fillStyle = '#2a4436';                                    // hull
   roundRect2(ctx, -13, -9, 26, 18, 5);
   ctx.fillStyle = '#c9a86a';                                    // cargo crate
@@ -3155,7 +3173,7 @@ function drawDrone(t) {
   ctx.rotate(-t.a);
   // hp pips
   const n = ESCORT.hp;
-  ctx.shadowBlur = 0;
+  ctx.shadowBlur = fxLow ? 0 :0;
   for (let i = 0; i < n; i++) {
     ctx.fillStyle = i < (t.hp || 0) ? '#9fe8b8' : 'rgba(160,170,200,0.25)';
     ctx.fillRect(-n * 5 + i * 10 + 1, -t.r - 14, 8, 4);
@@ -3203,7 +3221,7 @@ function drawTankOverlays(t) {
       ctx.globalAlpha = warm ? 0.25 + 0.2 * Math.sin(performance.now() / 70) : 0.85;
       ctx.strokeStyle = warm ? '#ffd34f' : '#ffb028';
       ctx.lineWidth = warm ? 2 : 5;
-      ctx.shadowColor = '#ffb028'; ctx.shadowBlur = warm ? 0 : 14;
+      ctx.shadowColor = '#ffb028'; ctx.shadowBlur = fxLow ? 0 :warm ? 0 : 14;
       ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(end.x, end.y); ctx.stroke();
     }
     ctx.restore();
@@ -3247,7 +3265,7 @@ function drawTank(t) {
   if (t.shield) {
     ctx.save();
     ctx.strokeStyle = '#4de3c2'; ctx.lineWidth = 2;
-    ctx.shadowColor = '#4de3c2'; ctx.shadowBlur = 12;
+    ctx.shadowColor = '#4de3c2'; ctx.shadowBlur = fxLow ? 0 :12;
     ctx.globalAlpha = 0.7 + 0.3 * Math.sin(performance.now() / 130);
     ctx.beginPath(); ctx.arc(0, 0, TANK_R + 6, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
@@ -3259,12 +3277,12 @@ function drawTank(t) {
     // Tint slot: player 0, boss 2 (red), any other enemy 1 — survival tanks have i > 1.
     const sm = SPRITE_META[t.kind];
     const scale = ((t.r || TANK_R) * 2.55) / sm.h;
-    ctx.shadowColor = t.glow; ctx.shadowBlur = t.boss ? 20 : 12;
+    ctx.shadowColor = t.glow; ctx.shadowBlur = fxLow ? 0 :t.boss ? 20 : 12;
     ctx.drawImage(spr[t.boss ? 2 : (t.i === 0 ? 0 : 1)], -sm.cx * scale, -sm.cy * scale, sm.w * scale, sm.h * scale);
     ctx.restore();
   } else {
     // vector fallback (sprite still loading / failed)
-    ctx.shadowColor = t.glow; ctx.shadowBlur = 14;
+    ctx.shadowColor = t.glow; ctx.shadowBlur = fxLow ? 0 :14;
     // treads
     ctx.fillStyle = '#222c44';
     ctx.fillRect(-TANK_R, -TANK_R - 1, TANK_R * 2, 7);
@@ -3287,7 +3305,7 @@ function drawTank(t) {
       ctx.fillRect(6, -bw / 2, TANK_R + 6, bw);
     }
     if (t.kind === 'photon') {   // glowing emitter tip
-      ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = fxLow ? 0 :8;
       ctx.beginPath(); ctx.arc(TANK_R + 11, 0, 3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
@@ -3301,7 +3319,7 @@ function drawTank(t) {
   } else if (t.power === 'big') {
     ctx.save();
     ctx.fillStyle = '#c792ea'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
-    ctx.shadowColor = '#c792ea'; ctx.shadowBlur = 8;
+    ctx.shadowColor = '#c792ea'; ctx.shadowBlur = fxLow ? 0 :8;
     ctx.fillText('BIG', t.x, t.y - TANK_R - 10);
     ctx.restore();
   }
@@ -3321,7 +3339,7 @@ function drawPowerup(p) {
   ctx.translate(p.x, p.y);
   ctx.scale(pulse, pulse);
   const col = powerColor(p.kind);
-  ctx.shadowColor = col; ctx.shadowBlur = 16;
+  ctx.shadowColor = col; ctx.shadowBlur = fxLow ? 0 :16;
   ctx.strokeStyle = col; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = col;
@@ -3338,10 +3356,10 @@ function drawBanner(text, col, size, yOff) {
   ctx.font = '900 ' + size + 'px "Arial Black", Arial, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const y = (yOff || H / 2);
-  ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 18;
+  ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = fxLow ? 0 :18;
   ctx.lineWidth = size / 9; ctx.strokeStyle = 'rgba(5,8,16,0.95)';
   ctx.strokeText(text, W / 2, y);
-  ctx.shadowColor = col; ctx.shadowBlur = 24;
+  ctx.shadowColor = col; ctx.shadowBlur = fxLow ? 0 :24;
   ctx.fillStyle = col;
   ctx.fillText(text, W / 2, y);
   ctx.restore();
@@ -3421,7 +3439,7 @@ function drawHUD() {
 function drawPip(x, y, filled, col) {
   ctx.save();
   ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2);
-  if (filled) { ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fillStyle = col; ctx.fill(); }
+  if (filled) { ctx.shadowColor = col; ctx.shadowBlur = fxLow ? 0 :8; ctx.fillStyle = col; ctx.fill(); }
   else { ctx.strokeStyle = 'rgba(160,180,220,0.4)'; ctx.lineWidth = 1.5; ctx.stroke(); }
   ctx.restore();
 }
@@ -3440,10 +3458,31 @@ canvas.addEventListener('pointerdown', (e) => {
 // ============================== LOOP ==============================
 let last = performance.now(), acc = 0;
 const STEP = 1 / 60;
+// FPS watchdog: in 'auto' FX mode, two consecutive slow 2s windows during real
+// play latch performance mode for this device (persisted — next session starts
+// smooth immediately). One-way latch: turning effects off raises FPS, so
+// re-measuring would just oscillate.
+const fxWatch = { t: 0, frames: 0, bad: 0 };
+function fxWatchdog(rawDt) {
+  if (fxLow || profile.fxMode !== 'auto' || mode !== 'play') { fxWatch.t = 0; fxWatch.frames = 0; return; }
+  fxWatch.t += rawDt; fxWatch.frames++;
+  if (fxWatch.t < 2) return;
+  const fps = fxWatch.frames / fxWatch.t;
+  fxWatch.t = 0; fxWatch.frames = 0;
+  fxWatch.bad = fps < 40 ? fxWatch.bad + 1 : 0;
+  if (fxWatch.bad >= 2) {
+    profile.fxAutoLow = true;
+    computeFx(); resize(); saveProfile(); syncFxBtn();
+    questToasts.push({ txt: '⚡ SMOOTH MODE ON — effects trimmed to keep this device fast (FX button to change)', t: 6 });
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = (now - last) / 1000; last = now;
+  const rawDt = (now - last) / 1000;
+  let dt = rawDt; last = now;
   if (dt > 0.25) dt = 0.25;
+  fxWatchdog(rawDt);
   acc += dt;
   let guard = 0;
   while (acc >= STEP && guard < 8) { update(STEP); acc -= STEP; guard++; }
@@ -4378,6 +4417,17 @@ soundBtn.onclick = () => {
   audioInit(); syncSoundBtn();
 };
 syncSoundBtn();
+const fxBtn = document.getElementById('fxBtn');
+function syncFxBtn() {
+  const label = profile.fxMode === 'auto' ? ('FX AUTO' + (fxLow ? '·LOW' : '')) : 'FX ' + profile.fxMode.toUpperCase();
+  fxBtn.textContent = label;
+  fxBtn.style.color = fxLow ? '#ffd166' : '#9fb3d9';
+}
+fxBtn.onclick = () => {
+  profile.fxMode = profile.fxMode === 'auto' ? 'low' : profile.fxMode === 'low' ? 'full' : 'auto';
+  computeFx(); resize(); saveProfile(); syncFxBtn();
+};
+syncFxBtn();
 updateWinTag();
 
 // ============================== SIZING ==============================
@@ -4386,7 +4436,7 @@ function resize() {
   const scale = Math.min(ww / W, wh / H) * 0.985;
   canvas.style.width = (W * scale) + 'px';
   canvas.style.height = (H * scale) + 'px';
-  dpr = Math.min(2, window.devicePixelRatio || 1);
+  dpr = fxLow ? 1 : Math.min(2, window.devicePixelRatio || 1);   // 1x in performance mode
   canvas.width = W * dpr; canvas.height = H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
