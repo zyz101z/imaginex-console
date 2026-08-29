@@ -1,5 +1,26 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-29 (later) — "Impossible football" audit sweep (user: find more 67-yd-FG-class bugs)
+Full sim.mjs realism audit; 7 fixes, all engine-level:
+1. **Punting from FG range**: the PUNT branch fired from any spot — a turnover gift at the opp 30
+   could end in a punt into the end zone. In-range "punts" now convert to FG attempts via a shared
+   `kickFG(spot)` helper (used by both the stall branch and the punt branch).
+2. **Negative drive yards**: a drive starting at the opp 6 (start 93+) collided with the kick-spot
+   clamp (92) → "FG, -2 yds". Stall spot now never falls behind its own start; kickFG clamp 92→97
+   so chip shots read as ~20-23 yarders.
+3. **Onside recovery gave field position to the WRONG team** (consumed opponent slot got the 45;
+   recoverer restarted at 25). Recovering team now starts at its own 45.
+4. **Ghost stat lines**: 4th DL earned tackles/sacks with gp=0 (gp slice was top-3) → DL gp now
+   top-4; `attributeDefense` pools + star-rusher credit now filter `injuredWeeks===0` (injured
+   players could accrue tackles); RB2 could log rush yards with 0 carries (car floor added).
+5. **Kneels no longer gain 1-4 yards** (yards: 0).
+- NEW permanent battery section "impossible-outcome sweep": 600-game scan (no in-range punts, no
+  gaining kneels, yardage 0-99 finite, OT leaves no ties) + full-season scan (stats⇒gp>0,
+  yards⇒touches, FGM≤FGA, no negative injuredWeeks). §7 replay assert loosened: a follow-up ask of
+  a DIFFERENT type (onside after a go-for-it TD) may mark the same drive.
+- Post-fix distributions: FGA 2.9/gm, make 75.5%, dist 20-59 (avg 40.3), punts 9.3/gm, deepest punt
+  spot 69 (weak-leg edge). Batteries: sim **3,018** ✓ gm **17,487** ✓. Cache `?v=20260829b`. Synced.
+
 ## 2026-08-29 — FG range realism + launch street FAs + clearer Coach's Calls (user reports ×3)
 1. **🦵 FG RANGE** (user: "my kicker tried a 67-yarder"): the stall-FG branch attempted from ANY spot
    (baseline audit: 50% league make rate, 31% of attempts from 60+, longest **88 yds**). Now: range

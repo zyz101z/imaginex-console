@@ -288,7 +288,10 @@ const band = (name, val, lo, hi) =>
       if (!b || a.result !== b.result || a.points !== b.points || a.off !== b.off) prefixSame = false;
     }
     check("call: pre-decision drives replay identically", prefixSame);
-    check("call: the decided drive is no longer marked", !r2.log[askIdx] || !r2.log[askIdx].ask || r2.log[askIdx].ask.drive !== askEntry.ask.drive);
+    // (a follow-up ask of a DIFFERENT type — e.g. onside after the go-for-it TD —
+    // may legitimately mark the same drive; only a leftover 4TH mark is a bug)
+    check("call: the decided drive is no longer marked", !r2.log[askIdx] || !r2.log[askIdx].ask ||
+      r2.log[askIdx].ask.type !== "4th" || r2.log[askIdx].ask.drive !== askEntry.ask.drive);
     // world integrity: standings reflect exactly one played game for the user
     const s2 = standings[userId];
     const playedCt = schedule.slice(0, week + 1).reduce((n, wk) =>
@@ -387,6 +390,55 @@ const band = (name, val, lo, hi) =>
   check("FG: no attempt beyond a real leg (≤64)", maxSeen <= 64, `longest ${maxSeen}`);
   check("FG: long tries exist (≥50 seen)", maxSeen >= 50, `longest ${maxSeen}`);
   band("FG make rate", fgm / Math.max(1, att), 0.68, 0.92);
+}
+
+// ---------- impossible-outcome sweep (the 67-yd-FG family) ----------
+// Hunt for football that cannot happen: punts from FG range, kneels that gain
+// yards, negative/absurd drive yardage, tied final scores, FGM > FGA, and
+// stat lines from players with 0 games played.
+{
+  const lg = buildLeague(makeRng(4242));
+  let puntFromRange = 0, kneelGains = 0, badYards = 0, ties = 0, games = 0;
+  for (let i = 0; i < 600; i++) {
+    const ids = Object.keys(lg);
+    const A = ids[i % ids.length], B = ids[(i + 7) % ids.length];
+    if (A === B) continue;
+    const g = simGame(makeRng(70000 + i), { id: A, players: lg[A] }, { id: B, players: lg[B] }, A);
+    games++;
+    if (g.scoreA === g.scoreB) ties++;
+    for (const row of g.log) {
+      if (!Number.isFinite(row.yards) || row.yards < 0 || row.yards > 99) badYards++;
+      if (row.result === "KNEEL" && row.yards > 0) kneelGains++;
+      // punt spot must be OUTSIDE even the weakest leg's range (minSpotFG ≥ 70 floor)
+      if (row.result === "PUNT" && row.start + row.yards >= 70) puntFromRange++;
+    }
+  }
+  check("sweep: no punts from FG range", puntFromRange === 0, `${puntFromRange}`);
+  check("sweep: kneels never gain yards", kneelGains === 0, `${kneelGains}`);
+  check("sweep: drive yardage always 0-99 and finite", badYards === 0, `${badYards}`);
+  check("sweep: OT leaves no tied finals", ties === 0, `${ties} of ${games}`);
+
+  // full season: counting stats imply games played; yards imply touches; FGM ≤ FGA
+  const league = buildLeague(makeRng(31));
+  const rng = makeRng(32);
+  const schedule = makeSchedule(rng, 1);
+  const standings = emptyStandings();
+  for (let w = 0; w < 18; w++) playWeek(rng, league, schedule, w, standings, {}, {}, null, null);
+  let ghostStats = 0, ghostYards = 0, badFG = 0, badInjury = 0;
+  const COUNTING = ["passYd", "car", "rushYd", "rec", "recYd", "tackles", "sacks", "defInts", "fga"];
+  for (const roster of Object.values(league)) {
+    for (const p of roster) {
+      const any = COUNTING.some(k => (p.stats[k] || 0) > 0);
+      if (any && !(p.stats.gp > 0)) ghostStats++;
+      if ((p.stats.rushYd > 0 && !(p.stats.car > 0)) || (p.stats.recYd > 0 && !(p.stats.rec > 0))) ghostYards++;
+      if ((p.stats.fgm || 0) > (p.stats.fga || 0)) badFG++;
+      if (p.injuredWeeks < 0) badInjury++;
+    }
+  }
+  check("sweep: no stats without games played", ghostStats === 0, `${ghostStats} players`);
+  check("sweep: yards imply carries/receptions", ghostYards === 0, `${ghostYards} players`);
+  check("sweep: FGM never exceeds FGA", badFG === 0, `${badFG}`);
+  check("sweep: injury weeks never negative", badInjury === 0, `${badInjury}`);
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

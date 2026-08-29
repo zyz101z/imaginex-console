@@ -122,7 +122,8 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
     const s1 = Math.round(rbYd * (0.62 + rng.f() * 0.2));
     rb1.stats.rushYd += s1; rb2.stats.rushYd += rbYd - s1;
     rb1.stats.car += Math.max(s1 > 0 ? 1 : 0, Math.round(s1 / 4.7));
-    rb2.stats.car += Math.max(0, Math.round((rbYd - s1) / 4.7));
+    // yards imply at least one carry (was possible: 2 rush yds, 0 car)
+    rb2.stats.car += Math.max((rbYd - s1) > 0 ? 1 : 0, Math.round((rbYd - s1) / 4.7));
   } else if (rb1) {
     rb1.stats.rushYd += rbYd;
     rb1.stats.car += Math.max(rbYd > 0 ? 1 : 0, Math.round(rbYd / 4.7));
@@ -152,23 +153,26 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
 }
 
 function attributeDefense(rng, chart, sacks, ints, star = null, bz = 0) {
-  const dl = chart.DL.slice(0, 4), lb = chart.LB.slice(0, 3);
+  // healthy players only — a depth chart thinned by injuries could previously
+  // credit tackles/sacks to a player who isn't dressed (stats with gp = 0)
+  const fit = list => list.filter(p => p && p.injuredWeeks === 0);
+  const dl = fit(chart.DL).slice(0, 4), lb = fit(chart.LB).slice(0, 3);
   // blitz-heavy: LBs come more often, and the best blitzer among them most of all
   const lbPool = bz > 0.05 && lb.length
     ? (() => { const s2 = [...lb].sort((a, b) => attr(b, "blitz") - attr(a, "blitz")); return [s2[0], ...s2]; })()
     : lb;
   for (let i = 0; i < sacks; i++) {
     // a mismatch edge rusher wins his rep more often (tuned: season leaders stay <26)
-    const p = (star && rng.chance(0.16)) ? star
+    const p = (star && star.injuredWeeks === 0 && rng.chance(0.16)) ? star
       : rng.chance(0.7 - Math.max(0, bz) * 0.8) ? rng.pick(dl.length ? dl : lbPool) : rng.pick(lbPool.length ? lbPool : dl);
     if (p) p.stats.sacks += 1;
   }
-  const dbs = [...chart.CB.slice(0, 3), ...chart.S.slice(0, 2)];
+  const dbs = [...fit(chart.CB).slice(0, 3), ...fit(chart.S).slice(0, 2)];
   for (let i = 0; i < ints; i++) {
     const p = rng.pick(dbs.length ? dbs : lb);
     if (p) p.stats.defInts += 1;
   }
-  for (const p of [...dl, ...lb, ...chart.CB.slice(0, 2), ...chart.S.slice(0, 2)]) {
+  for (const p of [...dl, ...lb, ...fit(chart.CB).slice(0, 2), ...fit(chart.S).slice(0, 2)]) {
     if (p) p.stats.tackles += rng.int(2, 7);
   }
 }
@@ -319,9 +323,9 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     if (lateGame && diff > 0 && remaining <= 2) {
       // victory formation: leading team with the ball late kneels it out
       if (remaining === 1 || rng.chance(0.6)) {
-        log.push({ q: 4, off: off.t.id, result: "KNEEL", points: 0, yards: rng.int(1, 4),
+        log.push({ q: 4, off: off.t.id, result: "KNEEL", points: 0, yards: 0,
           scorer: null, start });
-        break; // ballgame
+        break; // ballgame (kneels never GAIN yards)
       }
     }
     if (lateGame && diff < 0 && decision !== "safe") {
@@ -360,11 +364,29 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       if (!decI) askIce = ctxI;
       else if (decI === 'ice') iced = true;
     }
+    // Kicker RANGE: nobody trots out the FG unit for a 67-yard prayer. Range
+    // scales with the leg (kicker 70 → ~52 yds, 90 → ~57), and a desperate
+    // crunch-time coach will try from a few yards deeper.
+    const maxDist = Math.round(51 + (off.u.kicker - 70) * 0.25) + (hurry && remaining <= 2 ? 6 : 0);
+    const minSpotFG = 117 - maxDist;   // shallowest field position that's still in range
     let roll = rng.f() * variance;
     // desperation: clutch variance must not leak the roll back into "punt"
     if (noPunt) roll = roll % (p.to + p.td + p.fgAtt);
     let result, points = 0, yards, conv = null;
     let downs = false;
+    // One kick implementation for both paths that can end in a FG attempt
+    // (the stall-in-range branch, and a "punt" that stalled inside range).
+    const kickFG = (spot) => {
+      spot = Math.min(97, spot);   // dist floor ~20 — chip shots read as chip shots
+      const dist = 100 - spot + 17;
+      const k = off.chart.K[0];
+      const made = rng.chance(Math.max(0.3, Math.min(0.97,
+        1.14 - dist * 0.0082 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
+      if (k) { k.stats.fga += 1; if (made) k.stats.fgm += 1; }
+      result = made ? "FG" : "FG-MISS"; points = made ? 3 : 0;
+      scorerText = k ? `${k.name}, ${dist}-yd attempt` : null;
+      if (!made) nextStart[defIdx] = Math.max(5, Math.min(95, 100 - spot)); // missed FG = spot of the kick
+    };
     if (roll < p.to) {
       result = "TO"; yards = Math.min(rng.int(3, 22), 99 - start);
       // defense takes over AT THE SPOT — turn it over deep in your own end and pay for it
@@ -396,26 +418,15 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       yards = Math.max(1, 100 - start); // drive length IS the field you actually crossed
       off.momentum = Math.min(TUNE.MOMENTUM_MAX, off.momentum + 0.7);
     } else if (roll < p.to + p.td + p.fgAtt) {
-      // the drive stalls; where depends on where it started
-      const rawSpot = Math.min(92, start + rng.int(25, 50));
-      // Kicker RANGE: nobody trots out the FG unit for a 67-yard prayer. Range
-      // scales with the leg (kicker 70 → ~52 yds, 90 → ~57), and a desperate
-      // crunch-time coach will try from a few yards deeper.
-      const maxDist = Math.round(51 + (off.u.kicker - 70) * 0.25) + (hurry && remaining <= 2 ? 6 : 0);
-      const minSpot = 117 - maxDist;   // shallowest field position that's still in range
-      if (rawSpot >= minSpot - 5) {
+      // the drive stalls; where depends on where it started (a gift at the
+      // opponent 6 stalls where it stands — never BEHIND its own start)
+      const rawSpot = Math.min(Math.max(92, start), start + rng.int(25, 50));
+      if (rawSpot >= minSpotFG - 5) {
         // in range — or close enough that the coach pushes to the EDGE of range
         // and lets the kicker rip one from the max (long tries miss plenty).
-        const spot = Math.max(rawSpot, minSpot);
+        const spot = Math.max(rawSpot, minSpotFG);
         yards = spot - start;
-        const dist = 100 - spot + 17;
-        const k = off.chart.K[0];
-        const made = rng.chance(Math.max(0.3, Math.min(0.97,
-          1.14 - dist * 0.0082 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
-        if (k) { k.stats.fga += 1; if (made) k.stats.fgm += 1; }
-        result = made ? "FG" : "FG-MISS"; points = made ? 3 : 0;
-        scorerText = k ? `${k.name}, ${dist}-yd attempt` : null;
-        if (!made) nextStart[defIdx] = Math.max(5, Math.min(95, 100 - spot)); // missed FG = spot of the kick
+        kickFG(spot);
       } else if (noPunt) {
         // way out of range but desperate: go for it on 4th — and come up short
         yards = rawSpot - start;
@@ -432,10 +443,19 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
         off.momentum *= 0.6;
       }
     } else {
-      result = "PUNT"; yards = Math.min(rng.int(5, 30), 99 - start);
-      const landing = start + yards + 38 + rng.int(-8, 12);
-      nextStart[defIdx] = landing >= 100 ? 20 : Math.max(2, 100 - landing); // touchback or pinned
-      off.momentum *= 0.6;
+      yards = Math.min(rng.int(5, 30), 99 - start);
+      const spotP = start + yards;
+      if (spotP >= minSpotFG) {
+        // "punting" from inside field-goal range is not a thing — kick it instead.
+        // (Short fields hit this: a turnover gift at the opponent 30 could
+        // previously end in a punt into the end zone.)
+        kickFG(spotP);
+      } else {
+        result = "PUNT";
+        const landing = spotP + 38 + rng.int(-8, 12);
+        nextStart[defIdx] = landing >= 100 ? 20 : Math.max(2, 100 - landing); // touchback or pinned
+        off.momentum *= 0.6;
+      }
     }
     off.score += points;
     // 🏈 ONSIDE KICK: just scored, still trailing, clock dying — steal a possession?
@@ -446,7 +466,11 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       const decO = hooks.decide ? hooks.decide(ctxO) : null;
       if (!decO) askInfo = askInfo || ctxO;
       else if (decO === 'onside') {
-        if (rng.chance(0.18)) { stealNext = true; nextStart[defIdx] = 45; onsideRes = 'win'; }
+        if (rng.chance(0.18)) {
+          // recovered: the RECOVERING team gets the short field on ITS next drive
+          // (the opponent's consumed slot just logs the ONSIDE row)
+          stealNext = true; nextStart[offIdx] = 45; onsideRes = 'win';
+        }
         else { nextStart[defIdx] = Math.max(nextStart[defIdx], 55); onsideRes = 'lose'; }
       }
     }
@@ -497,7 +521,9 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
   for (const side of sides) {
     const chart = side.chart;
     for (const pos of Object.keys(chart)) {
-      for (const p of chart[pos].slice(0, pos === "OL" ? 5 : 3)) {
+      // top-4 DL accrue tackles/sacks in attributeDefense — they must earn gp too,
+      // or the season page shows the impossible "40 tackles, 0 games played"
+      for (const p of chart[pos].slice(0, pos === "OL" ? 5 : pos === "DL" ? 4 : 3)) {
         if (p.injuredWeeks > 0) continue;
         p.stats.gp += 1;
         const risk = TUNE.INJURY_PER_GAME * (1.4 - p.durability / 100);
