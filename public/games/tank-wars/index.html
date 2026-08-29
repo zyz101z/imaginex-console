@@ -1143,12 +1143,22 @@ function fireLaser(t) {
     }
     beams.push({ segs, col: t.col, t: 0.22, max: 0.22 });
     netSendGame({ t: 'beam', segs, col: t.col });
+    const struck = new Set();   // one hit per beam line, even if the reflection re-crosses
     for (let si = 0; si < segs.length; si++) {
       const [x1, y1, x2, y2] = segs[si];
+      // Point-blank: the beam STARTS at the muzzle (~21px out), so an enemy pressed
+      // against our hull sat behind it and couldn't be hit — test the first segment
+      // from the tank's center instead.
+      const sx = si === 0 ? t.x : x1, sy = si === 0 ? t.y : y1;
       for (const tk of tanks) {
         if (!tk.alive) continue;
         if (tk.i === t.i || tk.team === t.team) continue;   // no friendly fire — reflections included
-        if (segCircleHit(x1, y1, x2, y2, tk.x, tk.y, tk.r || TANK_R)) damageTank(tk);
+        // +6 forgiveness: hulls are drawn far larger than the 13px hit circle, and a
+        // shell already lands at ~15px — the precision weapon must not be the stingiest.
+        if (!struck.has(tk.i) && segCircleHit(sx, sy, x2, y2, tk.x, tk.y, (tk.r || TANK_R) + 6)) {
+          struck.add(tk.i);
+          damageTank(tk);
+        }
       }
     }
   }

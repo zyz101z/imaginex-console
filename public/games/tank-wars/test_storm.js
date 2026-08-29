@@ -997,6 +997,41 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.net.coop = false; tw.net.role = null; tw.surv.on = false; tw.surv.escort = false;
 }
 
+// ---------- 30. PHOTON laser forgiveness (the "laser doesn't kill" bug) ----------
+// The hitscan beam used the TIGHTEST window in the game (13px vs a shell's ~15px)
+// while hulls draw much larger, and it started at the muzzle so point-blank
+// enemies sat behind it. Now: +6px forgiveness, first segment tested from the
+// tank center, and one hit per beam line even if a reflection re-crosses.
+{
+  tw.startMatch({ mode: 'quick', aiLevel: 'rookie', arena: 'maze' });
+  const me = tw.tanks[0], foe = tw.tanks[1];
+  // park "me" somewhere with a long clear lane to the right (mazes vary per run)
+  let lane = 0;
+  outer: for (let y = 80; y < 560; y += 24) for (let x = 60; x < 400; x += 24) {
+    const ray = tw.castRay(x, y, 0, 900);
+    const clear = Math.hypot(ray.x - x, ray.y - y);
+    if (clear > 220) { me.x = x; me.y = y; lane = clear; break outer; }
+  }
+  check('laser: found a clear test lane', lane > 220, 'lane=' + lane);
+  me.a = 0;
+
+  // graze: foe center 17px off the beam line — inside 13+6, outside the old 13
+  foe.x = me.x + 150; foe.y = me.y + 17; foe.alive = true; foe.shield = false; foe.hp = 1;
+  tw.fireLaser(me);
+  check('laser: 17px graze now kills', foe.alive === false);
+
+  // point-blank: foe overlapping just ahead of our hull, behind the old muzzle start
+  foe.x = me.x + 10; foe.y = me.y; foe.alive = true; foe.hp = 1;
+  tw.fireLaser(me);
+  check('laser: point-blank enemy dies', foe.alive === false);
+
+  // one hit per beam line: 2hp foe on the line must lose exactly 1 hp per shot
+  foe.x = me.x + 150; foe.y = me.y; foe.alive = true; foe.hp = 2;
+  tw.fireLaser(me);
+  check('laser: single line = single hit (2hp foe survives at 1)', foe.alive === true && foe.hp === 1, 'hp=' + foe.hp);
+  tw.setPhase('menu'); tw.surv.on = false;
+}
+
 // ---------- 29. REMATCH keeps the survival variant (the convoy-rematch bug) ----------
 // btnRematch rebuilt the mode from surv flags but forgot escort, so a Convoy
 // rematch silently became a plain storm. Drive the REAL button handler.
