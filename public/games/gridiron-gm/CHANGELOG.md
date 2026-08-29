@@ -1,5 +1,24 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-29 — FG range realism + launch street FAs + clearer Coach's Calls (user reports ×3)
+1. **🦵 FG RANGE** (user: "my kicker tried a 67-yarder"): the stall-FG branch attempted from ANY spot
+   (baseline audit: 50% league make rate, 31% of attempts from 60+, longest **88 yds**). Now: range
+   scales with the leg (`maxDist = 51 + (kicker-70)*0.25`, +6 desperate late), stalls within 5 yds of
+   range get pushed to the EDGE and kicked, deeper stalls → PUNT (or a failed 4th-down TO when `noPunt`
+   desperation is on). Make curve retuned `1.14 - dist*0.0082`, floor 0.3. RESULT: make% 0.50→**0.71**,
+   avg attempt 40.7, longest 58, zero 60+. Chalk retuned: `EDGE_SCALE 0.0168→0.0175` (favorite win rate
+   back in the 72-80 band). New sim-battery section: attempts happen / ≤64 cap / 50+ exist / make-rate
+   band. **Draw counts changed** → downstream rng reshuffled (expected; batteries re-anchored).
+2. **🧾 LAUNCH STREET FAs** (user: "first season there are zero free agents"): `seedStreetFA(rng)` in
+   gm.mjs — 27 journeyman vets (ovr 60-74, ages 26-33, cheap 1-yr asks) seeded at `newFranchise` AND
+   load-migrated into existing season-1 saves (`seasonNum===1 && !S.fa && streetFA empty`, rng from
+   `seed^0x5fa`). gm-battery section added.
+3. **🧠 CLEARER COACH'S CALLS** (user: "confusing — how much time is left, where on the field?"):
+   every ask ctx in sim now carries `us/them` scores (+`start` for ICE); the decision panel renders a
+   `.decChips` strip on ALL four call types — `Q4 · YOU TRAIL 17–20 · 🏈 your ball at THEIR 42 ·
+   ⏱ ≈5 min left · 2 possessions` (minutes ≈ remaining×2.5). Headlines simplified per type.
+- Batteries: sim **3,010** ✓ gm **17,549** ✓. Cache `?v=20260829a`. Copies synced.
+
 ## 2026-08-26 — Coach's Calls ×4 + Power Rankings
 1. **Three NEW live decisions** join the 4th-down call (same hooks pattern; every branch draw-count-aligned so pre-decision drives replay identically — the invariant that keeps 3,000 sim checks green):
    - **💪 2-PT CALL** (`type:'twopt'`): when the auto-chart moment hits on YOUR late TD — GO FOR TWO (~48%) or KICK (~96%). Both paths consume exactly one rng draw.

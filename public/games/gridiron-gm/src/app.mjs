@@ -12,7 +12,7 @@ import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyR
   archiveSeasonStats, computeAwards, computeAllPro, statLine, careerTotals,
   SCHEMES, genCoach, coachFit, coachMods, playerValue, PICK_VALUE,
   evalTrade, execTrade, freshPicks, legalAfterLoss, applyTraining, scoutProspect,
-  genAIOffer, updateRecords, RECORD_KEYS, hofScore } from "./gm.mjs";
+  genAIOffer, updateRecords, RECORD_KEYS, hofScore, seedStreetFA } from "./gm.mjs";
 
 const SAVE_KEY = "gridiron_gm_save_v1";
 const $ = sel => document.querySelector(sel);
@@ -43,6 +43,7 @@ function newFranchise(teamId, capMode) {
   S.scoutPts = 10;
   S.nextClass = genDraftClass(rng);
   ensureContracts(rng, S.league);
+  S.streetFA = seedStreetFA(rng);   // season 1 opens with a real street market
   setOwnerGoal();
   save();
 }
@@ -96,6 +97,10 @@ function load() {
       bumpNextId(maxId);
       if (S.muted) setMuted(true);
       if (!S.streetFA) S.streetFA = [];
+      // migrate: season-1 saves from before the launch street pool existed
+      if (S.seasonNum === 1 && !S.fa && !S.streetFA.length) {
+        S.streetFA = seedStreetFA(makeRng((S.seed ^ 0x5fa) >>> 0));
+      }
       if (!S.records) S.records = {};
       if (S.fa && S.fa.pool) ensureAttrs(makeRng((S.seed ^ 0xa78) >>> 0), { pool: S.fa.pool });
       ensureContracts(makeRng((S.seed ^ 0x5eed) >>> 0), S.league);
@@ -1330,27 +1335,45 @@ function showDecisionPanel(ctx, onPick) {
   const box = document.createElement("div");
   box.id = "decisionBox";
   let situation = "", btns = "";
+  // Shared situation chips — the same at-a-glance strip on every call type:
+  // quarter, score, ball spot (when a spot is meaningful), and clock estimate.
+  const spotTxt = (s, theirs) => s == null ? null
+    : theirs ? (s >= 50 ? `their ball at YOUR ${100 - s}` : `their ball at their ${s}`)
+             : (s >= 50 ? `your ball at THEIR ${100 - s}` : `your ball at your ${s}`);
+  const chips = [];
+  if (ctx.quarter) chips.push(`Q${ctx.quarter}`);
+  if (ctx.us != null) {
+    chips.push(ctx.us === ctx.them ? `TIED <b>${ctx.us}–${ctx.them}</b>`
+      : ctx.us > ctx.them ? `YOU LEAD <b>${ctx.us}–${ctx.them}</b>`
+      : `YOU TRAIL <b>${ctx.us}–${ctx.them}</b>`);
+  }
+  const spotLine = spotTxt(ctx.start, ctx.type === "ice");
+  if (spotLine && ctx.type !== "twopt" && ctx.type !== "onside") chips.push(`🏈 ${spotLine}`);
+  if (ctx.remaining != null) {
+    chips.push(`⏱ ≈${Math.max(1, Math.round(ctx.remaining * 2.5))} min left · ${ctx.remaining} possession${ctx.remaining === 1 ? "" : "s"}`);
+  }
+  const chipRow = chips.length ? `<div class="decChips">${chips.map(c => `<span>${c}</span>`).join("")}</div>` : "";
   if (ctx.type === "twopt") {
-    situation = `TOUCHDOWN! · that makes it ${ctx.lead6 > 0 ? "a " + ctx.lead6 + "-point lead" : ctx.lead6 < 0 ? "a " + (-ctx.lead6) + "-point deficit" : "a tie"} before the try`;
+    situation = `TOUCHDOWN! Go for 2, or kick the extra point?`;
     btns = `<button data-c="go2">💪 GO FOR TWO<br><span>~48% — chart says this is the moment</span></button>
       <button data-c="kick">🦶 KICK THE XP<br><span>~96% — take the sure point</span></button>`;
   } else if (ctx.type === "onside") {
-    situation = `you scored — still down ${-ctx.diff} · ~${ctx.remaining} drives left`;
+    situation = `You scored — but they get the ball back. Steal it?`;
     btns = `<button data-c="onside">🤯 ONSIDE KICK!<br><span>~18% to steal the ball back — fail = they get midfield</span></button>
       <button data-c="deep">🦵 KICK DEEP<br><span>trust the defense to get one stop</span></button>`;
   } else if (ctx.type === "ice") {
-    situation = `they're driving to ${ctx.diff === 0 ? "WIN it" : "tie or win"} · crunch time`;
+    situation = `They're driving to ${ctx.diff === 0 ? "WIN it" : "tie or win"} — mess with the kicker?`;
     btns = `<button data-c="ice">🧊 ICE THE KICKER<br><span>call timeout — shaken kickers miss more</span></button>
       <button data-c="hold">😤 LET THEM KICK<br><span>save the drama — no mind games</span></button>`;
   } else {
-    const spot = ctx.start >= 50 ? `their ${100 - ctx.start}` : `your own ${ctx.start}`;
-    situation = `Q4 · down ${-ctx.diff} · ball at ${spot} · ~${ctx.remaining} drives left`;
+    situation = `Crunch time — how do we play this drive?`;
     btns = `<button data-c="go">🎲 GO FOR IT<br><span>chase the TD — no punts, boom or bust</span></button>
       <button data-c="fg">🎯 TAKE THE POINTS<br><span>work into field-goal range</span></button>
       <button data-c="safe">🛡️ PLAY IT SAFE<br><span>trust the defense — punt and flip the field</span></button>`;
   }
   box.innerHTML = `<div class="dim" style="letter-spacing:2px">🧠 COACH'S CALL</div>
     <b>${situation}</b>
+    ${chipRow}
     <div class="decBtns">${btns}</div>`;
   for (const b of box.querySelectorAll("button")) {
     b.onclick = () => { box.remove(); onPick(b.dataset.c); };

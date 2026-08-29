@@ -4,7 +4,7 @@ import { teamUnits, depthChart, attr } from "./players.mjs";
 
 export const TUNE = {
   DRIVES_PER_TEAM: 11,
-  EDGE_SCALE: 0.0168,      // how strongly unit-rating gaps move drive outcomes (chalk dial)
+  EDGE_SCALE: 0.0175,      // how strongly unit-rating gaps move drive outcomes (chalk dial; retuned after FG-range realism 2026-08-29)
   BASE_TD: 0.210,         // league-average per-drive TD prob
   BASE_FG_ATT: 0.21,      // per-drive FG attempt prob
   BASE_TO: 0.115,         // per-drive turnover prob
@@ -312,7 +312,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     }
     let decision = null, askInfo;
     if (hooks && hooks.teamId === off.t.id && lateGame && diff < 0 && diff >= -9 && remaining >= 2) {
-      const ctx = { drive: d, type: '4th', quarter, diff, start, remaining };
+      const ctx = { drive: d, type: '4th', quarter, diff, start, remaining, us: off.score, them: def.score };
       decision = hooks.decide ? hooks.decide(ctx) : null;
       if (!decision) askInfo = ctx;   // mark the moment; the ticker may come back for it
     }
@@ -355,7 +355,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     // Multiplies an existing make-probability, so the rng draw count NEVER changes.
     let iced = false, askIce = null;
     if (hooks && hooks.teamId === def.t.id && lateGame && remaining <= 3 && diff >= -3 && diff <= 0) {
-      const ctxI = { drive: d, type: 'ice', quarter, diff, remaining };
+      const ctxI = { drive: d, type: 'ice', quarter, diff, remaining, start, us: def.score, them: off.score };
       const decI = hooks.decide ? hooks.decide(ctxI) : null;
       if (!decI) askIce = ctxI;
       else if (decI === 'ice') iced = true;
@@ -382,7 +382,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       if (lateGame && [-2, -5, -10, -16, 1, 4, 12].includes(lead6)) {
         let tp = null;
         if (hooks && hooks.teamId === off.t.id) {
-          const ctx2 = { drive: d, type: 'twopt', quarter, lead6, remaining };
+          const ctx2 = { drive: d, type: 'twopt', quarter, lead6, remaining, us: off.score + 6, them: def.score };
           tp = hooks.decide ? hooks.decide(ctx2) : null;
           if (!tp) ask2 = ctx2;
         }
@@ -396,17 +396,41 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       yards = Math.max(1, 100 - start); // drive length IS the field you actually crossed
       off.momentum = Math.min(TUNE.MOMENTUM_MAX, off.momentum + 0.7);
     } else if (roll < p.to + p.td + p.fgAtt) {
-      // stall inside range: attempt spot depends on where the drive started
-      const spot = Math.min(92, start + rng.int(25, 50));
-      yards = spot - start;
-      const dist = 100 - spot + 17;
-      const k = off.chart.K[0];
-      const made = rng.chance(Math.max(0.2, Math.min(0.97,
-        1.06 - dist * 0.009 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
-      if (k) { k.stats.fga += 1; if (made) k.stats.fgm += 1; }
-      result = made ? "FG" : "FG-MISS"; points = made ? 3 : 0;
-      scorerText = k ? `${k.name}, ${dist}-yd attempt` : null;
-      if (!made) nextStart[defIdx] = Math.max(5, Math.min(95, 100 - spot)); // missed FG = spot of the kick
+      // the drive stalls; where depends on where it started
+      const rawSpot = Math.min(92, start + rng.int(25, 50));
+      // Kicker RANGE: nobody trots out the FG unit for a 67-yard prayer. Range
+      // scales with the leg (kicker 70 → ~52 yds, 90 → ~57), and a desperate
+      // crunch-time coach will try from a few yards deeper.
+      const maxDist = Math.round(51 + (off.u.kicker - 70) * 0.25) + (hurry && remaining <= 2 ? 6 : 0);
+      const minSpot = 117 - maxDist;   // shallowest field position that's still in range
+      if (rawSpot >= minSpot - 5) {
+        // in range — or close enough that the coach pushes to the EDGE of range
+        // and lets the kicker rip one from the max (long tries miss plenty).
+        const spot = Math.max(rawSpot, minSpot);
+        yards = spot - start;
+        const dist = 100 - spot + 17;
+        const k = off.chart.K[0];
+        const made = rng.chance(Math.max(0.3, Math.min(0.97,
+          1.14 - dist * 0.0082 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
+        if (k) { k.stats.fga += 1; if (made) k.stats.fgm += 1; }
+        result = made ? "FG" : "FG-MISS"; points = made ? 3 : 0;
+        scorerText = k ? `${k.name}, ${dist}-yd attempt` : null;
+        if (!made) nextStart[defIdx] = Math.max(5, Math.min(95, 100 - spot)); // missed FG = spot of the kick
+      } else if (noPunt) {
+        // way out of range but desperate: go for it on 4th — and come up short
+        yards = rawSpot - start;
+        result = "TO"; downs = true;
+        nextStart[defIdx] = Math.max(5, Math.min(95, 100 - rawSpot));
+        def.momentum = Math.min(TUNE.MOMENTUM_MAX, def.momentum + 1.1);
+        off.momentum = Math.max(-TUNE.MOMENTUM_MAX, off.momentum - 0.8);
+      } else {
+        // stalled well outside range: punt it away instead of attempting a bomb
+        yards = rawSpot - start;
+        result = "PUNT";
+        const landing = rawSpot + 38 + rng.int(-8, 12);
+        nextStart[defIdx] = landing >= 100 ? 20 : Math.max(2, 100 - landing);
+        off.momentum *= 0.6;
+      }
     } else {
       result = "PUNT"; yards = Math.min(rng.int(5, 30), 99 - start);
       const landing = start + yards + 38 + rng.int(-8, 12);
@@ -418,7 +442,7 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     // Only a made decision consumes a draw, and only from this point on (post-divergence).
     let onsideRes = null;
     if (hooks && hooks.teamId === off.t.id && lateGame && points > 0 && remaining >= 2 && (diff + points) < 0) {
-      const ctxO = { drive: d, type: 'onside', quarter, diff: diff + points, remaining };
+      const ctxO = { drive: d, type: 'onside', quarter, diff: diff + points, remaining, us: off.score, them: def.score };
       const decO = hooks.decide ? hooks.decide(ctxO) : null;
       if (!decO) askInfo = askInfo || ctxO;
       else if (decO === 'onside') {

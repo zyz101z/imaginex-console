@@ -365,5 +365,29 @@ const band = (name, val, lo, hi) =>
     `sacks ${base.sacks} → ${bend.sacks}`);
 }
 
+// ---------- FG range sanity (the 67-yard-attempt bug) ----------
+// Every attempt distance rides scorerText ("NAME, NN-yd attempt"); none may exceed
+// the best leg's ceiling (~58) + the crunch-time desperation bonus (6).
+{
+  const lg = buildLeague(makeRng(777));
+  const A = "KC", B = "DEN";
+  let maxSeen = 0, att = 0, games = 0, fgm = 0;
+  for (let i = 0; i < 400; i++) {
+    const g = simGame(makeRng(40000 + i), { id: A, players: lg[A] }, { id: B, players: lg[B] }, A);
+    games++;
+    for (const row of g.log) {
+      if ((row.result === "FG" || row.result === "FG-MISS") && row.scorer) {
+        const mm = /(\d+)-yd attempt/.exec(row.scorer);
+        if (mm) { att++; maxSeen = Math.max(maxSeen, +mm[1]); }
+        if (row.result === "FG") fgm++;
+      }
+    }
+  }
+  check("FG: attempts still happen", att > games, `${att} attempts in ${games} games`);
+  check("FG: no attempt beyond a real leg (≤64)", maxSeen <= 64, `longest ${maxSeen}`);
+  check("FG: long tries exist (≥50 seen)", maxSeen >= 50, `longest ${maxSeen}`);
+  band("FG make rate", fgm / Math.max(1, att), 0.68, 0.92);
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail > 0 ? 1 : 0);

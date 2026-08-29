@@ -262,6 +262,27 @@ export function fillMinimums(rng, league) {
   }
 }
 
+// Launch-day street pool: a brand-new franchise opens in-season with NO free-agent
+// market until the first offseason builds one — so seed the street with journeyman
+// vets on cheap 1-year asks (the same injury-insurance tier the offseason leaves
+// behind). Called once at franchise creation.
+export function seedStreetFA(rng) {
+  const MIX = [["QB", 2], ["RB", 3], ["WR", 4], ["TE", 2], ["OL", 3],
+               ["DL", 3], ["LB", 3], ["CB", 3], ["S", 2], ["K", 2]];
+  const out = [];
+  for (const [pos, n] of MIX) {
+    for (let i = 0; i < n; i++) {
+      const ovr = rng.int(60, 74);
+      const p = makePlayer(rng, {
+        name: genName(rng), pos, age: rng.int(26, 33), ovr, teamId: null,
+      });
+      p.asking = { salary: Math.max(0.8, Math.round((0.6 + (ovr - 60) * 0.12) * 10) / 10), years: 1 };
+      out.push(p);
+    }
+  }
+  return out.sort((a, b) => b.ovr - a.ovr);
+}
+
 // user cuts a player mid-franchise: 30% of salary sticks as dead money this season
 export function cutPlayer(league, deadMoney, teamId, playerId) {
   const roster = league[teamId];

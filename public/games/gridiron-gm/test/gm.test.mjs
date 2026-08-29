@@ -7,7 +7,7 @@ import { makeSchedule, emptyStandings, playWeek, simPlayoffs } from "../src/seas
 import { TEAMS } from "../src/data_teams.mjs";
 import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, CAP_LIMIT,
-  ROSTER_MAX, archiveSeasonStats, computeAwards, hofScore } from "../src/gm.mjs";
+  ROSTER_MAX, archiveSeasonStats, computeAwards, hofScore, seedStreetFA } from "../src/gm.mjs";
 
 let pass = 0, fail = 0;
 const check = (n, c, d = "") => { if (c) pass++; else { fail++; console.log("  FAIL:", n, d); } };
@@ -218,6 +218,17 @@ check("all contracts valid", badC === 0, badC);
   check("all-pro: QB is the top passer", qb.id === bestQB.id);
   check("statLine: QB format", statLine("QB", { passYd: 4000, passTD: 30, ints: 9 }) === "4000 yds, 30 TD, 9 INT");
   check("statLine: career-totals tolerant of missing keys", statLine("RB", { rushYd: 900 }) === "0 car, 900 yds, 0 TD");
+}
+
+// ---------- launch street pool (season 1 opened with ZERO free agents) ----------
+{
+  const pool = seedStreetFA(makeRng(9));
+  check("street seed: a real market (25+ players)", pool.length >= 25, `${pool.length}`);
+  check("street seed: journeyman tier (ovr 60-74)", pool.every(p => p.ovr >= 60 && p.ovr <= 74));
+  check("street seed: every player has a cheap 1-yr ask",
+    pool.every(p => p.asking && p.asking.years === 1 && p.asking.salary >= 0.8 && p.asking.salary <= 3));
+  check("street seed: covers QB and K", ["QB", "K"].every(pos => pool.some(p => p.pos === pos)));
+  check("street seed: unowned + healthy", pool.every(p => p.teamId === null && p.injuredWeeks === 0));
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
