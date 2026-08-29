@@ -3768,8 +3768,9 @@ document.getElementById('btnHelp').onclick = () => { show('menu', false); show('
 document.getElementById('btnHelpBack').onclick = () => { show('helpBox', false); show('menu', true); };
 document.getElementById('btnRematch').onclick = () => {
   show('victory', false);
-  if (net.coop && net.role === 'host') startCoopStorm();
-  else if (matchCfg.mode === 'survival') startSurvival(surv.rush ? 'rush' : surv.daily ? 'daily' : undefined);
+  // Rematch keeps the variant — escort included (it was falling back to plain storm).
+  if (net.coop && net.role === 'host') startCoopStorm(surv.escort ? 'escort' : undefined);
+  else if (matchCfg.mode === 'survival') startSurvival(surv.escort ? 'escort' : surv.rush ? 'rush' : surv.daily ? 'daily' : undefined);
   else startMatch(matchCfg);
 };
 document.getElementById('btnMenu').onclick = () => {

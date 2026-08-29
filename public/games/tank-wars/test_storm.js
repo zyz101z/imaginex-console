@@ -997,5 +997,25 @@ check('boss color defined for sprites', m[1].includes('BOSS_COL'));
   tw.net.coop = false; tw.net.role = null; tw.surv.on = false; tw.surv.escort = false;
 }
 
+// ---------- 29. REMATCH keeps the survival variant (the convoy-rematch bug) ----------
+// btnRematch rebuilt the mode from surv flags but forgot escort, so a Convoy
+// rematch silently became a plain storm. Drive the REAL button handler.
+{
+  const rematch = sandbox.document.getElementById('btnRematch').onclick;
+  check('rematch handler wired', typeof rematch === 'function');
+  tw.startSurvival('escort');
+  check('convoy entry: escort flag on', tw.surv.escort === true && tw.mode === 'play');
+  rematch();
+  check('rematch from CONVOY stays convoy', tw.surv.escort === true && tw.mode === 'play',
+    'escort=' + tw.surv.escort);
+  tw.startSurvival('rush');
+  rematch();
+  check('rematch from RUSH stays rush', tw.surv.rush === true && !tw.surv.escort);
+  tw.startSurvival();
+  rematch();
+  check('rematch from plain storm stays plain', !tw.surv.escort && !tw.surv.rush && !tw.surv.daily);
+  tw.surv.on = false; tw.setPhase('menu');
+}
+
 console.log(`\n=== stormtest: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);
