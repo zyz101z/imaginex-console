@@ -83,7 +83,7 @@
       <button class="btn" id="btnEscort" style="background:linear-gradient(180deg,#9fe8b8,#4aa86a);" title="Escort the cargo drone — it only rolls while you're close, has 4 HP, and the enemies hunt IT. Deliver each leg for hazard pay; the run ends if the drone (or you) goes down.">&#128666; CONVOY</button>
     </div>
     <p class="tag" id="dailyTag" style="margin:2px 0 0;"></p>
-    <p class="tag" id="questTag" style="margin:2px 0 0;white-space:pre-line;" title="Three fresh goals every day — scrap pays out instantly when each one completes."></p>
+    <button class="btn ghost" id="btnQuests" title="Three fresh goals every day — open to see today's quests, your progress, and the scrap each one pays.">&#127941; DAILY QUESTS &nbsp;&mdash;&nbsp; <span id="questBadge" style="color:#ffd166;">0/3</span></button>
     <div class="row">
       <button class="btn" id="btnRookie" title="One fast match vs an easy AI. First to 5 rounds.">QUICK &bull; ROOKIE</button>
       <button class="btn" id="btnAce" title="One fast match vs an expert AI. First to 5 rounds.">QUICK &bull; ACE</button>
@@ -113,6 +113,15 @@
     <h1>&#127942; MEDALS</h1>
     <div id="medalList" style="max-height:64vh;overflow-y:auto;text-align:left;"></div>
     <button class="btn ghost" id="btnMedalsBack">BACK</button>
+  </div>
+</div>
+<div id="questBox" class="overlay hidden">
+  <div class="panel">
+    <h1>&#127941; DAILY QUESTS</h1>
+    <p class="subtitle" style="margin-bottom:16px;">THREE NEW GOALS EVERY DAY &bull; SAME LIST FOR EVERYONE</p>
+    <div id="questList" style="text-align:left;"></div>
+    <p class="tag" id="questFoot"></p>
+    <button class="btn ghost" id="btnQuestsBack">BACK</button>
   </div>
 </div>
 <div id="boardBox" class="overlay hidden">
@@ -158,8 +167,9 @@
       <b style="color:#ffd166">&#9889; CO-OP STORM</b> (fight the waves together; a downed teammate revives
       next wave; best duos hit the &#129309; board) and <b style="color:#9fe8b8">CO-OP CONVOY</b> (two escorts,
       one drone).</p>
-      <p><b style="color:#ffd166">&#127941; DAILY QUESTS:</b> three fresh goals every day (listed on the menu) —
-      scrap pays out the moment each one pops.</p>
+      <p><b style="color:#ffd166">&#127941; DAILY QUESTS:</b> three fresh goals every day — tap the
+      <b>DAILY QUESTS</b> button on the menu to see today's list, your progress bars, and what each
+      pays. Scrap lands the moment a quest completes.</p>
       <p style="text-align:center;color:#7fd8c8;letter-spacing:2px;font-weight:800;font-size:13px;margin:14px 0 8px;">COMBAT BASICS</p>
       <p><b style="color:#7fd8ff">&#10052; FREEZE</b> power-up (solo + co-op storm): grab it to freeze every enemy
       solid for 3.5 seconds. The AI can grab it too — don't let it.</p>
@@ -1283,6 +1293,37 @@ function renderMedals() {
   }).join('');
 }
 
+// The DAILY QUESTS overlay: one card per quest with a progress bar and the
+// scrap reward front and center (the old menu one-liner was easy to miss).
+function renderQuests() {
+  ensureQuests();
+  const list = document.getElementById('questList');
+  const doneN = profile.quests.filter(s => s.done).length;
+  list.innerHTML = profile.quests.map(s => {
+    const def = QUEST_DEFS.find(q => q.id === s.id);
+    const v = Math.min(s.progress, def.target);
+    const pct = s.done ? 100 : Math.round((v / def.target) * 100);
+    return '<div style="padding:11px 14px;margin:9px 0;border-radius:10px;background:' + (s.done ? '#1d2b1f' : '#101a30') +
+      ';border:1px solid ' + (s.done ? '#4de37f' : '#26365c') + ';">' +
+      '<div style="display:flex;align-items:center;gap:9px;">' +
+        '<span style="font-size:17px;">' + (s.done ? '✅' : '🏅') + '</span>' +
+        '<b style="flex:1;font-size:14.5px;' + (s.done ? 'color:#4de37f;' : 'color:#dfe8ff;') + '">' + def.txt + '</b>' +
+        '<span style="color:#ffd166;font-weight:800;font-size:14px;white-space:nowrap;">+' + def.pay + ' 🔧</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-top:8px;">' +
+        '<div style="flex:1;height:7px;border-radius:4px;background:#0a1122;overflow:hidden;">' +
+          '<div style="width:' + pct + '%;height:100%;border-radius:4px;background:' +
+            (s.done ? 'linear-gradient(90deg,#4de37f,#7df0dc)' : 'linear-gradient(90deg,#ffd166,#ff8c42)') + ';"></div>' +
+        '</div>' +
+        '<span style="color:#9fb3d9;font-size:12px;font-weight:700;min-width:56px;text-align:right;">' +
+          (s.done ? 'PAID ✓' : v + ' / ' + def.target) + '</span>' +
+      '</div></div>';
+  }).join('');
+  document.getElementById('questFoot').textContent = doneN === 3
+    ? 'All three complete — fresh quests tomorrow!'
+    : 'Scrap pays out the instant a quest completes. Progress counts in any offline mode.';
+}
+
 let questToasts = [];   // {txt, t} — drawn briefly in the HUD
 function questBump(ev, n) {
   if (matchCfg.mode === 'online') return;   // offline honors only — keeps it fair & simple
@@ -2039,13 +2080,14 @@ function updateWinTag() {
     dt.textContent = stk + 'DAILY #' + dailyKey() + (today ? (' — your best today: wave ' + today) : ' — same storm for everyone') +
       '  ·  ' + rushTxt;
   }
-  const qt = document.getElementById('questTag');
-  if (qt) {
+  const qb = document.getElementById('questBadge');
+  if (qb) {
     ensureQuests();
-    qt.textContent = '🏅 TODAY\'S QUESTS:  ' + profile.quests.map(s => {
-      const def = QUEST_DEFS.find(q => q.id === s.id);
-      return (s.done ? '✅ ' : '▫ ') + def.txt + (s.done ? '' : ' (' + Math.min(s.progress, def.target) + '/' + def.target + ')');
-    }).join('   ·   ');
+    const doneN = profile.quests.filter(s => s.done).length;
+    const pend = profile.quests.filter(s => !s.done)
+      .reduce((a, s) => a + (((QUEST_DEFS.find(q => q.id === s.id) || {}).pay) || 0), 0);
+    qb.textContent = doneN === 3 ? 'ALL DONE ✓' : doneN + '/3 · ' + pend + ' 🔧 UP FOR GRABS';
+    qb.style.color = doneN === 3 ? '#4de37f' : '#ffd166';
   }
 }
 
@@ -3651,6 +3693,8 @@ document.getElementById('btnCampaignBack').onclick = () => { show('campaign', fa
 document.getElementById('btnGarage').onclick = () => { audioInit(); renderGarage(); show('menu', false); show('garage', true); };
 document.getElementById('btnMedals').onclick = () => { audioInit(); renderMedals(); show('menu', false); show('medals', true); };
 document.getElementById('btnMedalsBack').onclick = () => { show('medals', false); show('menu', true); };
+document.getElementById('btnQuests').onclick = () => { audioInit(); renderQuests(); show('menu', false); show('questBox', true); };
+document.getElementById('btnQuestsBack').onclick = () => { show('questBox', false); updateWinTag(); show('menu', true); };
 document.getElementById('btnBoard').onclick = () => {
   audioInit();
   show('menu', false); show('boardBox', true);
