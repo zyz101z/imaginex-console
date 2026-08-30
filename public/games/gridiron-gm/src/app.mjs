@@ -1418,12 +1418,56 @@ function runTicker(myGame, results, done) {
   }
   const scoreEl = $("#tickerScore");
   $("#tickerBox").classList.add("hidden");
+  // one drive row: text, then full render (score update + log line). Factored out
+  // so an onside ask can reveal its scoring drive BEFORE the question.
+  const rowText = (d) => {
+    const clockTxt = d.q === 5 ? "OVERTIME" : `Q${d.q} · ${d.clock || ""}`;
+    const conv = d.conv === "2G" ? " +2-POINT CONVERSION!" : d.conv === "2F" ? " (2-pt try FAILS)"
+      : d.conv === "XM" ? " (XP shanked!)" : "";
+    const desc = ({
+      TD: "TOUCHDOWN!" + conv, FG: "Field goal is GOOD",
+      "FG-MISS": d.iced ? "ICED!! The rattled kicker pushes it wide!" : "Field goal MISSES",
+      ONSIDE: "🤯 ONSIDE KICK RECOVERED — they never get the ball back!",
+      PUNT: "drive stalls — punt",
+      TO: d.downs ? "TURNOVER ON DOWNS — the gamble fails!" : "TURNOVER!",
+      "OT-WIN": "wins it in overtime!",
+      KNEEL: "kneels it out. That's the ballgame.",
+      SAFETY: "SAFETY!! Swallowed up in his own end zone — 2 points!",
+    })[d.result] || d.result;
+    const who = d.scorer && (d.result === "TD" || d.result === "FG" || d.result === "FG-MISS")
+      ? ` — ${d.scorer}` : "";
+    const sf = (d.onside === "win" ? "ONSIDE GAMBLE PAYS — " : d.onside === "lose" ? "onside fails, short field... " : "") +
+      (d.hurry ? "HURRY-UP — " : d.milk ? "grinding clock — " : "") +
+      (d.start >= 50 ? "SHORT FIELD! " : d.start <= 10 ? "backed up... " : "");
+    return `${clockTxt} · ${teamName(d.off)} — ${sf}${d.yards ? d.yards + " yd drive, " : ""}${desc}${who}`;
+  };
+  const renderRow = (d) => {
+    if (d.off === home) hs += d.points; else as += d.points;
+    if (d.defPoints) { if (d.off === home) as += d.defPoints; else hs += d.defPoints; }
+    const clockTxt = d.q === 5 ? "OVERTIME" : `Q${d.q} · ${d.clock || ""}`;
+    scoreEl.innerHTML = `${logo(away, 34)} <b>${as}</b> <span class="dim">—</span> <b>${hs}</b> ${logo(home, 34)}
+      &nbsp;<span class="qpill">${clockTxt}</span>`;
+    playDrive(d);
+    const line = document.createElement("div");
+    line.className = "tline" + (d.result === "TD" ? " td" : d.result === "TO" ? " to" : "");
+    if (d.result !== "TD" && d.result !== "TO") {
+      line.style.borderLeftColor = TEAM_BY_ID[d.off].color;
+    }
+    line.textContent = rowText(d);
+    drivesEl.prepend(line);
+    return line;
+  };
   const step = () => {
     // COACH'S CALL: the next entry is a decision moment we haven't shown yet.
     // Pause, ask, re-sim the rest of the game with the choice, splice the log.
     if (i < log.length && log[i].ask && decisionsLeft > 0 && weekHooks && weekHooks.captured) {
       const ctx = log[i].ask;
       decisionsLeft--;
+      // ONSIDE asks come AFTER the score is banked, and the choice doesn't change
+      // that drive's outcome — so show the touchdown (and the real score) FIRST,
+      // then ask. 4th/2-pt/ice stay pre-reveal: their choice changes the drive.
+      let revealed = null;
+      if (ctx.type === "onside") revealed = renderRow(log[i++]);
       showDecisionPanel(ctx, (choice) => {
         decisionsMade[ctx.drive + ":" + (ctx.type || "4th")] = choice;
         const r2 = replayUserGame(weekHooks, S.standings, coachMods, decisionsMade);
@@ -1432,6 +1476,9 @@ function runTicker(myGame, results, done) {
           log = myGame.log = r2.log;
           myGame.box = r2.box;
           myGame.scoreHome = r2.scoreA; myGame.scoreAway = r2.scoreB;
+          // the revealed scoring drive may gain onside flavor in the re-sim
+          // ("ONSIDE GAMBLE PAYS —") — refresh its text in place
+          if (revealed && log[i - 1]) revealed.textContent = rowText(log[i - 1]);
         }
         timer = setTimeout(step, 500);
       });
@@ -1451,37 +1498,7 @@ function runTicker(myGame, results, done) {
       }
       return;
     }
-    const d = log[i++];
-    if (d.off === home) hs += d.points; else as += d.points;
-    if (d.defPoints) { if (d.off === home) as += d.defPoints; else hs += d.defPoints; }
-    const clockTxt = d.q === 5 ? "OVERTIME" : `Q${d.q} · ${d.clock || ""}`;
-    scoreEl.innerHTML = `${logo(away, 34)} <b>${as}</b> <span class="dim">—</span> <b>${hs}</b> ${logo(home, 34)}
-      &nbsp;<span class="qpill">${clockTxt}</span>`;
-    const conv = d.conv === "2G" ? " +2-POINT CONVERSION!" : d.conv === "2F" ? " (2-pt try FAILS)"
-      : d.conv === "XM" ? " (XP shanked!)" : "";
-    const desc = ({
-      TD: "TOUCHDOWN!" + conv, FG: "Field goal is GOOD",
-      "FG-MISS": d.iced ? "ICED!! The rattled kicker pushes it wide!" : "Field goal MISSES",
-      ONSIDE: "🤯 ONSIDE KICK RECOVERED — they never get the ball back!",
-      PUNT: "drive stalls — punt",
-      TO: d.downs ? "TURNOVER ON DOWNS — the gamble fails!" : "TURNOVER!",
-      "OT-WIN": "wins it in overtime!",
-      KNEEL: "kneels it out. That's the ballgame.",
-      SAFETY: "SAFETY!! Swallowed up in his own end zone — 2 points!",
-    })[d.result] || d.result;
-    playDrive(d);
-    const line = document.createElement("div");
-    line.className = "tline" + (d.result === "TD" ? " td" : d.result === "TO" ? " to" : "");
-    if (d.result !== "TD" && d.result !== "TO") {
-      line.style.borderLeftColor = TEAM_BY_ID[d.off].color;
-    }
-    const who = d.scorer && (d.result === "TD" || d.result === "FG" || d.result === "FG-MISS")
-      ? ` — ${d.scorer}` : "";
-    const sf = (d.onside === "win" ? "ONSIDE GAMBLE PAYS — " : d.onside === "lose" ? "onside fails, short field... " : "") +
-      (d.hurry ? "HURRY-UP — " : d.milk ? "grinding clock — " : "") +
-      (d.start >= 50 ? "SHORT FIELD! " : d.start <= 10 ? "backed up... " : "");
-    line.textContent = `${clockTxt} · ${teamName(d.off)} — ${sf}${d.yards ? d.yards + " yd drive, " : ""}${desc}${who}`;
-    drivesEl.prepend(line);
+    renderRow(log[i++]);
     timer = setTimeout(step, 1150);
   };
   let timer = setTimeout(step, 400);

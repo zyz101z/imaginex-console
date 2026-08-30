@@ -1,5 +1,15 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-29 (later 3) — Onside ask reveals the score FIRST (user report)
+User saw "onside or kick deep?" while the ticker still showed the pre-TD score (the panel paused
+BEFORE revealing the scoring drive). Fix in runTicker: drive-row rendering factored into
+`rowText(d)`/`renderRow(d)`; an **onside** ask now renders its scoring drive (score + banner)
+BEFORE showDecisionPanel — safe because the onside choice never changes that drive's own outcome —
+and after the replay the revealed line's text is refreshed from the new log (picks up "ONSIDE
+GAMBLE PAYS —" flavor). 4th/2-pt/ice stay pre-reveal (their choice changes the drive; 2-pt panel
+already says TOUCHDOWN! + score chips). App-layer only; batteries untouched (3,020/17,537 ✓).
+Cache `?v=20260829c`. Synced.
+
 ## 2026-08-29 (later 2) — Score-conservation + decade-probe batteries (user greenlit both)
 1. **Score conservation** (sim battery, sweep section): every game's drive log replayed ticker-style
    (points→offense, defPoints→other side, OT row) must sum EXACTLY to scoreA/scoreB — locks
