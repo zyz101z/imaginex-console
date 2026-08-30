@@ -2,7 +2,7 @@
 // HUD/overlays, saves. Engine stays pure; all timing/randomness injected from here.
 
 import * as E from "./engine.mjs";
-import { W, H, PEN, STAND, penX, penY, drawScene, drawPig, drawTruffle, drawCrate, drawStar } from "./render.mjs";
+import { W, H, PEN, STAND, penX, penY, drawScene, drawPig, drawTruffle, drawCrate, drawStar, drawHintRing } from "./render.mjs";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game"), ctx = canvas.getContext("2d");
@@ -70,6 +70,8 @@ const sfx = {
   pop() { beep(600, 0.06, "sine", 0.14, 900); },
   coin() { beep(1150, 0.06, "triangle", 0.1); setTimeout(() => beep(1500, 0.09, "triangle", 0.1), 50); },
   merge() { [440, 550, 660, 880].forEach((f, i) => setTimeout(() => beep(f, 0.12, "triangle", 0.14), i * 70)); },
+  discover() { [523, 659, 784, 1047, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.18, "triangle", 0.16), i * 90)); },
+  shiny() { [1200, 1600, 2100].forEach((f, i) => setTimeout(() => beep(f, 0.1, "sine", 0.12), i * 60)); },
   crack() { beep(160, 0.1, "square", 0.16, 60); setTimeout(() => beep(90, 0.12, "square", 0.14, 40), 70); },
   rebirth() { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.22, "triangle", 0.15), i * 110)); },
   buy() { beep(500, 0.05, "triangle", 0.12, 700); },
@@ -120,6 +122,25 @@ function addSplat(x, y) {
       t: 0, dur: 0.5 + rng() * 0.3, r: 3 + rng() * 4 });
   }
 }
+// 🎉 first-EVER creation of a tier: full celebration (banner + confetti + fanfare).
+// Any path that mints pigs (merge, crate, shop) routes its discoveries here.
+function celebrate(tier, x = W / 2, y = PEN.y + PEN.h / 2) {
+  fx.push({ kind: "banner", t: 0, dur: 2.6, name: E.TIERS[tier - 1].name, tier });
+  addConfetti(x, y, 40);
+  addRing(x, y, "#ffd166");
+  sfx.discover();
+}
+// pig just created (any source): shiny fanfare + tier-discovery celebration
+function announcePig(pig, wasKnown, x, y) {
+  if (!pig) return;
+  if (!wasKnown) celebrate(pig.tier, x, y);
+  if (pig.shiny) {
+    toast(`✨ SHINY ${E.TIERS[pig.tier - 1].name}! It digs DOUBLE!`);
+    addConfetti(x ?? W / 2, y ?? H / 2, 20);
+    sfx.shiny();
+  }
+}
+
 function toast(msg) {
   $("toast").textContent = msg;
   $("toast").style.opacity = 1;
@@ -147,13 +168,15 @@ function refreshHud() {
 // ---------------------------------------------------------------- actions
 $("buyBtn").onclick = () => {
   audio();
+  const known = S.discovered.includes(E.buyTier(S));
   const p = E.buyPiglet(S, rng);
   if (!p) { sfx.deny(); return; }
   const a = animFor(p);
   a.py -= 40;  // drop in with a hop
   addSplat(a.px, a.py + 30);
   sfx.buy(); sfx.oink(p.tier);
-  refreshHud(); save();
+  announcePig(p, known, a.px, a.py);
+  refreshHud(); save(); reportScore();
 };
 
 $("upgBtn").onclick = () => { audio(); renderUpgrades(); $("upgBox").classList.remove("hidden"); };
@@ -233,7 +256,9 @@ function renderBook() {
     }
     const nm = document.createElement("div");
     nm.className = "nm";
-    nm.textContent = known ? `${tier}. ${t.name}` : `${tier}. ???`;
+    const shinyBadge = (S.shinyFound || []).includes(tier) ? " ✨" : "";
+    nm.textContent = known ? `${tier}. ${t.name}${shinyBadge}` : `${tier}. ???`;
+    if (shinyBadge) nm.title = "You've found the shiny version!";
     cell.appendChild(cv); cell.appendChild(nm);
     grid.appendChild(cell);
   });
@@ -298,6 +323,7 @@ function refreshCrateOpenBtn() {
 function closeCrateModal() { crateModalOpen = false; $("crateBox").classList.add("hidden"); }
 $("crateOpen").onclick = () => {
   const pos = cratePos;
+  const before = new Set(S.discovered);
   const p = E.openCrate(S, rng, nowSec());
   closeCrateModal();
   if (p) {
@@ -305,7 +331,8 @@ $("crateOpen").onclick = () => {
     if (pos) { a.px = pos.x; a.py = pos.y; a.tx = a.px; a.ty = a.py; }
     addConfetti(a.px, a.py, 26);
     sfx.crack(); sfx.oink(p.tier);
-    toast(`📦 It's a ${E.TIERS[p.tier - 1].name}!`);
+    if (before.has(p.tier) && !p.shiny) toast(`📦 It's a ${E.TIERS[p.tier - 1].name}!`);
+    announcePig(p, before.has(p.tier), a.px, a.py);
     cratePos = null;
     refreshHud(); save(); reportScore();
   } else { sfx.deny(); if (!S.crate) { cratePos = null; toast("💨 The crate crumbled away!"); } }
@@ -328,9 +355,15 @@ canvas.addEventListener("pointerdown", (ev) => {
   if (p) {
     const a = animFor(p);
     drag = { id: p.id, dx: a.px - x, dy: a.py - y };
+    // merge hints: every pig that matches the one in hand gets a pulsing gold ring
+    dragMatches = new Set(
+      p.tier < E.MAX_TIER
+        ? S.pigs.filter(q => q.id !== p.id && q.tier === p.tier).map(q => q.id)
+        : []);
     canvas.setPointerCapture(ev.pointerId);
   }
 });
+let dragMatches = new Set();
 canvas.addEventListener("pointermove", (ev) => {
   if (!drag) return;
   const { x, y } = canvasPos(ev);
@@ -342,6 +375,7 @@ canvas.addEventListener("pointermove", (ev) => {
   a.tx = a.px; a.ty = a.py;
 });
 canvas.addEventListener("pointerup", (ev) => {
+  dragMatches = new Set();
   if (!drag) return;
   const p = S.pigs.find(q => q.id === drag.id);
   const wasDrag = drag; drag = null;
@@ -349,6 +383,7 @@ canvas.addEventListener("pointerup", (ev) => {
   const a = animFor(p);
   const target = pigAt(a.px, a.py, p.id);
   if (target && E.canMerge(S, p, target)) {
+    const known = S.discovered.includes(p.tier + 1);
     const ta = animFor(target);
     const merged = E.mergePigs(S, target.id, p.id, rng);   // dragged pig disappears into target
     if (merged) {
@@ -358,10 +393,7 @@ canvas.addEventListener("pointerup", (ev) => {
       addSplat(ta.px, ta.py);
       addPopText(ta.px, ta.py - 55, E.TIERS[merged.tier - 1].name + "!", "#aef7ff");
       sfx.merge(); sfx.oink(merged.tier);
-      if (merged.tier === S.bestTier && !seenBest.has(merged.tier)) {
-        seenBest.add(merged.tier);
-        toast(`✨ NEW PIG: ${E.TIERS[merged.tier - 1].name}!`);
-      }
+      announcePig(merged, known, ta.px, ta.py);
       refreshHud(); save(); reportScore();
       return;
     }
@@ -372,7 +404,6 @@ canvas.addEventListener("pointerup", (ev) => {
   p.y = (a.py - PEN.y - 30) / (PEN.h - 62);
   save();
 });
-const seenBest = new Set(S.discovered);
 
 // ---------------------------------------------------------------- game loop
 let last = performance.now();
@@ -446,11 +477,21 @@ function render(t) {
     if (!crateModalOpen) ctx.fillText(`${mm}:${ss}`, cratePos.x, cratePos.y - 40);
   }
 
+  // merge hints: pulsing gold rings under every pig matching the one being dragged
+  if (drag && dragMatches.size) {
+    for (const p of S.pigs) {
+      if (!dragMatches.has(p.id)) continue;
+      const a = animFor(p);
+      drawHintRing(ctx, a.px, a.py, E.TIERS[p.tier - 1].size * 30, t);
+    }
+  }
+
   // pigs, y-sorted for depth
   const sorted = [...S.pigs].sort((a, b) => animFor(a).py - animFor(b).py);
   for (const p of sorted) {
     const a = animFor(p);
-    drawPig(ctx, { x: a.px, y: a.py }, p.tier, { phase: a.phase, dir: a.dir, lift: drag && drag.id === p.id });
+    drawPig(ctx, { x: a.px, y: a.py }, p.tier,
+      { phase: a.phase, dir: a.dir, lift: drag && drag.id === p.id, shiny: p.shiny });
   }
 
   // fx on top
@@ -482,6 +523,29 @@ function render(t) {
       ctx.fillStyle = "#7d5229";
       ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
+    } else if (f.kind === "banner") {
+      // 🎉 NEW PIG DISCOVERED — scale-in, hold, fade out; the pig poses beneath
+      const k = f.t / f.dur;
+      const inK = Math.min(1, f.t / 0.3);
+      const scaleB = 0.6 + 0.4 * (1 - Math.pow(1 - inK, 3));
+      ctx.save();
+      ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
+      ctx.translate(W / 2, 250);
+      ctx.scale(scaleB, scaleB);
+      ctx.fillStyle = "rgba(20,32,14,0.82)";
+      ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 4;
+      const bw = 480, bh = 170;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 22) : ctx.rect(-bw / 2, -bh / 2, bw, bh);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#ffe9a8";
+      ctx.font = "900 20px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("✨ NEW PIG DISCOVERED! ✨", 0, -48);
+      ctx.fillStyle = "#fff";
+      ctx.font = "900 38px 'Segoe UI',sans-serif";
+      ctx.fillText(f.name.toUpperCase(), 0, 0);
+      drawPig(ctx, { x: 0, y: 52 }, f.tier, { scale: Math.min(E.TIERS[f.tier - 1].size, 1.2) * 0.8, phase: t * 6 });
+      ctx.restore();
     }
   }
 }

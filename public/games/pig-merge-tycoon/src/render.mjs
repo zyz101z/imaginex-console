@@ -478,6 +478,92 @@ export function drawPig(ctx, p, tier, opts = {}) {
       ctx.stroke();
     }
   }
+  if (T.robo) {
+    // antenna + panel seams + glowing sensor eye
+    ctx.strokeStyle = "#7a8698"; ctx.lineWidth = s * 0.07; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-s * 0.05, -s * 0.72); ctx.lineTo(-s * 0.12, -s * 1.05); ctx.stroke();
+    ctx.fillStyle = "#7fe8ff";
+    ctx.beginPath(); ctx.arc(-s * 0.12, -s * 1.1, s * 0.11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(90,105,125,0.6)"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.75, -s * 0.1); ctx.lineTo(s * 0.3, -s * 0.1);
+    ctx.moveTo(-s * 0.3, -s * 0.55); ctx.lineTo(-s * 0.3, s * 0.45); ctx.stroke();
+    ctx.fillStyle = "#7a8698";
+    for (const [rx2, ry2] of [[-0.6, -0.3], [-0.05, 0.3], [0.2, -0.4]]) {
+      ctx.beginPath(); ctx.arc(rx2 * s, ry2 * s, s * 0.05, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#7fe8ff";
+    ctx.beginPath(); ctx.arc(hx + s * 0.12, -s * 0.24, s * 0.09, 0, Math.PI * 2); ctx.fill();
+  }
+  if (T.dragon) {
+    // flapping bat-wings + head horns + a puff of snout-fire
+    ctx.fillStyle = `hsl(${hue},${sat + 10}%,${(T.light || 60) - 18}%)`;
+    const wingFlap = Math.sin(phase * 2.2) * 0.25;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(-s * 0.25 + side * s * 0.12, -s * 0.55);
+      ctx.rotate(side * (0.5 + wingFlap));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(-s * 0.35, -s * 0.75, -s * 0.05, -s * 0.9);
+      ctx.lineTo(s * 0.06, -s * 0.55); ctx.lineTo(s * 0.2, -s * 0.75); ctx.lineTo(s * 0.16, -s * 0.3);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#f5eed8";
+    for (const hx2 of [hx - s * 0.2, hx + s * 0.1]) {
+      ctx.beginPath();
+      ctx.moveTo(hx2, -s * 0.6); ctx.lineTo(hx2 + s * 0.08, -s * 0.88); ctx.lineTo(hx2 + s * 0.16, -s * 0.58);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,176,40,0.9)";
+    const puff = 0.6 + Math.abs(Math.sin(phase * 1.4)) * 0.5;
+    ctx.beginPath(); ctx.arc(hx + s * 0.78, -s * 0.02, s * 0.12 * puff, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,222,89,0.9)";
+    ctx.beginPath(); ctx.arc(hx + s * 0.7, -s * 0.02, s * 0.08 * puff, 0, Math.PI * 2); ctx.fill();
+  }
+  if (T.phoenix) {
+    // fiery crest + flaming tail feathers
+    for (const [cols, shrink] of [[["#e84f4f", "#ff8c42"], 1], [["#ffde59", "#ffb028"], 0.6]]) {
+      ctx.fillStyle = cols[0];
+      for (const [fxx, h] of [[-0.25, 0.55], [0, 0.8], [0.25, 0.6]]) {
+        const flick = Math.sin(phase * 3 + fxx * 9) * 0.1;
+        ctx.beginPath();
+        ctx.moveTo(fxx * s - s * 0.13 * shrink, -s * 0.7);
+        ctx.quadraticCurveTo(fxx * s - s * 0.18, -s * (0.7 + h * 0.6), fxx * s + (flick * s), -s * (0.7 + h * shrink));
+        ctx.quadraticCurveTo(fxx * s + s * 0.18, -s * (0.7 + h * 0.6), fxx * s + s * 0.13 * shrink, -s * 0.7);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.fillStyle = "#ffb028";
+    ctx.beginPath(); ctx.arc(-s * 1.12, -s * 0.35, s * 0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffde59";
+    ctx.beginPath(); ctx.arc(-s * 1.2, -s * 0.5, s * 0.08, 0, Math.PI * 2); ctx.fill();
+  }
+  if (T.infinity) {
+    // the ∞ halo + a rainbow rim ring around the whole hog
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = s * 0.09; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(-s * 0.14, -s * 1.05, s * 0.14, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s * 0.14, -s * 1.05, s * 0.14, 0, Math.PI * 2); ctx.stroke();
+    const rim = ctx.createLinearGradient(-s, 0, s, 0);
+    ["#ff6b6b", "#ffe66d", "#7be07b", "#6bc7ff", "#c792ea"].forEach((c, i, a2) => rim.addColorStop(i / (a2.length - 1), c));
+    ctx.strokeStyle = rim; ctx.lineWidth = s * 0.08; ctx.globalAlpha = 0.8;
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 1.16, s * 0.93, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // ✨ shiny: orbiting white sparkles + a bright outline shimmer
+  if (opts.shiny) {
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = s * 0.06;
+    ctx.globalAlpha = 0.6 + Math.sin(phase * 4) * 0.25;
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 1.12, s * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff";
+    for (let i = 0; i < 3; i++) {
+      const a = phase * 1.8 + (i * Math.PI * 2) / 3;
+      drawStar(ctx, Math.cos(a) * s * 1.35, -s * 0.1 + Math.sin(a) * s * 0.9, s * 0.11);
+    }
+  }
   ctx.restore();
 }
 
@@ -492,41 +578,57 @@ export function drawStar(ctx, cx, cy, r) {
 }
 
 // Truffle by pig TIER: bigger and fancier as tiers climb, so a high pig's payday
-// reads at a glance. Bands: 1-3 brown · 4-6 gold-flecked · 7-9 rare white ·
-// 10-12 glowing golden · 13-15 crystal rainbow · 16 the Imperial Truffle.
+// reads at a glance. Bands 1-15 group by threes; every tier from 16 up digs its
+// OWN signature truffle (imperial, magma, storm, galaxy, cosmic, robo, dragon,
+// phoenix, infinity) so the new pigs never look like "just another gold one".
+const TRUFFLE_STYLES = {
+  //         body       highlight   glow
+  brown:    ["#4a3226", "#5d4232",  null],
+  fleck:    ["#4a3226", "#5d4232",  null],
+  white:    ["#e8dcc8", "#f5efe2",  null],
+  golden:   ["#e0a92b", "#f5c862",  "#ffd166"],
+  crystal:  ["#8fd4e8", "#c8ecf5",  "#aef7ff"],
+  imperial: ["#f5c33b", "#ffe28a",  "#fff2a8"],
+  magma:    ["#3a2a26", "#54382c",  "#ff7a20"],
+  storm:    ["#8fa0b8", "#c4d0e0",  "#cfe4ff"],
+  galaxy:   ["#2c2050", "#4a3a80",  "#b39dff"],
+  cosmic:   ["#3a3a52", "#6a6a8a",  "#ffffff"],
+  robo:     ["#9aa7b8", "#d4dde8",  "#7fe8ff"],
+  dragon:   ["#3f7d3a", "#66a85c",  "#a8ff8a"],
+  phoenix:  ["#c9463c", "#f0973a",  "#ffb028"],
+  infinity: ["#141020", "#2a2440",  "#e8d9ff"],
+};
+const TIER_TRUFFLE = ["imperial", "magma", "storm", "galaxy", "cosmic", "robo", "dragon", "phoenix", "infinity"];
 export function drawTruffle(ctx, x, y, tier = 1) {
-  const r = 7 + Math.min(20, tier) * 0.9;                    // t1 ≈ 8px … t20 ≈ 25px
-  const band = tier >= 16 ? 5 : tier >= 13 ? 4 : tier >= 10 ? 3 : tier >= 7 ? 2 : tier >= 4 ? 1 : 0;
+  const r = 7 + Math.min(22, tier) * 0.85;                   // t1 ≈ 8px … t24 ≈ 26px
+  const key = tier >= 16 ? (TIER_TRUFFLE[Math.min(TIER_TRUFFLE.length - 1, tier - 16)] || "infinity")
+    : tier >= 13 ? "crystal" : tier >= 10 ? "golden" : tier >= 7 ? "white" : tier >= 4 ? "fleck" : "brown";
+  const [bodyCol, hiCol, glow] = TRUFFLE_STYLES[key];
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.beginPath(); ctx.ellipse(x, y + r * 0.8, r, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
-  if (band >= 3) {   // glow for golden and up
-    ctx.shadowColor = band === 3 ? "#ffd166" : band === 4 ? "#aef7ff" : "#fff2a8";
-    ctx.shadowBlur = 10 + band * 3;
-  }
-  // body
-  const bodyCol = ["#4a3226", "#4a3226", "#e8dcc8", "#e0a92b", "#8fd4e8", "#f5c33b"][band];
-  const hiCol   = ["#5d4232", "#5d4232", "#f5efe2", "#f5c862", "#c8ecf5", "#ffe28a"][band];
-  ctx.fillStyle = bodyCol;
+  if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 12 + r * 0.3; }
   // lumpy silhouette: three overlapping blobs
+  ctx.fillStyle = bodyCol;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x - r * 0.45, y + r * 0.2, r * 0.6, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + r * 0.45, y + r * 0.15, r * 0.55, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = hiCol;
   ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.5, 0, Math.PI * 2); ctx.fill();
   ctx.shadowBlur = 0;
-  if (band === 1) {          // gold flecks
+  // signature decorations
+  if (key === "fleck") {
     ctx.fillStyle = "#ffd166";
     for (const [fx2, fy2] of [[-0.4, 0.15], [0.25, -0.35], [0.45, 0.3]]) {
       ctx.beginPath(); ctx.arc(x + fx2 * r, y + fy2 * r, r * 0.13, 0, Math.PI * 2); ctx.fill();
     }
-  } else if (band === 2) {   // white truffle marbling
+  } else if (key === "white") {
     ctx.strokeStyle = "#c9b998"; ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(x - r * 0.5, y); ctx.quadraticCurveTo(x, y - r * 0.4, x + r * 0.5, y + r * 0.1);
     ctx.moveTo(x - r * 0.3, y + r * 0.4); ctx.quadraticCurveTo(x + r * 0.1, y + r * 0.1, x + r * 0.4, y + r * 0.45);
     ctx.stroke();
-  } else if (band === 4) {   // crystal facets + rainbow sheen
+  } else if (key === "crystal") {
     const g = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
     ["#ff9ec4", "#ffe66d", "#7be07b", "#6bc7ff"].forEach((c, i, a2) => g.addColorStop(i / (a2.length - 1), c));
     ctx.globalAlpha = 0.5;
@@ -537,13 +639,86 @@ export function drawTruffle(ctx, x, y, tier = 1) {
     ctx.beginPath();
     ctx.moveTo(x - r * 0.5, y - r * 0.2); ctx.lineTo(x, y + r * 0.1); ctx.lineTo(x - r * 0.3, y + r * 0.5);
     ctx.moveTo(x + r * 0.15, y - r * 0.5); ctx.lineTo(x + r * 0.45, y); ctx.stroke();
-  } else if (band === 5) {   // imperial: crown-star on top
+  } else if (key === "imperial") {
     ctx.fillStyle = "#fff";
     drawStar(ctx, x, y - r * 0.9, r * 0.42);
+  } else if (key === "magma") {
+    ctx.strokeStyle = "#ffb028"; ctx.lineWidth = r * 0.1; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.6, y - r * 0.1); ctx.lineTo(x - r * 0.2, y + r * 0.15); ctx.lineTo(x - r * 0.35, y + r * 0.5);
+    ctx.moveTo(x + r * 0.1, y - r * 0.45); ctx.lineTo(x + r * 0.3, y); ctx.lineTo(x + r * 0.1, y + r * 0.4);
+    ctx.stroke();
+  } else if (key === "storm") {
+    ctx.fillStyle = "#ffe45e";
+    ctx.beginPath();
+    ctx.moveTo(x + r * 0.1, y - r * 0.55); ctx.lineTo(x - r * 0.15, y + r * 0.05); ctx.lineTo(x + r * 0.05, y + r * 0.05);
+    ctx.lineTo(x - r * 0.1, y + r * 0.6); ctx.lineTo(x + r * 0.35, y - r * 0.1); ctx.lineTo(x + r * 0.12, y - r * 0.1);
+    ctx.closePath(); ctx.fill();
+  } else if (key === "galaxy") {
+    ctx.fillStyle = "#fff";
+    for (const [gx, gy, gr] of [[-0.45, -0.2, 0.09], [0.1, 0.3, 0.07], [0.4, -0.3, 0.1], [-0.1, -0.45, 0.06]]) {
+      ctx.beginPath(); ctx.arc(x + gx * r, y + gy * r, gr * r, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (key === "cosmic") {
+    // a tiny ringed planet
+    const g = ctx.createLinearGradient(x - r, y, x + r, y);
+    ["#ff9ec4", "#ffe66d", "#7be07b", "#6bc7ff", "#c792ea"].forEach((c, i, a2) => g.addColorStop(i / (a2.length - 1), c));
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.85, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = r * 0.1;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 1.25, r * 0.4, -0.35, 0, Math.PI * 2); ctx.stroke();
+  } else if (key === "robo") {
+    ctx.strokeStyle = "#5d6b7d"; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(x - r * 0.6, y); ctx.lineTo(x + r * 0.6, y);
+    ctx.moveTo(x, y - r * 0.55); ctx.lineTo(x, y + r * 0.55); ctx.stroke();
+    ctx.fillStyle = "#7fe8ff";
+    ctx.beginPath(); ctx.arc(x + r * 0.3, y - r * 0.3, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#5d6b7d";
+    for (const [rx, ry] of [[-0.4, -0.35], [-0.35, 0.35], [0.45, 0.3]]) {
+      ctx.beginPath(); ctx.arc(x + rx * r, y + ry * r, r * 0.07, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (key === "dragon") {
+    // scale arcs + a little flame
+    ctx.strokeStyle = "#2c5a28"; ctx.lineWidth = 1.3;
+    for (const [sx, sy] of [[-0.35, -0.15], [0.05, -0.3], [0.35, -0.05], [-0.1, 0.2], [0.25, 0.3]]) {
+      ctx.beginPath(); ctx.arc(x + sx * r, y + sy * r, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+    }
+    ctx.fillStyle = "#ffb028";
+    ctx.beginPath();
+    ctx.moveTo(x + r * 0.75, y - r * 0.5); ctx.quadraticCurveTo(x + r * 1.05, y - r * 0.9, x + r * 0.7, y - r * 1.05);
+    ctx.quadraticCurveTo(x + r * 0.85, y - r * 0.75, x + r * 0.55, y - r * 0.7); ctx.closePath(); ctx.fill();
+  } else if (key === "phoenix") {
+    // flame crest licking off the top
+    ctx.fillStyle = "#ffde59";
+    for (const [fxx, h] of [[-0.35, 0.7], [0, 1.0], [0.35, 0.75]]) {
+      ctx.beginPath();
+      ctx.moveTo(x + fxx * r - r * 0.14, y - r * 0.5);
+      ctx.quadraticCurveTo(x + fxx * r - r * 0.2, y - r * (0.5 + h * 0.5), x + fxx * r, y - r * (0.5 + h));
+      ctx.quadraticCurveTo(x + fxx * r + r * 0.2, y - r * (0.5 + h * 0.5), x + fxx * r + r * 0.14, y - r * 0.5);
+      ctx.closePath(); ctx.fill();
+    }
+  } else if (key === "infinity") {
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = r * 0.14; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(x - r * 0.28, y, r * 0.26, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + r * 0.28, y, r * 0.26, 0, Math.PI * 2); ctx.stroke();
   }
-  // sparkle (everyone gets one; brighter up the bands)
-  ctx.fillStyle = band >= 3 ? "#ffffff" : "#ffe9a8";
-  drawStar(ctx, x + r * 0.55, y - r * 0.55, r * (0.26 + band * 0.03));
+  // sparkle (everyone gets one; brighter with a glow)
+  ctx.fillStyle = glow ? "#ffffff" : "#ffe9a8";
+  drawStar(ctx, x + r * 0.55, y - r * 0.55, r * 0.3);
+  ctx.restore();
+}
+
+// pulsing gold ring under a pig — "this one matches what you're dragging!"
+export function drawHintRing(ctx, x, y, radius, time) {
+  const pulse = 1 + Math.sin(time * 6) * 0.12;
+  ctx.save();
+  ctx.strokeStyle = "#ffd166";
+  ctx.lineWidth = 3.5;
+  ctx.shadowColor = "#ffd166"; ctx.shadowBlur = 10;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.ellipse(x, y + radius * 0.55, radius * 1.25 * pulse, radius * 0.5 * pulse, 0, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 }
 

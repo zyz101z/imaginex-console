@@ -22,6 +22,10 @@ export const TIERS = [
   { name: "Storm Sow",     hue: 212, sat: 28, size: 1.86, glow: true, bolt: true, light: 62 },
   { name: "Galaxy Boar",   hue: 258, sat: 55, size: 1.94, glow: true, galaxy: true, tusks: true, light: 42 },
   { name: "COSMIC PIG",    hue: -1,  sat: 90, size: 2.06, glow: true, rainbow: true, crown: true, stars: true, sun: true },
+  { name: "Robo Hog",      hue: 195, sat: 25, size: 2.16, glow: true, robo: true, light: 74 },
+  { name: "Dragon Boar",   hue: 115, sat: 55, size: 2.26, glow: true, dragon: true, tusks: true, light: 55 },
+  { name: "Phoenix Sow",   hue: 22,  sat: 95, size: 2.36, glow: true, phoenix: true, light: 55 },
+  { name: "INFINITY HOG",  hue: 270, sat: 35, size: 2.52, glow: true, infinity: true, galaxy: true, light: 24 },
 ];
 export const MAX_TIER = TIERS.length;
 
@@ -69,6 +73,7 @@ export function newGame(now = 0) {
     digs: 0,
     crate: null,                     // { tier, expiresAt }
     discovered: [1],                 // tier-book entries
+    shinyFound: [],                  // tiers where a ✨ shiny has been seen (book badges)
     lastSeen: now,
   };
 }
@@ -85,6 +90,8 @@ export const digInterval = (s) => 6.0 * Math.pow(0.93, s.upgrades.feed);        
 export const truffleValue = (s, tier) =>
   Math.ceil(2 * Math.pow(2.05, tier - 1) * (1 + 0.15 * s.upgrades.market) * s.mult);
 export const crateChance = (s) => (1 / 45) * (1 + 0.20 * s.upgrades.lucky);
+// what one dig from THIS pig pays (✨ shiny pigs dig double)
+export const pigDigValue = (s, pig) => truffleValue(s, pig.tier) * (pig.shiny ? 2 : 1);
 
 export function upgradeCost(s, key) {
   const u = UPGRADES[key];
@@ -94,10 +101,16 @@ export const expansionCost = (s) =>
   s.expansion + 1 < EXPANSIONS.length ? EXPANSION_COST[s.expansion + 1] : null;
 
 // ---------------------------------------------------------------- pigs
-function addPig(s, tier, rng) {
+export const SHINY_CHANCE = 0.02;   // ✨ any newborn pig (bought, merged, crated)
+function addPig(s, tier, rng, forceShiny = false) {
   const pig = { id: s.nextId++, tier,
-    x: 0.15 + rng() * 0.7, y: 0.2 + rng() * 0.6 };
+    x: 0.15 + rng() * 0.7, y: 0.2 + rng() * 0.6,
+    shiny: forceShiny || rng() < SHINY_CHANCE || undefined };
   s.pigs.push(pig);
+  if (pig.shiny) {
+    s.shinyFound = s.shinyFound || [];
+    if (!s.shinyFound.includes(tier)) { s.shinyFound.push(tier); s.shinyFound.sort((a, b) => a - b); }
+  }
   if (tier > s.bestTier) s.bestTier = tier;
   if (!s.discovered.includes(tier)) { s.discovered.push(tier); s.discovered.sort((a, b) => a - b); }
   return pig;
@@ -115,11 +128,17 @@ export const canMerge = (s, a, b) =>
   !!a && !!b && a.id !== b.id && a.tier === b.tier && a.tier < MAX_TIER;
 
 // Merge b INTO a: a becomes tier+1 at its own spot, b disappears.
+// ✨ Shiny: a shiny parent always passes it on; otherwise a fresh 2% roll.
 export function mergePigs(s, idA, idB, rng) {
   const a = s.pigs.find(p => p.id === idA), b = s.pigs.find(p => p.id === idB);
   if (!canMerge(s, a, b)) return null;
   s.pigs = s.pigs.filter(p => p.id !== b.id);
   a.tier += 1;
+  a.shiny = a.shiny || b.shiny || rng() < SHINY_CHANCE || undefined;
+  if (a.shiny) {
+    s.shinyFound = s.shinyFound || [];
+    if (!s.shinyFound.includes(a.tier)) { s.shinyFound.push(a.tier); s.shinyFound.sort((x, y) => x - y); }
+  }
   if (a.tier > s.bestTier) s.bestTier = a.tier;
   if (!s.discovered.includes(a.tier)) { s.discovered.push(a.tier); s.discovered.sort((x, y) => x - y); }
   return a;
@@ -127,7 +146,7 @@ export function mergePigs(s, idA, idB, rng) {
 
 // One pig digs: pays out a truffle; sometimes unearths a mystery crate.
 export function doDig(s, pig, rng, now = 0) {
-  const value = truffleValue(s, pig.tier);
+  const value = pigDigValue(s, pig);
   s.coins += value;
   s.lifetimeCoins += value;
   s.digs++;
@@ -221,7 +240,7 @@ export function offlineEarnings(s, now) {
   const away = Math.min(8 * 3600, Math.max(0, now - s.lastSeen));
   s.lastSeen = now;
   if (away < 60 || !s.pigs.length) return 0;
-  const perSec = s.pigs.reduce((a, p) => a + truffleValue(s, p.tier), 0) / digInterval(s);
+  const perSec = s.pigs.reduce((a, p) => a + pigDigValue(s, p), 0) / digInterval(s);
   const gain = Math.floor(perSec * away * 0.4);
   s.coins += gain;
   s.lifetimeCoins += gain;
@@ -246,5 +265,6 @@ export function deserialize(json) {
   const s = JSON.parse(json);
   if (!s || s.v !== 1) return null;
   if (s.upgrades && s.upgrades.stock == null) s.upgrades.stock = 0;   // pre-stock saves
+  if (!s.shinyFound) s.shinyFound = [];                                // pre-shiny saves
   return s;
 }
