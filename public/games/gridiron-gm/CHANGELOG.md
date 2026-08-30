@@ -1,5 +1,14 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-29 (later 4) — Name pools ×4 (user: rookie/FA names repeat too much)
+FIRST 50→190, LAST 50→320 (same mixed-origin flavor). Per 1,700 generated players (≈ a decade):
+max surname repeats 34→13, 277 distinct surnames in play, ~20 exact full-name coincidences
+(realistic; NFL has them). ⚠️ LESSON: tried a global USED_NAMES dedup Set first — it broke
+"same seed ⇒ same result" (second same-seed league build collided with the first build's names
+→ retry draws → different rosters). genName MUST stay a pure function of the rng; determinism
+tests caught it immediately. Existing saves keep their names; new classes/FAs draw from the big
+pools. Batteries 3,020/17,537 ✓. Cache `?v=20260829d`. Synced.
+
 ## 2026-08-29 (later 3) — Onside ask reveals the score FIRST (user report)
 User saw "onside or kick deep?" while the ticker still showed the pre-TD score (the panel paused
 BEFORE revealing the scoring drive). Fix in runTicker: drive-row rendering factored into

@@ -6,12 +6,49 @@ const FIRST = ["Jalen","Marcus","Trey","Darius","Caleb","Zion","Malik","Jaylen",
   "Cole","Hunter","Brock","Tanner","Wyatt","Gage","Chase","Blake","Dawson","Cade",
   "Amari","Xavier","Elijah","Isaiah","Josiah","Micah","Noah","Ezra","Levi","Asher",
   "Tyrell","Devonte","Keshawn","Rashad","Jamal","Andre","Terrell","Donte","Marquis","Cortez",
-  "Jake","Ryan","Matt","Danny","Tommy","Joey","Nick","Sam","Ben","Will"];
+  "Jake","Ryan","Matt","Danny","Tommy","Joey","Nick","Sam","Ben","Will",
+  "Aiden","Austin","Avery","Braxton","Brady","Brandon","Brendan","Bryce","Camden","Carson",
+  "Cameron","Chandler","Christian","Cooper","Colton","Damian","Dante","Davion","Deion","Dennis",
+  "Derek","Desmond","Devin","Dillon","Dominic","Drew","Dylan","Easton","Eli","Emmanuel",
+  "Ethan","Evan","Ezekiel","Felix","Gabriel","Garrett","Gavin","Grant","Grayson","Griffin",
+  "Hakeem","Harrison","Hassan","Hayden","Hendrix","Ibrahim","Immanuel","Jace","Jackson","Jaden",
+  "Jamar","Jameson","Jared","Jarvis","Javon","Jaxon","Jeremiah","Jermaine","Jett","Joaquin",
+  "Jonah","Jordan","Julian","Justice","Kaden","Kai","Kareem","Keegan","Kellen","Kendall",
+  "Kendrick","Kenji","Kobe","Kyler","Lamar","Landon","Lawrence","Leon","Lincoln","Logan",
+  "Luca","Malcolm","Mario","Mason","Mateo","Maverick","Maxwell","Mekhi","Miles","Mohammed",
+  "Nasir","Nathaniel","Nico","Nolan","Omar","Orlando","Parker","Preston","Quentin","Quincy",
+  "Rafael","Raheem","Reese","Reggie","Ricardo","Roman","Ronan","Roosevelt","Ryder","Santiago",
+  "Sawyer","Sergio","Seth","Shane","Silas","Sterling","Tariq","Tate","Theo","Tobias",
+  "Travis","Tristan","Tucker","Tyrese","Vaughn","Victor","Vince","Wade","Walker","Warren",
+  "Weston","Xander","Yusuf","Zachary","Zane","Zeke","Amos","Barrett","Cyrus","Duke"];
 const LAST = ["Washington","Jefferson","Brooks","Hayes","Coleman","Simmons","Rivers","Dalton","Pierce","Watts",
   "Mitchell","Carter","Henderson","Franklin","Griffin","Sanders","Boone","Vance","Sharpe","Odom",
   "Lattimore","Tillman","Okafor","Nakamura","Sosa","Vasquez","Ferreira","Kowalski","Lindqvist","Petrov",
   "McCray","Dunbar","Holloway","Beckett","Stallworth","Ridgeway","Calloway","Prescott","Winfield","Ashford",
-  "Barlow","Crowder","Dixon","Ellison","Fontaine","Garvey","Hutchins","Ingram","Jarrett","Kessler"];
+  "Barlow","Crowder","Dixon","Ellison","Fontaine","Garvey","Hutchins","Ingram","Jarrett","Kessler",
+  "Abernathy","Adeyemi","Alvarado","Ambrose","Antonelli","Applewhite","Armstead","Atwater","Baptiste","Bargas",
+  "Barkley","Bassett","Beaumont","Bellamy","Benford","Bergstrom","Blackmon","Blount","Bowersox","Bracken",
+  "Braddock","Brantley","Bridgewater","Briscoe","Broadnax","Bronson","Burkhalter","Cabrera","Cadwell","Callahan",
+  "Camacho","Canfield","Carmichael","Castellanos","Chamberlain","Chapman","Childress","Cisneros","Claiborne","Clements",
+  "Colbert","Copeland","Corbin","Cormier","Cotton","Covington","Crabtree","Crenshaw","Cudjoe","Culpepper",
+  "Dandridge","Delacroix","Delgado","Dempsey","Devereaux","Dobbins","Donaldson","Dorsett","Drummond","Duckworth",
+  "Dupree","Eastman","Echols","Ellsworth","Emerson","Escobar","Espinoza","Fairbanks","Falk","Fernandez",
+  "Fitzpatrick","Flanagan","Fleming","Flowers","Forsythe","Fuentes","Gallagher","Galloway","Garrick","Gaskin",
+  "Gilchrist","Godwin","Goldsmith","Gonsalves","Goodwin","Granderson","Greenlaw","Grimes","Guerrero","Gutierrez",
+  "Haggerty","Hairston","Hardaway","Harmon","Hartfield","Hawkins","Haywood","Hemsley","Hightower","Hollis",
+  "Holmgren","Horvath","Huxley","Igwe","Ito","Iverson","Jacobs","Jankowski","Jimenez","Kavanagh",
+  "Keller","Kendricks","Kirkland","Knighton","Kpassagnon","Laird","Lambert","Langford","Lassiter","Ledbetter",
+  "Lefleur","Lockhart","Longoria","Lucero","Maddox","Mahoney","Malloy","Mancini","Manningham","Marchetti",
+  "Marsh","Matthews","Maybin","McAllister","McCaffrey","McCloud","McDaniel","McGill","McKenzie","McKinnon",
+  "Mendez","Mercer","Middleton","Montgomery","Moreau","Moreno","Mosley","Muhammad","Navarro","Ngata",
+  "Norwood","Nunez","Nwosu","Oglesby","Okonkwo","Olawale","Oliphant","Orellana","Ozturk","Pacheco",
+  "Palmer","Paredes","Parrish","Peterman","Pettigrew","Phillips","Pittman","Poindexter","Prather","Quarles",
+  "Radcliffe","Ramsey","Rashad","Reeves","Renfro","Reyes","Riggins","Robles","Rockwell","Romano",
+  "Rousseau","Rutherford","Salazar","Santana","Satterfield","Schneider","Sheffield","Sherwood","Singletary","Slater",
+  "Soderberg","Sparks","Spellman","Stanton","Stclair","Steele","Stovall","Stroud","Sutherland","Takahashi",
+  "Talley","Tavares","Thibodeaux","Thornton","Trask","Trevino","Trujillo","Underwood","Upshaw","Uzomah",
+  "Valentine","Vandermeer","Vasquez","Velazquez","Vereen","Villanueva","Wadsworth","Wakefield","Waldron","Whitfield",
+  "Whitlock","Wilkerson","Winslow","Witherspoon","Woodard","Wren","Yarbrough","Yates","Zamora","Zimmerman"];
 
 // Positional roster template to fill to a playable 2-deep (counts beyond authored players)
 export const TEMPLATE = { QB: 2, RB: 3, WR: 4, TE: 2, OL: 7, DL: 6, LB: 5, CB: 4, S: 3, K: 1 };
@@ -117,6 +154,10 @@ export function emptyStats() {
     tackles: 0, sacks: 0, defInts: 0, fgm: 0, fga: 0 };
 }
 
+// ~190 firsts × ~320 lasts = 60k combos. NO cross-call dedup set: genName must stay
+// a pure function of the rng or same-seed league builds diverge (breaks the
+// determinism the replay system depends on). Rare exact repeats are fine — the
+// real NFL has same-named players too.
 export function genName(rng) { return `${rng.pick(FIRST)} ${rng.pick(LAST)}`; }
 
 export function buildRoster(rng, teamId) {
