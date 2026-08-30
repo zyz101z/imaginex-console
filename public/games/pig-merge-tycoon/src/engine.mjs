@@ -40,13 +40,16 @@ export const UPGRADES = {
 // Mystery crates: three rarities. `pulls` are [tierOffset from the pen's median
 // tier, probability]; `costDigs` prices the crate in digs-worth of the base tier,
 // so crates auto-scale with your economy. Rates are SHOWN before opening.
+// Tables shifted DOWN one tier 2026-08-30 (playtest: crates scaled too hard —
+// iron/golden kept gifting pigs above the pen's best working tier). Wooden is
+// now filler, iron peaks at median+1, golden at median+2.
 export const CRATE_TYPES = {
   wooden: { name: "Wooden Crate", icon: "🪵", weight: 70, costDigs: 10,
-            pulls: [[-1, 0.35], [0, 0.50], [1, 0.15]] },
+            pulls: [[-2, 0.35], [-1, 0.50], [0, 0.15]] },
   iron:   { name: "Iron Crate",   icon: "⚙️", weight: 25, costDigs: 28,
-            pulls: [[0, 0.40], [1, 0.45], [2, 0.15]] },
+            pulls: [[-1, 0.40], [0, 0.45], [1, 0.15]] },
   golden: { name: "Golden Crate", icon: "🌟", weight: 5,  costDigs: 80,
-            pulls: [[1, 0.40], [2, 0.45], [3, 0.15]] },
+            pulls: [[0, 0.40], [1, 0.45], [2, 0.15]] },
 };
 export const CRATE_LIFETIME = 300;  // 5 minutes to decide — no rushing (user request)
 

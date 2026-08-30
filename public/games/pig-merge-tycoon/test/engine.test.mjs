@@ -91,7 +91,7 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   // pulls table: resolved tiers, probabilities sum to 1, matches what open rolls
   s.crate = { type: "iron", base: 3, cost: 100, expiresAt: 1e9 };
   const pulls = cratePulls(s.crate);
-  check("iron pulls are base..base+2", pulls.map(p => p.tier).join(",") === "3,4,5");
+  check("iron pulls are base-1..base+1 (post-nerf)", pulls.map(p => p.tier).join(",") === "2,3,4");
   check("pull rates sum to 1", Math.abs(pulls.reduce((a, p) => a + p.p, 0) - 1) < 1e-9);
   // clamped offsets merge (golden at the top of the ladder = guaranteed max tier)
   const topPulls = cratePulls({ type: "golden", base: MAX_TIER, cost: 1, expiresAt: 1e9 });
@@ -103,7 +103,7 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   const coinsBefore = s.coins;
   const opened = openCrate(s, rng, 0);
   check("open deducts the cost", s.coins === coinsBefore - 100);
-  check("open yields an advertised tier", opened && [3, 4, 5].includes(opened.tier), opened && opened.tier);
+  check("open yields an advertised tier", opened && [2, 3, 4].includes(opened.tier), opened && opened.tier);
   // broke: no open, crate stays
   s.crate = { type: "wooden", base: 2, cost: 500, expiresAt: 1e9 };
   s.coins = 10;
@@ -131,8 +131,8 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
     const g = openCrate(s, rng, 0);
     if (g) dist[g.tier] = (dist[g.tier] || 0) + 1;
   }
-  check("open rolls follow the advertised rates (t4 ≈ 45% beats t5 ≈ 15%)",
-    (dist[4] || 0) > (dist[5] || 0) * 1.6, JSON.stringify(dist));
+  check("open rolls follow the advertised rates (t3 ≈ 45% beats t4 ≈ 15%)",
+    (dist[3] || 0) > (dist[4] || 0) * 1.6, JSON.stringify(dist));
 }
 
 // ---------- 4b. Prize Breeds (shop tier upgrade) ----------

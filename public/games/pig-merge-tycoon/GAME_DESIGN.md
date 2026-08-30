@@ -58,6 +58,8 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
   visually grows (fence moves out).
 - **Mystery Crates**: base ~1/45 digs; tier = your median pen tier (20% chance +1).
   Crates wait 5 MINUTES (playtest: no rushing); opening costs coins and shows the odds first.
+  Pull tables (relative to median pen tier, nerfed 2026-08-30 — they scaled too hard):
+  🪵 wooden −2/−1/0 (35/50/15%) · ⚙️ iron −1/0/+1 (40/45/15%) · 🌟 golden 0/+1/+2 (40/45/15%).
 - **Rebirth (Sell the Farm)**: needs tier 10 first time (+1 tier requirement each
   rebirth, max requirement 14). Each rebirth: ×2 permanent sell multiplier,
   golden statue added, pigs/coins/upgrades reset (expansions keep 1 level).
