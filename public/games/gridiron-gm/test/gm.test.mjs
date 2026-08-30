@@ -88,6 +88,34 @@ for (let season = 1; season <= 10; season++) {
       check(`s${season} no zombie ages`, p.age <= (p.pos === "K" ? 42 : 40), `${p.name} ${p.age}`);
     }
   }
+
+  // ---- decade-probe integrity (aggregated so 10 seasons don't spam 60k checks)
+  {
+    // (a) no player on two rosters / duplicate ids anywhere in the league
+    const seen = new Map(); // id -> teamId
+    let dupes = 0, wrongTeamId = 0, badContract = 0, badDead = 0;
+    for (const [teamId, roster] of Object.entries(league)) {
+      for (const p of roster) {
+        if (seen.has(p.id)) dupes++;
+        seen.set(p.id, teamId);
+        if (p.teamId !== teamId) wrongTeamId++;
+        const c = p.contract;
+        if (!c || !Number.isFinite(c.salary) || !Number.isFinite(c.years) ||
+            c.salary <= 0 || c.years < 1) badContract++;
+      }
+    }
+    for (const t of TEAMS) {
+      const dm = deadMoney[t.id] || 0;
+      if (!Number.isFinite(dm) || dm < 0) badDead++;
+    }
+    check(`s${season} no player on two rosters`, dupes === 0, `${dupes} dupes`);
+    check(`s${season} teamId matches roster`, wrongTeamId === 0, `${wrongTeamId} mismatched`);
+    check(`s${season} all contracts valid (salary>0, years>=1)`, badContract === 0, `${badContract} bad`);
+    check(`s${season} dead money finite and non-negative`, badDead === 0, `${badDead} bad`);
+    // (b) unsigned pool leftovers must not still claim a team
+    check(`s${season} FA pool leftovers are teamless`,
+      pool.every(p => p.teamId === null || p.teamId === undefined), pool.length + " in pool");
+  }
 }
 
 // ---- decade-scale invariants

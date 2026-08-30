@@ -1,5 +1,14 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-08-29 (later 2) — Score-conservation + decade-probe batteries (user greenlit both)
+1. **Score conservation** (sim battery, sweep section): every game's drive log replayed ticker-style
+   (points→offense, defPoints→other side, OT row) must sum EXACTLY to scoreA/scoreB — locks
+   engine↔ticker↔standings together. 600 games, zero drift on first run.
+2. **Decade-probe integrity** (gm battery, inside the existing 10-season loop, aggregated per season):
+   no duplicate player ids across rosters, p.teamId === roster team, contracts valid
+   (salary>0/years≥1/finite), deadMoney finite ≥0, FA-pool leftovers teamless. All clean first run.
+- No engine changes needed — both landed green. Batteries: sim **3,020** ✓ gm **17,537** ✓.
+
 ## 2026-08-29 (later) — "Impossible football" audit sweep (user: find more 67-yd-FG-class bugs)
 Full sim.mjs realism audit; 7 fixes, all engine-level:
 1. **Punting from FG range**: the PUNT branch fired from any spot — a turnover gift at the opp 30

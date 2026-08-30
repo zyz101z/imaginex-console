@@ -398,7 +398,7 @@ const band = (name, val, lo, hi) =>
 // stat lines from players with 0 games played.
 {
   const lg = buildLeague(makeRng(4242));
-  let puntFromRange = 0, kneelGains = 0, badYards = 0, ties = 0, games = 0;
+  let puntFromRange = 0, kneelGains = 0, badYards = 0, ties = 0, games = 0, scoreDrift = 0;
   for (let i = 0; i < 600; i++) {
     const ids = Object.keys(lg);
     const A = ids[i % ids.length], B = ids[(i + 7) % ids.length];
@@ -406,14 +406,24 @@ const band = (name, val, lo, hi) =>
     const g = simGame(makeRng(70000 + i), { id: A, players: lg[A] }, { id: B, players: lg[B] }, A);
     games++;
     if (g.scoreA === g.scoreB) ties++;
+    // SCORE CONSERVATION: replaying the drive log (exactly like the app's ticker —
+    // points to the offense, defPoints to the other side) must land on the final
+    // score. If these ever diverge, the ticker ends on a different score than the
+    // standings/box record.
+    let sumA = 0, sumB = 0;
     for (const row of g.log) {
+      if (row.off === A) sumA += row.points || 0; else sumB += row.points || 0;
+      if (row.defPoints) { if (row.off === A) sumB += row.defPoints; else sumA += row.defPoints; }
       if (!Number.isFinite(row.yards) || row.yards < 0 || row.yards > 99) badYards++;
       if (row.result === "KNEEL" && row.yards > 0) kneelGains++;
       // punt spot must be OUTSIDE even the weakest leg's range (minSpotFG ≥ 70 floor)
       if (row.result === "PUNT" && row.start + row.yards >= 70) puntFromRange++;
     }
+    if (sumA !== g.scoreA || sumB !== g.scoreB) scoreDrift++;
   }
+  check("sweep: drive log always sums to the final score", scoreDrift === 0, `${scoreDrift} games drifted`);
   check("sweep: no punts from FG range", puntFromRange === 0, `${puntFromRange}`);
+  check("sweep: score conservation checked on real games", games > 500, games);
   check("sweep: kneels never gain yards", kneelGains === 0, `${kneelGains}`);
   check("sweep: drive yardage always 0-99 and finite", badYards === 0, `${badYards}`);
   check("sweep: OT leaves no tied finals", ties === 0, `${ties} of ${games}`);
