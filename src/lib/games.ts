@@ -91,6 +91,19 @@ export const games: Game[] = [
     status: "available",
   },
   {
+    id: "pig-merge-tycoon",
+    title: "Pig Merge Tycoon",
+    description:
+      "Buy piglets, let them dig up truffles for coins, and drag matching pigs together to merge them into ever-fancier hogs — 20 tiers deep, from Piglet through knights, emperors and galaxies to the COSMIC PIG. Peek inside mystery crates, upgrade the farm, and sell it all to rebirth with double profits.",
+    genre: "Idle / Merge Tycoon",
+    cover: "/games/pig-merge-tycoon/cover.png",
+    url: "/games/pig-merge-tycoon/index.html",
+    color: "#ff9ec4",
+    cartridgeColor: "#3a2415",
+    cartridgeLabelColor: "#ffb8d4",
+    status: "available",
+  },
+  {
     id: "gridiron-gm",
     title: "Gridiron GM",
     description:

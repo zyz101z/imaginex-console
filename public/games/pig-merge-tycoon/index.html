@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Pig Merge Tycoon</title>
+<style>
+  html, body { margin:0; padding:0; background:#4e9436; height:100%; overflow:hidden;
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-user-select:none; user-select:none; touch-action:none;
+    -webkit-tap-highlight-color:transparent; }
+  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #stage { position:relative; }
+  canvas { display:block; border-radius:10px; box-shadow:0 10px 50px rgba(0,0,0,0.35); }
+
+  /* ---- HUD — sized in em so it scales WITH the canvas (#stage font-size is set
+         to 16px × the canvas scale in resize(); iPads shrink everything together) ---- */
+  .pill { position:absolute; display:flex; align-items:center; gap:0.5em;
+    background:rgba(20,32,14,0.78); border:2px solid rgba(255,255,255,0.25); border-radius:999px;
+    color:#fff; font-weight:900; padding:0.3em 0.8em; font-size:1.25em; pointer-events:none;
+    text-shadow:0 2px 3px rgba(0,0,0,0.4); }
+  #coinPill { top:0.6em; left:0.75em; }
+  #coinPill .c { color:#ffd166; }
+  #multPill { top:3.4em; left:0.9em; font-size:0.82em; padding:0.25em 0.75em; color:#ffe9a8; display:none; }
+  #tierPill { top:0.7em; left:50%; transform:translateX(-50%); font-size:0.88em; color:#d9f0ff; }
+
+  .btn { position:absolute; border:none; cursor:pointer; font-family:inherit; font-weight:900;
+    border-radius:0.8em; color:#3d2410; box-shadow:0 0.25em 0 rgba(0,0,0,0.25), 0 0.4em 0.9em rgba(0,0,0,0.3);
+    transition:transform 0.06s, box-shadow 0.06s; text-shadow:0 1px 0 rgba(255,255,255,0.35); }
+  .btn:active { transform:translateY(0.2em); box-shadow:0 1px 0 rgba(0,0,0,0.25); }
+  .btn:disabled { filter:grayscale(0.8) brightness(0.8); cursor:default; }
+  #buyBtn { left:50%; transform:translateX(-50%); bottom:0.45em; font-size:1.4em; padding:0.55em 1.5em;
+    background:linear-gradient(180deg,#ffd97a,#f5a93c); }
+  #buyBtn:active { transform:translateX(-50%) translateY(0.2em); }
+  #buyBtn small { display:block; font-size:0.6em; font-weight:800; }
+  #upgBtn { left:0.9em; bottom:0.9em; font-size:0.95em; padding:0.8em 1.2em;
+    background:linear-gradient(180deg,#9fe8b8,#53b877); }
+  #bookBtn { left:11.6em; bottom:0.9em; font-size:0.95em; padding:0.8em 1.2em;
+    background:linear-gradient(180deg,#b3d5ff,#6f9fe8); }
+  #rebirthBtn { right:0.9em; bottom:0.9em; font-size:0.95em; padding:0.8em 1.2em;
+    background:linear-gradient(180deg,#ffb3ec,#e06fd0); display:none; }
+  #soundBtn { position:absolute; top:0.7em; right:0.75em; background:rgba(20,32,14,0.78); color:#fff;
+    border:2px solid rgba(255,255,255,0.25); border-radius:0.6em; padding:0.35em 0.85em; font-weight:800;
+    font-size:0.88em; cursor:pointer; }
+
+  /* ---- overlays ---- */
+  .overlay { position:absolute; inset:0; background:rgba(12,20,8,0.72); border-radius:10px;
+    display:flex; align-items:center; justify-content:center; z-index:10; }
+  .hidden { display:none !important; }
+  .panel { background:linear-gradient(180deg,#fff7e8,#ffe9c4); border:4px solid #8a5a33; border-radius:1.4em;
+    padding:1.4em 1.6em; max-width:86%; max-height:86%; overflow-y:auto; text-align:center;
+    color:#4a3220; box-shadow:0 1.2em 3.5em rgba(0,0,0,0.5); }
+  .panel h1 { margin:0 0 0.15em; font-size:1.6em; letter-spacing:1px; color:#7a4a1e; }
+  .panel .sub { margin:0 0 0.9em; font-size:0.82em; color:#8a6a48; font-weight:700; }
+  .prow { display:flex; align-items:center; gap:0.75em; background:rgba(255,255,255,0.65);
+    border:2px solid #d9b98a; border-radius:0.9em; padding:0.6em 0.9em; margin:0.5em 0; text-align:left; }
+  .prow .ic { font-size:1.6em; }
+  .prow .info { flex:1; }
+  .prow .info b { font-size:0.95em; }
+  .prow .info span { display:block; font-size:0.75em; color:#8a6a48; font-weight:700; }
+  .prow button { border:none; border-radius:0.6em; padding:0.5em 0.9em; font-weight:900; font-family:inherit;
+    cursor:pointer; background:linear-gradient(180deg,#ffd97a,#f5a93c); color:#3d2410; font-size:0.88em;
+    box-shadow:0 0.2em 0 rgba(0,0,0,0.2); white-space:nowrap; }
+  .prow button:disabled { filter:grayscale(0.8) brightness(0.85); }
+  .bookGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:0.6em; }
+  .bookCell { background:rgba(255,255,255,0.6); border:2px solid #d9b98a; border-radius:0.75em;
+    padding:0.4em 0.25em 0.25em; }
+  .bookCell canvas { margin:0 auto; box-shadow:none; max-width:100%; }
+  .bookCell .nm { font-size:0.7em; font-weight:900; color:#6a4a28; }
+  .bookCell.unknown { opacity:0.45; }
+  .closeBtn { margin-top:0.9em; border:none; border-radius:0.75em; padding:0.65em 1.6em; font-weight:900;
+    font-family:inherit; font-size:0.95em; cursor:pointer; color:#fff;
+    background:linear-gradient(180deg,#a8794a,#7a4a1e); box-shadow:0 0.2em 0 rgba(0,0,0,0.25); }
+  .bigCoin { font-size:2.6em; margin:0.15em 0; }
+  #rbConfirm .go { background:linear-gradient(180deg,#ffb3ec,#e06fd0); color:#4a1040; }
+  .toast { position:absolute; top:5.5em; left:50%; transform:translateX(-50%);
+    background:rgba(20,32,14,0.85); border:2px solid #ffd166; color:#ffe9a8; border-radius:0.9em;
+    padding:0.5em 1.25em; font-weight:900; font-size:1em; pointer-events:none; opacity:0;
+    transition:opacity 0.25s; z-index:9; text-align:center; max-width:90%; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage">
+  <canvas id="game" width="960" height="640"></canvas>
+  <div class="pill" id="coinPill">🪙 <span class="c" id="coinTxt">0</span></div>
+  <div class="pill" id="multPill">⭐ SELL ×<span id="multTxt">1</span></div>
+  <div class="pill" id="tierPill">🐷 <span id="penTxt">0/6</span> · best: <span id="bestTxt">Piglet</span></div>
+  <button id="soundBtn">♪ ON</button>
+  <button class="btn" id="buyBtn">🐷 BUY PIGLET<small id="buyCost">🪙 12</small></button>
+  <button class="btn" id="upgBtn">⬆ UPGRADES</button>
+  <button class="btn" id="bookBtn">📖 PIG BOOK</button>
+  <button class="btn" id="rebirthBtn">💰 SELL FARM</button>
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay hidden" id="upgBox"><div class="panel" style="min-width:26em;">
+    <h1>⬆ UPGRADES</h1>
+    <p class="sub">make the farm work harder</p>
+    <div id="upgRows"></div>
+    <button class="closeBtn" id="upgClose">DONE</button>
+  </div></div>
+
+  <div class="overlay hidden" id="bookBox"><div class="panel" style="min-width:30em;">
+    <h1>📖 PIG BOOK</h1>
+    <p class="sub">merge two matching pigs to discover the next one!</p>
+    <div class="bookGrid" id="bookGrid"></div>
+    <button class="closeBtn" id="bookClose">DONE</button>
+  </div></div>
+
+  <div class="overlay hidden" id="crateBox"><div class="panel" style="min-width:25em;">
+    <h1 id="crateTitle">🪵 WOODEN CRATE</h1>
+    <p class="sub">what's inside — and the odds</p>
+    <div id="crateRows"></div>
+    <button class="closeBtn" id="crateOpen" style="background:linear-gradient(180deg,#ffd97a,#f5a93c); color:#3d2410;">OPEN</button><br>
+    <button class="closeBtn" id="crateLeave" style="margin-top:8px;">MAYBE LATER — it'll wait</button>
+  </div></div>
+
+  <div class="overlay hidden" id="awayBox"><div class="panel">
+    <h1>🌙 While you were away…</h1>
+    <div class="bigCoin">🪙</div>
+    <p class="sub" style="font-size:16px;">your pigs kept digging!</p>
+    <p style="font-size:28px; font-weight:900; color:#b8860b; margin:4px 0;" id="awayAmt"></p>
+    <button class="closeBtn" id="awayClose">COLLECT</button>
+  </div></div>
+
+  <div class="overlay hidden" id="rbConfirm"><div class="panel" style="max-width:24em;">
+    <h1>💰 SELL THE FARM?</h1>
+    <p class="sub" style="font-size:14px; line-height:1.5;" id="rbText"></p>
+    <button class="closeBtn go" id="rbGo">SELL IT ALL — REBIRTH!</button><br>
+    <button class="closeBtn" id="rbNo" style="margin-top:8px;">keep farming</button>
+  </div></div>
+
+  <div class="overlay hidden" id="helpBox"><div class="panel" style="max-width:28em; text-align:left;">
+    <h1 style="text-align:center;">🐷 PIG MERGE TYCOON</h1>
+    <p class="sub" style="text-align:center;">how it works</p>
+    <p style="font-size:14px; line-height:1.6; font-weight:600;">
+      🐷 <b>Buy piglets</b> — they root around and dig up <b>truffles</b> that sell at the market.<br>
+      🤏 <b>Drag a pig onto a matching pig</b> to MERGE them into a bigger, fancier pig that digs
+      rarer truffles.<br>
+      📦 Pigs sometimes unearth <b>mystery crates</b> — tap one to see exactly what's inside
+      and the odds, then <b>pay to open it</b> for a bonus pig. 🌟 Golden crates hold the best pulls!<br>
+      ⬆ Buy <b>upgrades</b> and <b>pen expansions</b> as the coins roll in — and when piglets
+      stop keeping up, <b>🏆 Prize Breeds</b> upgrades the pig the shop sells!<br>
+      💰 Reach the deep tiers and <b>SELL THE FARM</b> to rebirth: everything resets but your
+      profits are <b>doubled forever</b>.<br>
+      🌙 Your pigs even keep digging <b>while you're away</b>.
+    </p>
+    <div style="text-align:center;"><button class="closeBtn" id="helpClose">LET'S FARM</button></div>
+  </div></div>
+</div></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

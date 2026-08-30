@@ -581,6 +581,7 @@ const GAME_SCORE_LABELS: Record<string, string> = {
   "tank-wars": "Wins",
   "creature-cove": "Lifetime Gold",
   wilson: "Best Tag",
+  "pig-merge-tycoon": "Farm Score",
 };
 
 function LeaderboardView() {
