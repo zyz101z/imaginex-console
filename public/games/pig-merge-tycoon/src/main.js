@@ -224,11 +224,33 @@ function renderUpgrades() {
     <button data-k="expand" ${ecost == null || S.coins < ecost ? "disabled" : ""}>
       ${ecost == null ? "MAX" : "🪙 " + E.fmt(ecost)}</button>`);
   rows.appendChild(row);
+  // 🎨 farm styles — cosmetic reskins, buy once then switch freely
+  const themeHd = document.createElement("div");
+  themeHd.style.cssText = "margin:0.9em 0 0.2em;font-size:0.75em;font-weight:900;letter-spacing:2px;color:#8a6a48;";
+  themeHd.textContent = "— 🎨 FARM STYLE —";
+  rows.appendChild(themeHd);
+  for (const [key, th] of Object.entries(E.THEMES)) {
+    const owned = S.themesOwned.includes(key);
+    const inUse = S.theme === key;
+    const trow = mk(`<div class="ic">${th.icon}</div>
+      <div class="info"><b>${th.name}</b>
+      <span>${inUse ? "the farm right now" : owned ? "owned — tap to switch" : "reskins the whole farm"}</span></div>
+      <button data-k="theme:${key}" ${inUse || (!owned && S.coins < th.cost) ? "disabled" : ""}>
+        ${inUse ? "IN USE" : owned ? "USE" : "🪙 " + E.fmt(th.cost)}</button>`);
+    rows.appendChild(trow);
+  }
   rows.querySelectorAll("button").forEach(b => b.onclick = () => {
     const k = b.dataset.k;
-    const ok = k === "expand" ? E.buyExpansion(S) : E.buyUpgrade(S, k);
-    if (ok) { sfx.coin(); toast(k === "expand" ? "🚧 Pen expanded!" : "⬆ Upgraded!"); }
-    else sfx.deny();
+    let ok;
+    if (k.startsWith("theme:")) {
+      const key = k.slice(6);
+      ok = S.themesOwned.includes(key) ? E.setTheme(S, key) : E.buyTheme(S, key);
+      if (ok) toast(`🎨 ${E.THEMES[key].name}!`);
+    } else {
+      ok = k === "expand" ? E.buyExpansion(S) : E.buyUpgrade(S, k);
+      if (ok) toast(k === "expand" ? "🚧 Pen expanded!" : "⬆ Upgraded!");
+    }
+    if (ok) sfx.coin(); else sfx.deny();
     renderUpgrades(); refreshHud(); save();
   });
 }
@@ -346,7 +368,7 @@ canvas.addEventListener("pointerdown", (ev) => {
   const p = pigAt(x, y);
   if (p) {
     const a = animFor(p);
-    drag = { id: p.id, dx: a.px - x, dy: a.py - y };
+    drag = { id: p.id, dx: a.px - x, dy: a.py - y, sx: x, sy: y, at: nowSec(), moved: false };
     // merge hints: every pig that matches the one in hand gets a pulsing gold ring
     dragMatches = new Set(
       p.tier < E.MAX_TIER
@@ -356,22 +378,56 @@ canvas.addEventListener("pointerdown", (ev) => {
   }
 });
 let dragMatches = new Set();
+// ---- naming dialog (double-tap a pig) ----
+let namingPigId = null;
+function openNameDialog(pig) {
+  namingPigId = pig.id;
+  $("nameTitle").textContent = `Name your ${E.TIERS[pig.tier - 1].name}`;
+  $("nameInput").value = pig.name || "";
+  $("nameBox").classList.remove("hidden");
+  setTimeout(() => $("nameInput").focus(), 50);
+}
+$("nameSave").onclick = () => {
+  if (namingPigId != null) {
+    E.namePig(S, namingPigId, $("nameInput").value);
+    const p = S.pigs.find(q => q.id === namingPigId);
+    if (p && p.name) { toast(`🐷 Say hello to ${p.name}!`); sfx.oink(p.tier); }
+    save();
+  }
+  namingPigId = null;
+  $("nameBox").classList.add("hidden");
+};
+$("nameCancel").onclick = () => { namingPigId = null; $("nameBox").classList.add("hidden"); };
 canvas.addEventListener("pointermove", (ev) => {
   if (!drag) return;
   const { x, y } = canvasPos(ev);
   const p = S.pigs.find(q => q.id === drag.id);
   if (!p) { drag = null; return; }
+  if (Math.hypot(x - drag.sx, y - drag.sy) > 8) drag.moved = true;
+  if (!drag.moved) return;   // still a tap until the finger truly moves
   const a = animFor(p);
   a.px = Math.max(PEN.x + 20, Math.min(PEN.x + PEN.w - 20, x + drag.dx));
   a.py = Math.max(PEN.y + 24, Math.min(PEN.y + PEN.h - 16, y + drag.dy));
   a.tx = a.px; a.ty = a.py;
 });
+let lastTap = { id: -1, at: 0 };
 canvas.addEventListener("pointerup", (ev) => {
   dragMatches = new Set();
   if (!drag) return;
   const p = S.pigs.find(q => q.id === drag.id);
   const wasDrag = drag; drag = null;
   if (!p) return;
+  // TAP (no real movement): pig does a trick; a quick second tap opens naming
+  if (!wasDrag.moved && nowSec() - wasDrag.at < 0.6) {
+    if (lastTap.id === p.id && nowSec() - lastTap.at < 0.4) {
+      lastTap = { id: -1, at: 0 };
+      openNameDialog(p);
+    } else {
+      lastTap = { id: p.id, at: nowSec() };
+      doTrick(p);
+    }
+    return;
+  }
   const a = animFor(p);
   const target = pigAt(a.px, a.py, p.id);
   if (target && E.canMerge(S, p, target)) {
@@ -397,6 +453,42 @@ canvas.addEventListener("pointerup", (ev) => {
   save();
 });
 
+// ---------------------------------------------------------------- pig tricks (Noah's feature)
+// Tap a pig: it shows off. Hop, spin, mud roll, or a little oink solo.
+function doTrick(p) {
+  const a = animFor(p);
+  if (a.trick) return;   // one trick at a time, ham
+  const kind = ["hop", "spin", "roll", "sing"][Math.floor(rng() * 4)];
+  a.trick = { kind, t: 0, dur: kind === "sing" ? 1.4 : kind === "roll" ? 1.0 : 0.7, noted: 0 };
+  if (kind !== "sing") sfx.oink(p.tier);
+}
+function trickTransforms(p, a, dt) {
+  const tr = a.trick;
+  if (!tr) return { yOff: 0, rot: 0 };
+  tr.t += dt;
+  const k = Math.min(1, tr.t / tr.dur);
+  let yOff = 0, rot = 0;
+  if (tr.kind === "hop") {
+    yOff = -Math.sin(Math.PI * k) * 30;
+    if (k >= 1) addSplat(a.px, a.py);
+  } else if (tr.kind === "spin") {
+    rot = k * Math.PI * 2;
+  } else if (tr.kind === "roll") {
+    rot = Math.sin(k * Math.PI * 3) * 0.5;
+    if (Math.random() < 0.15) addSplat(a.px + (Math.random() - 0.5) * 30, a.py + 8);
+  } else if (tr.kind === "sing") {
+    // three ascending oinks with floating notes
+    const beats = [0.1, 0.55, 1.0];
+    while (tr.noted < 3 && tr.t >= beats[tr.noted]) {
+      const n = tr.noted++;
+      sfx.oink(Math.max(1, p.tier - (2 - n) * 3));
+      addPopText(a.px + (n - 1) * 16, a.py - 50, ["♪", "♫", "♪"][n], "#aef7ff");
+    }
+  }
+  if (k >= 1) a.trick = null;
+  return { yOff, rot };
+}
+
 // ---------------------------------------------------------------- game loop
 let last = performance.now();
 function frame(now) {
@@ -408,7 +500,9 @@ function frame(now) {
   // wander + dig
   for (const p of S.pigs) {
     const a = animFor(p);
-    if (drag && drag.id === p.id) { a.phase += dt * 4; continue; }
+    if (drag && drag.id === p.id && drag.moved) { a.phase += dt * 4; continue; }
+    if (a.trick) { a.trickFx = trickTransforms(p, a, dt); a.phase += dt * 6; continue; }
+    a.trickFx = null;
     if (t >= a.wanderAt) {
       a.tx = penX(Math.random()); a.ty = penY(Math.random());
       a.wanderAt = t + 2.5 + Math.random() * 4;
@@ -458,7 +552,7 @@ function frame(now) {
 
 function render(t) {
   ctx.clearRect(0, 0, W, H);
-  drawScene(ctx, { time: t, rebirths: S.rebirths });
+  drawScene(ctx, { time: t, rebirths: S.rebirths, theme: S.theme });
 
   // crate
   if (S.crate && cratePos) {
@@ -482,8 +576,17 @@ function render(t) {
   const sorted = [...S.pigs].sort((a, b) => animFor(a).py - animFor(b).py);
   for (const p of sorted) {
     const a = animFor(p);
-    drawPig(ctx, { x: a.px, y: a.py }, p.tier,
-      { phase: a.phase, dir: a.dir, lift: drag && drag.id === p.id });
+    const tf = a.trickFx || { yOff: 0, rot: 0 };
+    drawPig(ctx, { x: a.px, y: a.py + tf.yOff }, p.tier,
+      { phase: a.phase, dir: a.dir, rot: tf.rot, lift: drag && drag.id === p.id && drag.moved });
+    if (p.name) {
+      const ps = E.TIERS[p.tier - 1].size * 30;
+      ctx.font = "900 13px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(20,20,30,0.75)"; ctx.lineWidth = 3;
+      ctx.strokeText(p.name, a.px, a.py + tf.yOff - ps * 1.35 - 8);
+      ctx.fillText(p.name, a.px, a.py + tf.yOff - ps * 1.35 - 8);
+    }
   }
 
   // fx on top

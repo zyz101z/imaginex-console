@@ -2,7 +2,7 @@
 import {
   TIERS, MAX_TIER, EXPANSIONS, UPGRADES, CRATE_TYPES, CRATE_LIFETIME, buyTier, newGame, capacity, pigletCost,
   digInterval, truffleValue, crateChance, upgradeCost, expansionCost, buyPiglet, canMerge,
-  mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade,
+  mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade, THEMES, buyTheme, setTheme, namePig,
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
   serialize, deserialize,
 } from "../src/engine.mjs";
@@ -287,6 +287,39 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   back.coins = 0;
   const r = doDig(back, back.pigs[0], () => 0.9, 0);
   check("ex-shiny pigs dig normal value", r.value === val);
+}
+
+// ---------- 11. themes + pig names ----------
+{
+  const rng = makeRng(31);
+  const s = newGame();
+  check("starts on classic theme", s.theme === "classic" && s.themesOwned.includes("classic"));
+  check("cannot use unowned theme", !setTheme(s, "winter") && s.theme === "classic");
+  check("cannot afford winter at start", !buyTheme(s, "winter"));
+  s.coins = THEMES.winter.cost + 5;
+  check("buy winter switches to it", buyTheme(s, "winter") && s.theme === "winter" && s.coins === 5);
+  check("cannot re-buy an owned theme", !buyTheme(s, "winter"));
+  check("switch back to classic free", setTheme(s, "classic") && s.theme === "classic");
+  // themes survive rebirth (cosmetic permanence)
+  s.pigs = [{ id: 1, tier: 10, x: 0, y: 0 }];
+  doRebirth(s);
+  check("themes survive rebirth", s.themesOwned.includes("winter"));
+  // migration
+  const legacy = JSON.parse(serialize(newGame()));
+  delete legacy.themesOwned; delete legacy.theme;
+  const mig = deserialize(JSON.stringify(legacy));
+  check("pre-theme saves migrate", mig && mig.theme === "classic" && mig.themesOwned.includes("classic"));
+
+  // names
+  const n = newGame();
+  n.coins = 1e6;
+  const p1 = buyPiglet(n, rng), p2 = buyPiglet(n, rng);
+  check("namePig sets a trimmed name", namePig(n, p1.id, "  Sir Oinksalot III  ") && p1.name === "Sir Oinksalo");
+  check("empty name clears", namePig(n, p1.id, "   ") && p1.name === undefined);
+  namePig(n, p1.id, "Hammy");
+  const merged = mergePigs(n, p2.id, p1.id, rng);   // unnamed absorbs named
+  check("names survive merges", merged.name === "Hammy");
+  check("names survive save round-trip", deserialize(serialize(n)).pigs[0].name === "Hammy");
 }
 
 console.log(`\n=== pigmerge: ${pass} passed, ${fail} failed ===`);

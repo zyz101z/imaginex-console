@@ -57,6 +57,15 @@ export const CRATE_TYPES = {
 };
 export const CRATE_LIFETIME = 300;  // 5 minutes to decide — no rushing (user request)
 
+// Farm themes — cosmetic reskins of the whole scene. Bought once with coins
+// (escalating late-game sinks), then switch freely. Never reset by rebirth.
+export const THEMES = {
+  classic: { name: "Classic Farm", icon: "🌿", cost: 0 },
+  winter:  { name: "Winter Farm",  icon: "❄️", cost: 200_000 },
+  night:   { name: "Night Farm",   icon: "🌙", cost: 2_000_000 },
+  beach:   { name: "Beach Farm",   icon: "🏖️", cost: 20_000_000 },
+};
+
 export function newGame(now = 0) {
   return {
     v: 1,
@@ -73,6 +82,8 @@ export function newGame(now = 0) {
     digs: 0,
     crate: null,                     // { tier, expiresAt }
     discovered: [1],                 // tier-book entries
+    theme: "classic",
+    themesOwned: ["classic"],
     lastSeen: now,
   };
 }
@@ -124,6 +135,7 @@ export function mergePigs(s, idA, idB, rng) {
   if (!canMerge(s, a, b)) return null;
   s.pigs = s.pigs.filter(p => p.id !== b.id);
   a.tier += 1;
+  a.name = a.name || b.name;   // a named pig keeps its name through the merge
   if (a.tier > s.bestTier) s.bestTier = a.tier;
   if (!s.discovered.includes(a.tier)) { s.discovered.push(a.tier); s.discovered.sort((x, y) => x - y); }
   return a;
@@ -203,6 +215,30 @@ export function buyExpansion(s) {
   return true;
 }
 
+// ---------------------------------------------------------------- themes + names
+export function buyTheme(s, key) {
+  const t = THEMES[key];
+  if (!t || s.themesOwned.includes(key) || s.coins < t.cost) return false;
+  s.coins -= t.cost;
+  s.themesOwned.push(key);
+  s.theme = key;
+  return true;
+}
+export function setTheme(s, key) {
+  if (!THEMES[key] || !s.themesOwned.includes(key)) return false;
+  s.theme = key;
+  return true;
+}
+// Noah's feature: tap-tap a pig to name it. Names survive merges (the merged pig
+// keeps whichever parent had one). Empty string clears the name.
+export function namePig(s, id, name) {
+  const pig = s.pigs.find(p => p.id === id);
+  if (!pig) return false;
+  const clean = String(name || "").trim().slice(0, 12);
+  pig.name = clean || undefined;
+  return true;
+}
+
 // ---------------------------------------------------------------- rebirth
 export const rebirthRequirement = (s) => Math.min(14, 10 + s.rebirths);
 export const canRebirth = (s) => s.pigs.some(p => p.tier >= rebirthRequirement(s));
@@ -253,5 +289,6 @@ export function deserialize(json) {
   // shiny pigs removed (Noah's call) — scrub any that snuck into saves during the shiny hour
   delete s.shinyFound;
   if (s.pigs) for (const p of s.pigs) delete p.shiny;
+  if (!s.themesOwned) { s.themesOwned = ["classic"]; s.theme = "classic"; }   // pre-theme saves
   return s;
 }

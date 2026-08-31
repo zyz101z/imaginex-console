@@ -86,6 +86,17 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
   crate crack, rebirth jingle. Mute button.
 - Touch-first: drag-to-merge works with finger or mouse; buttons are fat.
 
+## Pass 6 additions (2026-08-30, user+Noah picks)
+- 🎨 **Farm themes**: Classic (free) · Winter 200K (snow, frozen wallow) · Night 2M
+  (stars, moon, fireflies, glowing barn windows) · Beach 20M (sand, water-pool pen,
+  foam). Buy once → switch free, in the upgrades drawer; SURVIVE rebirth.
+- 🐷 **Pig names**: double-tap a pig → name dialog (12 chars); name floats above the
+  pig, survives merges (merged pig keeps whichever parent was named) and saves.
+- 🎪 **Pig tricks**: single-tap a pig → random trick: hop, spin, mud roll, or an
+  ascending three-oink solo with floating notes. Pure toy, no economics.
+- Approved-for-later backlog: daily gift crate, farm goals/quests, Farmhand
+  auto-merger, statue bonuses, save slots, County Fair, Mythic Barn (25+).
+
 ## ImagineX integration
 - Folder `public/games/pig-merge-tycoon/`; ES modules (engine pure + UI), served
   statically like divided-states.
