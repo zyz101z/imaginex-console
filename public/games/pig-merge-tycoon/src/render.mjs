@@ -147,6 +147,24 @@ export function drawScene(ctx, opts = {}) {
   ctx.fillStyle = "#bfe3f5"; ctx.beginPath(); ctx.arc(62, 28, 9, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "#f5efe2"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(53, 28); ctx.lineTo(71, 28); ctx.moveTo(62, 19); ctx.lineTo(62, 37); ctx.stroke();
+  // 🎀 ribbon board — a plank right of the doors that fills with rosettes as you earn them
+  if (opts.ribbons > 0) {
+    ctx.fillStyle = "#c9915a"; rr(ctx, 42, 48, 46, 50, 4); ctx.fill();
+    ctx.strokeStyle = "#6a3d22"; ctx.lineWidth = 2; rr(ctx, 42, 48, 46, 50, 4); ctx.stroke();
+    const n = Math.min(12, opts.ribbons);
+    for (let i = 0; i < n; i++) {
+      const rx = 50 + (i % 3) * 15, ry = 56 + Math.floor(i / 3) * 12;
+      ctx.strokeStyle = "#3f6fd8"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(rx - 2, ry + 3); ctx.lineTo(rx - 3, ry + 9);
+      ctx.moveTo(rx + 2, ry + 3); ctx.lineTo(rx + 3, ry + 9); ctx.stroke();
+      ctx.fillStyle = "#4f86ff"; ctx.beginPath(); ctx.arc(rx, ry, 4.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffe9a8"; ctx.beginPath(); ctx.arc(rx, ry, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    if (opts.ribbons > 12) {
+      ctx.fillStyle = "#3d2410"; ctx.font = "900 9px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("+" + (opts.ribbons - 12), 65, 96);
+    }
+  }
   // weathervane pig on the ridge
   ctx.strokeStyle = "#4e3a2a"; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(0, -58); ctx.lineTo(0, -74); ctx.stroke();

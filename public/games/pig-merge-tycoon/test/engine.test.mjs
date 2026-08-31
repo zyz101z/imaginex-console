@@ -4,7 +4,8 @@ import {
   digInterval, truffleValue, crateChance, upgradeCost, expansionCost, buyPiglet, canMerge,
   mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade, THEMES, buyTheme, setTheme, namePig,
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
-  serialize, deserialize,
+  serialize, deserialize, RIBBONS, ribbonProgress, hasRibbon, ribbonReward, checkRibbons,
+  sellValue, sellPig,
 } from "../src/engine.mjs";
 
 let pass = 0, fail = 0;
@@ -320,6 +321,80 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   const merged = mergePigs(n, p2.id, p1.id, rng);   // unnamed absorbs named
   check("names survive merges", merged.name === "Hammy");
   check("names survive save round-trip", deserialize(serialize(n)).pigs[0].name === "Hammy");
+}
+
+// ---------- 12. blue ribbons ----------
+{
+  const rng = makeRng(77);
+  check("ribbon ids unique", new Set(RIBBONS.map(r => r.id)).size === RIBBONS.length);
+  check("ribbon descs never name a pig tier (surprise rule)",
+    RIBBONS.every(r => !TIERS.slice(2).some(t => (r.desc + " " + r.name).toLowerCase().includes(t.name.toLowerCase()))));   // tiers 1-2 (Piglet/Pig) are just the word "pig"
+  const s = newGame();
+  check("fresh farm has no ribbons", checkRibbons(s).length === 0 && s.ribbons.length === 0);
+  check("progress clamps to goal", ribbonProgress({ ...s, bestTier: 99 }, RIBBONS.find(r => r.id === "tier5"))[0] === 5);
+  s.coins = 1e6;
+  const a = buyPiglet(s, rng), b = buyPiglet(s, rng);
+  check("stats.bought counts shop buys", s.stats.bought === 2);
+  const before = s.coins;
+  mergePigs(s, a.id, b.id, rng);
+  const won = checkRibbons(s);
+  check("first merge earns a ribbon + pays", won.some(w => w.ribbon.id === "merge1") && s.coins > before && hasRibbon(s, "merge1"));
+  check("lifetime coins credit the reward", s.lifetimeCoins >= won.reduce((x, w) => x + w.reward, 0));
+  check("ribbons never re-award", checkRibbons(s).every(w => w.ribbon.id !== "merge1") && s.ribbons.filter(x => x === "merge1").length === 1);
+  // reward scales with best tier
+  const lo = ribbonReward({ ...s, bestTier: 2 }, RIBBONS[0]), hi = ribbonReward({ ...s, bestTier: 12 }, RIBBONS[0]);
+  check("ribbon reward scales with best tier", hi > lo * 100);
+  // crate + golden counters
+  s.crate = { type: "golden", base: 3, cost: 1, expiresAt: 999 };
+  openCrate(s, rng, 0);
+  check("crate counters tick (incl. golden)", s.stats.crates === 1 && s.stats.goldenCrates === 1);
+  check("golden ribbon lands", checkRibbons(s).some(w => w.ribbon.id === "golden1"));
+  // names: first name counts, rename doesn't
+  const p = s.pigs[0];
+  namePig(s, p.id, "Ham"); namePig(s, p.id, "Hammy");
+  check("names counter ignores renames", s.stats.names === 1);
+  // matching-set ribbon reads the live pen
+  s.pigs = [1, 2, 3, 4].map(i => ({ id: 100 + i, tier: 3, x: 0, y: 0 }));
+  check("matching set ribbon", checkRibbons(s).some(w => w.ribbon.id === "quads"));
+  // ribbons + stats survive rebirth and save round-trip
+  s.pigs = [{ id: 1, tier: 10, x: 0, y: 0 }];
+  const merges = s.stats.merges;
+  doRebirth(s);
+  check("ribbons + stats survive rebirth", hasRibbon(s, "merge1") && s.stats.merges === merges);
+  check("rebirth ribbon lands", checkRibbons(s).some(w => w.ribbon.id === "rb1"));
+  const rt = deserialize(serialize(s));
+  check("ribbons survive save round-trip", rt.ribbons.length === s.ribbons.length && rt.stats.crates === 1);
+  // migration: pre-ribbon save gets counters + back-awards proven milestones
+  const legacy = JSON.parse(serialize(newGame()));
+  delete legacy.stats; delete legacy.ribbons; legacy.bestTier = 8; legacy.lifetimeCoins = 5000;
+  const mig = deserialize(JSON.stringify(legacy));
+  const back = checkRibbons(mig);
+  check("pre-ribbon saves migrate + back-award", mig.stats.merges === 0 &&
+    back.some(w => w.ribbon.id === "tier8") && back.some(w => w.ribbon.id === "coins1k") && !hasRibbon(mig, "merge1"));
+}
+
+// ---------- 13. selling pigs ----------
+{
+  const rng = makeRng(5);
+  const s = newGame();
+  s.coins = 1e9;
+  const p = buyPiglet(s, rng);
+  const v = sellValue(s, p);
+  check("sell pays something", v >= 1);
+  const c0 = s.coins, n0 = s.pigs.length;
+  check("sellPig removes pig + pays", sellPig(s, p.id) === v && s.coins === c0 + v && s.pigs.length === n0 - 1);
+  check("selling a missing pig is a no-op", sellPig(s, 9999) === 0 && s.coins === c0 + v);
+  check("stats.sold ticks", s.stats.sold === 1);
+  // buy→sell can never profit, at any rebirth mult / market level / stock tier
+  let exploit = false;
+  for (const mult of [1, 8, 1024, 1e6]) for (const market of [0, 8]) for (const stock of [0, 4, 9]) {
+    const t = newGame(); t.coins = Infinity; t.mult = mult; t.upgrades.market = market; t.upgrades.stock = stock;
+    const cost = pigletCost(t);
+    const q = buyPiglet(t, rng);
+    if (sellValue(t, q) >= cost) exploit = true;
+  }
+  check("buy→sell never profits", !exploit);
+  check("higher tiers sell for more", sellValue(s, { tier: 9 }) > sellValue(s, { tier: 3 }) * 50);
 }
 
 console.log(`\n=== pigmerge: ${pass} passed, ${fail} failed ===`);

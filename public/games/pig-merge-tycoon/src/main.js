@@ -75,6 +75,7 @@ const sfx = {
   rebirth() { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.22, "triangle", 0.15), i * 110)); },
   buy() { beep(500, 0.05, "triangle", 0.12, 700); },
   deny() { beep(140, 0.12, "square", 0.1, 90); },
+  ribbon() { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.16, "triangle", 0.15), i * 80)); setTimeout(() => beep(1568, 0.3, "sine", 0.12), 340); },
 };
 $("soundBtn").textContent = muted ? "♪ OFF" : "♪ ON";
 $("soundBtn").onclick = () => {
@@ -141,6 +142,28 @@ function toast(msg) {
   toastT = nowSec() + 2.4;
 }
 
+// 🎀 ribbons: run after anything that changes state. Several can land at once
+// (e.g. a merge that also discovers a tier) so celebrations queue up one at a time.
+const ribbonQueue = [];
+let ribbonNextAt = 0;
+function checkRibbons() {
+  const won = E.checkRibbons(S);
+  if (!won.length) return;
+  ribbonQueue.push(...won);
+  save();
+}
+function drainRibbonQueue(t) {
+  if (!ribbonQueue.length || t < ribbonNextAt) return;
+  const { ribbon, reward } = ribbonQueue.shift();
+  ribbonNextAt = t + 2.8;
+  toast(`🎀 BLUE RIBBON — ${ribbon.name}! +🪙 ${E.fmt(reward)}`);
+  toastT = t + 2.7;
+  addConfetti(W / 2, 120, 30);
+  addPopText(W / 2, 150, `${ribbon.icon} +🪙 ${E.fmt(reward)}`, "#ffd166");
+  sfx.ribbon();
+  refreshHud();
+}
+
 // ---------------------------------------------------------------- HUD
 function refreshHud() {
   if (crateModalOpen) refreshCrateOpenBtn();
@@ -157,6 +180,7 @@ function refreshHud() {
     canRb || S.pigs.some(p => p.tier >= E.rebirthRequirement(S) - 2) ? "block" : "none";
   $("rebirthBtn").disabled = !canRb;
   $("rebirthBtn").textContent = canRb ? "💰 SELL FARM" : `💰 SELL @ ${E.TIERS[E.rebirthRequirement(S) - 1].name.toUpperCase()}`;
+  $("ribbonBtn").textContent = `🎀 ${S.ribbons.length}/${E.RIBBONS.length}`;
 }
 
 // ---------------------------------------------------------------- actions
@@ -170,8 +194,34 @@ $("buyBtn").onclick = () => {
   addSplat(a.px, a.py + 30);
   sfx.buy(); sfx.oink(p.tier);
   announcePig(p, known, a.px, a.py);
+  checkRibbons();
   refreshHud(); save(); reportScore();
 };
+
+$("ribbonBtn").onclick = () => { audio(); renderRibbons(); $("ribbonBox").classList.remove("hidden"); };
+$("ribbonClose").onclick = () => $("ribbonBox").classList.add("hidden");
+function renderRibbons() {
+  const rows = $("ribbonRows");
+  rows.innerHTML = "";
+  $("ribbonSub").textContent = `${S.ribbons.length} of ${E.RIBBONS.length} earned · each one pays out coins`;
+  // earned first (newest on top), then the closest-to-done ones
+  const list = E.RIBBONS.map(r => {
+    const [cur, goal] = E.ribbonProgress(S, r);
+    return { r, cur, goal, done: E.hasRibbon(S, r.id), k: cur / goal };
+  });
+  list.sort((a, b) => (b.done - a.done) || (b.k - a.k));
+  for (const { r, cur, goal, done } of list) {
+    const row = document.createElement("div");
+    row.className = "prow" + (done ? " won" : "");
+    const pct = Math.round(Math.min(1, cur / goal) * 100);
+    row.innerHTML = `<div class="ic">${done ? "🎀" : r.icon}</div>
+      <div class="info"><b>${r.name}</b><span>${r.desc}</span>
+        <div class="bar"><i style="width:${pct}%"></i></div></div>
+      <div class="prog">${done ? "✓ EARNED" : `${E.fmt(cur)} / ${E.fmt(goal)}`}
+        <small>${done ? "" : "🪙 " + E.fmt(E.ribbonReward(S, r))}</small></div>`;
+    rows.appendChild(row);
+  }
+}
 
 $("upgBtn").onclick = () => { audio(); renderUpgrades(); $("upgBox").classList.remove("hidden"); };
 $("upgClose").onclick = () => $("upgBox").classList.add("hidden");
@@ -196,6 +246,8 @@ $("rbGo").onclick = () => {
   addConfetti(W / 2, H / 2, 60);
   sfx.rebirth();
   toast(`🌟 REBIRTH ${S.rebirths}! Profits ×${E.fmt(S.mult)} forever`);
+  ribbonNextAt = nowSec() + 2.6;   // let the rebirth toast finish first
+  checkRibbons();
   refreshHud(); save(); reportScore();
 };
 
@@ -251,6 +303,7 @@ function renderUpgrades() {
       if (ok) toast(k === "expand" ? "🚧 Pen expanded!" : "⬆ Upgraded!");
     }
     if (ok) sfx.coin(); else sfx.deny();
+    checkRibbons();
     renderUpgrades(); refreshHud(); save();
   });
 }
@@ -348,6 +401,7 @@ $("crateOpen").onclick = () => {
     if (before.has(p.tier)) toast(`📦 It's a ${E.TIERS[p.tier - 1].name}!`);
     announcePig(p, before.has(p.tier), a.px, a.py);
     cratePos = null;
+    checkRibbons();
     refreshHud(); save(); reportScore();
   } else { sfx.deny(); if (!S.crate) { cratePos = null; toast("💨 The crate crumbled away!"); } }
 };
@@ -382,16 +436,42 @@ let dragMatches = new Set();
 let namingPigId = null;
 function openNameDialog(pig) {
   namingPigId = pig.id;
-  $("nameTitle").textContent = `Name your ${E.TIERS[pig.tier - 1].name}`;
+  $("nameTitle").textContent = pig.name ? `${pig.name} the ${E.TIERS[pig.tier - 1].name}` : `Your ${E.TIERS[pig.tier - 1].name}`;
   $("nameInput").value = pig.name || "";
+  sellArmed = false;
+  $("nameSell").textContent = `💸 SELL for 🪙 ${E.fmt(E.sellValue(S, pig))}`;
   $("nameBox").classList.remove("hidden");
   setTimeout(() => $("nameInput").focus(), 50);
 }
+// Sell is two taps (arm, then confirm) so a stray double-tap never loses a pig.
+let sellArmed = false;
+$("nameSell").onclick = () => {
+  const p = S.pigs.find(q => q.id === namingPigId);
+  if (!p) return;
+  if (!sellArmed) {
+    sellArmed = true;
+    $("nameSell").textContent = `REALLY SELL ${p.name ? p.name.toUpperCase() : "THIS PIG"}? 🪙 ${E.fmt(E.sellValue(S, p))}`;
+    return;
+  }
+  const a = animFor(p);
+  const got = E.sellPig(S, p.id);
+  anim.delete(p.id);
+  namingPigId = null; sellArmed = false;
+  $("nameBox").classList.add("hidden");
+  addRing(a.px, a.py, "#ffd166");
+  addPopText(a.px, a.py - 40, "+🪙 " + E.fmt(got), "#ffd166");
+  addSplat(a.px, a.py);
+  sfx.coin(); sfx.oink(p.tier);
+  toast(`💸 Sold${p.name ? " " + p.name : ""} for 🪙 ${E.fmt(got)}`);
+  checkRibbons();
+  refreshHud(); save();
+};
 $("nameSave").onclick = () => {
   if (namingPigId != null) {
     E.namePig(S, namingPigId, $("nameInput").value);
     const p = S.pigs.find(q => q.id === namingPigId);
     if (p && p.name) { toast(`🐷 Say hello to ${p.name}!`); sfx.oink(p.tier); }
+    checkRibbons();
     save();
   }
   namingPigId = null;
@@ -442,6 +522,7 @@ canvas.addEventListener("pointerup", (ev) => {
       addPopText(ta.px, ta.py - 55, E.TIERS[merged.tier - 1].name + "!", "#aef7ff");
       sfx.merge(); sfx.oink(merged.tier);
       announcePig(merged, known, ta.px, ta.py);
+      checkRibbons();
       refreshHud(); save(); reportScore();
       return;
     }
@@ -526,13 +607,15 @@ function frame(now) {
         const def = E.CRATE_TYPES[res.crate.type];
         toast(`${def.icon} A ${def.name} surfaced! Tap it to peek inside`);
       }
+      checkRibbons();   // digs / lifetime-coin ribbons land mid-dig
       refreshHud();
     }
   }
   // crate expiry (frozen while the player is reading the crate dialog)
   if (S.crate && !crateModalOpen) { E.expireCrate(S, t); if (!S.crate) cratePos = null; }
-  // toast fade
+  // toast fade + queued ribbon celebrations
   if (toastT && t > toastT) { $("toast").style.opacity = 0; toastT = 0; }
+  drainRibbonQueue(t);
 
   // fx
   for (let i = fx.length - 1; i >= 0; i--) {
@@ -552,7 +635,7 @@ function frame(now) {
 
 function render(t) {
   ctx.clearRect(0, 0, W, H);
-  drawScene(ctx, { time: t, rebirths: S.rebirths, theme: S.theme });
+  drawScene(ctx, { time: t, rebirths: S.rebirths, theme: S.theme, ribbons: S.ribbons.length });
 
   // crate
   if (S.crate && cratePos) {
@@ -673,6 +756,8 @@ if (fresh) {
   }
 }
 lastReportedScore = 0;
+// older saves earn back-ribbons for what they already achieved; a fresh farm has none
+if (!fresh) { ribbonNextAt = nowSec() + 1.5; checkRibbons(); }
 refreshHud();
 save();
 setInterval(save, 5000);
@@ -681,7 +766,7 @@ requestAnimationFrame(frame);
 
 // debug hook for headless testing (freight-nation __rd pattern)
 window.__pm = {
-  get S() { return S; }, E, openCrateModal,
+  get S() { return S; }, E, openCrateModal, renderRibbons, checkRibbons,
   buy: () => $("buyBtn").click(),
   pigAt, animFor,
   forceDig: (i = 0) => { const p = S.pigs[i]; if (p) { const a = animFor(p); a.nextDig = 0; } },

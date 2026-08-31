@@ -42,6 +42,18 @@
   #soundBtn { position:absolute; top:0.7em; right:0.75em; background:rgba(20,32,14,0.78); color:#fff;
     border:2px solid rgba(255,255,255,0.25); border-radius:0.6em; padding:0.35em 0.85em; font-weight:800;
     font-size:0.88em; cursor:pointer; }
+  #ribbonBtn { position:absolute; top:3.6em; right:0.75em; background:linear-gradient(180deg,#8fb8ff,#3f6fd8);
+    color:#fff; border:2px solid rgba(255,255,255,0.35); border-radius:0.6em; padding:0.35em 0.85em;
+    font-weight:900; font-size:0.88em; cursor:pointer; font-family:inherit;
+    box-shadow:0 0.2em 0 rgba(0,0,0,0.25); text-shadow:0 1px 2px rgba(0,0,0,0.4); }
+  #ribbonBtn:active { transform:translateY(0.15em); box-shadow:none; }
+  .prow.won { background:linear-gradient(90deg,#e6f0ff,rgba(255,255,255,0.7)); border-color:#7fa6ee; }
+  .prow .bar { height:0.45em; background:rgba(0,0,0,0.12); border-radius:999px; margin-top:0.35em; overflow:hidden; }
+  .prow .bar i { display:block; height:100%; background:linear-gradient(90deg,#8fb8ff,#3f6fd8); border-radius:999px; }
+  .prow.won .bar i { background:linear-gradient(90deg,#ffd97a,#f5a93c); }
+  .prow .prog { font-weight:900; font-size:0.82em; color:#3f5fa8; min-width:6em; text-align:right; white-space:nowrap; }
+  .prow.won .prog { color:#2f7a3a; }
+  .prow .prog small { display:block; font-size:0.8em; color:#b8860b; }
 
   /* ---- overlays ---- */
   .overlay { position:absolute; inset:0; background:rgba(12,20,8,0.72); border-radius:10px;
@@ -86,6 +98,7 @@
   <div class="pill" id="multPill">⭐ SELL ×<span id="multTxt">1</span></div>
   <div class="pill" id="tierPill">🐷 <span id="penTxt">0/6</span> · best: <span id="bestTxt">Piglet</span></div>
   <button id="soundBtn">♪ ON</button>
+  <button id="ribbonBtn">🎀 0/0</button>
   <button class="btn" id="buyBtn">🐷 BUY PIGLET<small id="buyCost">🪙 12</small></button>
   <button class="btn" id="upgBtn">⬆ UPGRADES</button>
   <button class="btn" id="bookBtn">📖 PIG BOOK</button>
@@ -106,6 +119,13 @@
     <button class="closeBtn" id="bookClose">DONE</button>
   </div></div>
 
+  <div class="overlay hidden" id="ribbonBox"><div class="panel" style="min-width:30em; max-width:34em;">
+    <h1>🎀 BLUE RIBBONS</h1>
+    <p class="sub" id="ribbonSub">farm milestones — each one pays out coins</p>
+    <div id="ribbonRows"></div>
+    <button class="closeBtn" id="ribbonClose">DONE</button>
+  </div></div>
+
   <div class="overlay hidden" id="crateBox"><div class="panel" style="min-width:25em;">
     <h1 id="crateTitle">🪵 WOODEN CRATE</h1>
     <p class="sub">what's inside — and the odds</p>
@@ -122,6 +142,8 @@
       background:#fff;color:#4a3220;font:inherit;font-weight:800;font-size:1.1em;text-align:center;-webkit-user-select:text;user-select:text;" />
     <br><button class="closeBtn" id="nameSave" style="background:linear-gradient(180deg,#ffd97a,#f5a93c); color:#3d2410;">SAVE NAME</button>
     <button class="closeBtn" id="nameCancel" style="margin-left:0.5em;">CANCEL</button>
+    <p class="sub" style="margin:1.1em 0 0.3em;">odd one out with nothing to merge into?</p>
+    <button class="closeBtn" id="nameSell" style="background:linear-gradient(180deg,#ffb3b3,#d9534f); font-size:0.85em; padding:0.55em 1.2em;">💸 SELL</button>
   </div></div>
 
   <div class="overlay hidden" id="awayBox"><div class="panel">
@@ -145,7 +167,7 @@
     <p style="font-size:14px; line-height:1.6; font-weight:600;">
       🐷 <b>Buy piglets</b> — they root around and dig up <b>truffles</b> that sell at the market.<br>
       🤏 <b>Drag a pig onto a matching pig</b> to MERGE them into a bigger, fancier pig that digs
-      rarer truffles.<br>
+      rarer truffles. Tap a pig for a trick; <b>double-tap</b> to name it — or <b>sell</b> an odd one out.<br>
       📦 Pigs sometimes unearth <b>mystery crates</b> — tap one to see exactly what's inside
       and the odds, then <b>pay to open it</b> for a bonus pig. 🌟 Golden crates hold the best pulls!<br>
       ⬆ Buy <b>upgrades</b> and <b>pen expansions</b> as the coins roll in — and when piglets

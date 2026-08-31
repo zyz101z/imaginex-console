@@ -97,6 +97,30 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 - Approved-for-later backlog: daily gift crate, farm goals/quests, Farmhand
   auto-merger, statue bonuses, save slots, County Fair, Mythic Barn (25+).
 
+## 💸 Sell a pig (2026-08-31, user request: stranded odd-one-out pigs)
+- Double-tap a pig → the name dialog now also has **SELL** (two taps: arm → "REALLY
+  SELL?" → gone; a stray double-tap can't lose a pig).
+- Price = `min(truffleValue(tier) × 4 digs, ½ × shop base price for that tier)`. The
+  cap is the anti-exploit: rebirth mult inflates truffle value but not shop price,
+  so buy→sell must never profit (test sweeps mult/market/stock combos).
+- Tracked in `stats.sold` (no ribbon yet).
+
+## 🎀 Blue Ribbons (2026-08-31)
+- ~40 farm milestones in `RIBBONS` (engine): merges (1→2000), best tier (5→24),
+  book size, lifetime coins (1K→1T), digs, crates (+golden), shop buys, maxed upgrade,
+  Prize Breeds 5, full pen, 25 pigs at once, 4-of-a-kind, 5 names, all themes,
+  rebirths (1→10). Each has a live `progress(s)` → bar + "x / y" in the panel.
+- Reward = `truffleValue(bestTier) × digs` (15–200 digs), so it auto-scales with the
+  economy. Coins also count toward lifetimeCoins.
+- Lifetime `stats` counters (merges/crates/goldenCrates/bought/names) + `ribbons` ids
+  are saved and NEVER reset by rebirth. Old saves migrate (counters at 0) and
+  back-award anything the save already proves (best tier, coins, digs, rebirths).
+- UI: 🎀 button under ♪ shows earned/total; panel sorts earned first, then closest.
+  Earn = queued toast + confetti + jingle (one at a time, 2.8s apart; waits for the
+  rebirth toast). Barn wall grows a ribbon board (12 rosettes, then "+N").
+- ⚠️ Surprise rule: ribbon names/descs use tier NUMBERS only, never pig names —
+  enforced by a test. New pigs must stay a surprise for Noah + Dad.
+
 ## ImagineX integration
 - Folder `public/games/pig-merge-tycoon/`; ES modules (engine pure + UI), served
   statically like divided-states.
