@@ -71,7 +71,6 @@ const sfx = {
   coin() { beep(1150, 0.06, "triangle", 0.1); setTimeout(() => beep(1500, 0.09, "triangle", 0.1), 50); },
   merge() { [440, 550, 660, 880].forEach((f, i) => setTimeout(() => beep(f, 0.12, "triangle", 0.14), i * 70)); },
   discover() { [523, 659, 784, 1047, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.18, "triangle", 0.16), i * 90)); },
-  shiny() { [1200, 1600, 2100].forEach((f, i) => setTimeout(() => beep(f, 0.1, "sine", 0.12), i * 60)); },
   crack() { beep(160, 0.1, "square", 0.16, 60); setTimeout(() => beep(90, 0.12, "square", 0.14, 40), 70); },
   rebirth() { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, 0.22, "triangle", 0.15), i * 110)); },
   buy() { beep(500, 0.05, "triangle", 0.12, 700); },
@@ -130,15 +129,10 @@ function celebrate(tier, x = W / 2, y = PEN.y + PEN.h / 2) {
   addRing(x, y, "#ffd166");
   sfx.discover();
 }
-// pig just created (any source): shiny fanfare + tier-discovery celebration
+// pig just created (any source): first-ever tier = full celebration
 function announcePig(pig, wasKnown, x, y) {
   if (!pig) return;
   if (!wasKnown) celebrate(pig.tier, x, y);
-  if (pig.shiny) {
-    toast(`✨ SHINY ${E.TIERS[pig.tier - 1].name}! It digs DOUBLE!`);
-    addConfetti(x ?? W / 2, y ?? H / 2, 20);
-    sfx.shiny();
-  }
 }
 
 function toast(msg) {
@@ -256,9 +250,7 @@ function renderBook() {
     }
     const nm = document.createElement("div");
     nm.className = "nm";
-    const shinyBadge = (S.shinyFound || []).includes(tier) ? " ✨" : "";
-    nm.textContent = known ? `${tier}. ${t.name}${shinyBadge}` : `${tier}. ???`;
-    if (shinyBadge) nm.title = "You've found the shiny version!";
+    nm.textContent = known ? `${tier}. ${t.name}` : `${tier}. ???`;
     cell.appendChild(cv); cell.appendChild(nm);
     grid.appendChild(cell);
   });
@@ -331,7 +323,7 @@ $("crateOpen").onclick = () => {
     if (pos) { a.px = pos.x; a.py = pos.y; a.tx = a.px; a.ty = a.py; }
     addConfetti(a.px, a.py, 26);
     sfx.crack(); sfx.oink(p.tier);
-    if (before.has(p.tier) && !p.shiny) toast(`📦 It's a ${E.TIERS[p.tier - 1].name}!`);
+    if (before.has(p.tier)) toast(`📦 It's a ${E.TIERS[p.tier - 1].name}!`);
     announcePig(p, before.has(p.tier), a.px, a.py);
     cratePos = null;
     refreshHud(); save(); reportScore();
@@ -491,7 +483,7 @@ function render(t) {
   for (const p of sorted) {
     const a = animFor(p);
     drawPig(ctx, { x: a.px, y: a.py }, p.tier,
-      { phase: a.phase, dir: a.dir, lift: drag && drag.id === p.id, shiny: p.shiny });
+      { phase: a.phase, dir: a.dir, lift: drag && drag.id === p.id });
   }
 
   // fx on top

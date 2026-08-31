@@ -41,8 +41,8 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 23 Phoenix Sow (flame crest) · 24 **INFINITY HOG** (∞ halo, the true final form)
 - Every tier 16+ digs its OWN signature truffle (imperial/magma/storm/galaxy/ringed-
   cosmic/robo/dragon/phoenix/infinity); tiers 1-15 use banded styles.
-- ✨ SHINY pigs: 2% on any new pig, shiny parents propagate through merges, digs pay
-  2×, orbiting sparkles + shimmer outline, ✨ badge in the Pig Book (s.shinyFound).
+- ~~Shiny pigs~~ — built 2026-08-30, REMOVED same day at Noah's request (he didn't
+  like the effect). Old saves scrub shiny flags on load. Don't re-add without asking.
 - Merge hints: while dragging, matching pigs get a pulsing gold ring.
 - First-ever tier creation = NEW PIG DISCOVERED banner + confetti + fanfare.
 - Tier look evolves procedurally: size, palette, accessories (spots, ribbon, crown,

@@ -2,7 +2,7 @@
 import {
   TIERS, MAX_TIER, EXPANSIONS, UPGRADES, CRATE_TYPES, CRATE_LIFETIME, buyTier, newGame, capacity, pigletCost,
   digInterval, truffleValue, crateChance, upgradeCost, expansionCost, buyPiglet, canMerge,
-  mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade, pigDigValue, SHINY_CHANCE,
+  mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade,
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
   serialize, deserialize,
 } from "../src/engine.mjs";
@@ -72,7 +72,7 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   for (let i = 0; i < 5; i++) buyPiglet(s, rng);
   const before = s.coins;
   const r = doDig(s, s.pigs[0], rng, 100);
-  check("dig pays the pig's dig value", s.coins === before + r.value && r.value === pigDigValue(s, s.pigs[0]));
+  check("dig pays truffle value", s.coins === before + r.value && r.value === truffleValue(s, s.pigs[0].tier));
   let crates = 0;
   const seenTypes = {};
   for (let i = 0; i < 3000; i++) {
@@ -276,37 +276,17 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   check("bestTier >= first requirement", s.bestTier >= 10, s.bestTier);
 }
 
-// ---------- 10. shiny pigs ----------
+// ---------- 10. shiny removal (Noah's call): saves scrub cleanly ----------
 {
-  const rng = makeRng(77);
-  const s = newGame();
-  s.coins = 1e15; s.expansion = 5;
-  let shinies = 0, merges = 0;
-  for (let i = 0; i < 4000; i++) {
-    s.pigs = [{ id: 1, tier: 1, x: 0, y: 0 }, { id: 2, tier: 1, x: 0, y: 0 }];
-    s.nextId = 3;
-    const m = mergePigs(s, 1, 2, rng);
-    merges++;
-    if (m.shiny) shinies++;
-  }
-  const rate = shinies / merges;
-  check("shiny rate ~2% on merges", rate > 0.008 && rate < 0.045, rate.toFixed(4));
-  s.pigs = [{ id: 1, tier: 3, x: 0, y: 0, shiny: true }, { id: 2, tier: 3, x: 0, y: 0 }];
-  const m2 = mergePigs(s, 2, 1, rng);
-  check("shiny parent propagates", m2.shiny === true);
-  const plain = { id: 8, tier: 5 }, sparkly = { id: 9, tier: 5, shiny: true };
-  check("shiny digs double", pigDigValue(s, sparkly) === truffleValue(s, 5) * 2 &&
-    pigDigValue(s, plain) === truffleValue(s, 5));
-  check("shinyFound logs the tier", (s.shinyFound || []).includes(4));
-  const legacy = JSON.parse(serialize(newGame()));
-  delete legacy.shinyFound;
-  const mig = deserialize(JSON.stringify(legacy));
-  check("pre-shiny saves migrate", mig && Array.isArray(mig.shinyFound));
-  const so = newGame(0);
-  so.pigs = [{ id: 1, tier: 4, x: 0, y: 0, shiny: true }];
-  const gain = offlineEarnings(so, 3600);
-  const expect = Math.floor((truffleValue(so, 4) * 2 / digInterval(so)) * 3600 * 0.4);
-  check("offline pay honors shiny", gain === expect, gain + " vs " + expect);
+  const g = newGame();
+  g.pigs = [{ id: 1, tier: 3, x: 0, y: 0, shiny: true }];
+  g.shinyFound = [3];
+  const back = deserialize(JSON.stringify(g));
+  check("shiny flags scrubbed from old saves", back && back.pigs[0].shiny === undefined && back.shinyFound === undefined);
+  const val = truffleValue(back, 3);
+  back.coins = 0;
+  const r = doDig(back, back.pigs[0], () => 0.9, 0);
+  check("ex-shiny pigs dig normal value", r.value === val);
 }
 
 console.log(`\n=== pigmerge: ${pass} passed, ${fail} failed ===`);

@@ -551,19 +551,6 @@ export function drawPig(ctx, p, tier, opts = {}) {
     ctx.beginPath(); ctx.ellipse(0, 0, s * 1.16, s * 0.93, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
-  // ✨ shiny: orbiting white sparkles + a bright outline shimmer
-  if (opts.shiny) {
-    ctx.strokeStyle = "rgba(255,255,255,0.85)";
-    ctx.lineWidth = s * 0.06;
-    ctx.globalAlpha = 0.6 + Math.sin(phase * 4) * 0.25;
-    ctx.beginPath(); ctx.ellipse(0, 0, s * 1.12, s * 0.9, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#fff";
-    for (let i = 0; i < 3; i++) {
-      const a = phase * 1.8 + (i * Math.PI * 2) / 3;
-      drawStar(ctx, Math.cos(a) * s * 1.35, -s * 0.1 + Math.sin(a) * s * 0.9, s * 0.11);
-    }
-  }
   ctx.restore();
 }
 
