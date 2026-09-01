@@ -75,7 +75,8 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 - **Rebirth (Sell the Farm)**: needs tier 10 first time (+1 tier requirement each
   rebirth, max requirement 14). Each rebirth: ×2 permanent sell multiplier,
   golden statue added, pigs/coins/upgrades reset (expansions keep 1 level).
-- **Offline earnings**: away-time truffle income at 40% rate, capped at 8 hours,
+- **Offline earnings**: away-time truffle income at ~13% rate (40% ÷ 3, user nerf
+  2026-08-31: offline was too generous), capped at 8 hours,
   presented as a "While you were away…" welcome-back chest.
 
 ## Look & feel (the Penguin Tycoon vibe, 2D)

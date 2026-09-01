@@ -5,7 +5,7 @@ import {
   mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade, THEMES, buyTheme, setTheme, namePig,
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
   serialize, deserialize, RIBBONS, ribbonProgress, hasRibbon, ribbonReward, checkRibbons,
-  sellValue, sellPig, STAGE_DIGS,
+  sellValue, sellPig, STAGE_DIGS, OFFLINE_RATE,
 } from "../src/engine.mjs";
 
 let pass = 0, fail = 0;
@@ -207,11 +207,12 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   const s = newGame(1000);
   s.pigs = [{ id: 1, tier: 4, x: 0, y: 0 }, { id: 2, tier: 4, x: 0, y: 0 }];
   const g1 = offlineEarnings(s, 1000 + 3600);
-  const expected = Math.floor((2 * truffleValue(s, 4) / digInterval(s)) * 3600 * 0.4);
-  check("offline pays 40% rate", g1 === expected, `${g1} vs ${expected}`);
+  const expected = Math.floor((2 * truffleValue(s, 4) / digInterval(s)) * 3600 * OFFLINE_RATE);
+  check("offline rate is a third of the old 40%", Math.abs(OFFLINE_RATE - 0.4 / 3) < 1e-9);
+  check("offline pays OFFLINE_RATE (~13%)", g1 === expected, `${g1} vs ${expected}`);
   s.lastSeen = 0;
   const g2 = offlineEarnings(s, 100 * 3600);
-  const cap = Math.floor((2 * truffleValue(s, 4) / digInterval(s)) * 8 * 3600 * 0.4);
+  const cap = Math.floor((2 * truffleValue(s, 4) / digInterval(s)) * 8 * 3600 * OFFLINE_RATE);
   check("offline caps at 8h", g2 === cap, `${g2} vs ${cap}`);
   const s2 = newGame(0);
   check("no pigs, no offline pay", offlineEarnings(s2, 99999) === 0);

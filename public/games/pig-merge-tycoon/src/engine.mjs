@@ -367,13 +367,15 @@ export function doRebirth(s) {
 }
 
 // ---------------------------------------------------------------- offline
-// Away-time truffle income at 40% rate, capped at 8 hours. Returns coins granted.
+// Away-time truffle income, capped at 8 hours. Returns coins granted.
+// Rate was 40% of live; cut to a third of that (user 2026-08-31: too much free money).
+export const OFFLINE_RATE = 0.4 / 3;
 export function offlineEarnings(s, now) {
   const away = Math.min(8 * 3600, Math.max(0, now - s.lastSeen));
   s.lastSeen = now;
   if (away < 60 || !s.pigs.length) return 0;
   const perSec = s.pigs.reduce((a, p) => a + truffleValue(s, p.tier), 0) / digInterval(s);
-  const gain = Math.floor(perSec * away * 0.4);
+  const gain = Math.floor(perSec * away * OFFLINE_RATE);
   s.coins += gain;
   s.lifetimeCoins += gain;
   return gain;
