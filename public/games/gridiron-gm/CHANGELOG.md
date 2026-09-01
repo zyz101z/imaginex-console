@@ -1,5 +1,14 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-09-01 (later) — Same-round picks are distinct trade assets (user follow-up)
+Trade UI checkboxes were keyed by ROUND — a team holding two R2s (own + acquired) could only
+select one, and execTrade moved "first match" (mid-draft that re-slots the WRONG board slot).
+Now: checkboxes key `round:origin` (both boxes selectable, "via TEAM" labels), selections resolve
+to exact `{round, from}` entries, `movePk`/`assetValue` accept entry-or-round (legacy AI offers
+unchanged), archetypeLean handles both, stale numeric selections in open saves are cleared.
+gm battery: exact-entry moves, same-round two-pick swap in one deal, object-form valuation.
+Batteries sim 3,016 ✓ gm 18,851 ✓. Cache `?v=20260901b`. Synced.
+
 ## 2026-09-01 — Five user reports fixed + "situation coherence" battery doctrine
 1. **Losing teams punted their final possession**: the deficit-1-3 late branch only bled
    probability toward the FG — punt mass survived. Now `remaining <= 2 && trailing ⇒ noPunt`

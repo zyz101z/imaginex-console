@@ -290,6 +290,26 @@ check("all contracts valid", badC === 0, badC);
   check("resync: traded slot re-owned", moved.owner === "BBB", moved.owner);
   check("resync: untouched slots keep owners", slots.filter(sl => sl.owner === sl.slotTeam).length === 8);
   check("resync: exercised slots untouched", slots[0].owner === "AAA" && slots[1].owner === "BBB");
+
+  // duplicate-round picks are distinct assets: {round, from} entries move the EXACT pick
+  const { execTrade, evalTrade } = await import("../src/gm.mjs");
+  const lg2 = buildLeague(makeRng(77));
+  const [tA, tB] = Object.keys(lg2);
+  const book = { [tA]: [{ round: 2, from: tA }, { round: 2, from: "XYZ" }, { round: 5, from: tA }],
+                 [tB]: [{ round: 1, from: tB }] };
+  execTrade(lg2, book, tA, tB, { players: [], picks: [{ round: 2, from: "XYZ" }] }, { players: [], picks: [] });
+  check("exact pick moves (via-XYZ R2, not own R2)",
+    book[tB].some(k => k.round === 2 && k.from === "XYZ") &&
+    book[tA].some(k => k.round === 2 && k.from === tA), JSON.stringify(book));
+  // both same-round picks can move in ONE deal
+  execTrade(lg2, book, tB, tA, { players: [], picks: [{ round: 2, from: "XYZ" }] },
+    { players: [], picks: [{ round: 2, from: tA }] });
+  check("same-round swap lands both", book[tA].some(k => k.from === "XYZ" && k.round === 2) &&
+    book[tB].some(k => k.from === tA && k.round === 2));
+  // evalTrade values object-form picks (duplicates each count)
+  const ev = evalTrade(lg2, book, tA, tB, { players: [], picks: [] },
+    { players: [], picks: [{ round: 2, from: tA }, { round: 1, from: tB }] });
+  check("evalTrade counts object-form picks", ev.giveVal === 45 + 90, ev.giveVal);
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

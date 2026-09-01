@@ -441,14 +441,17 @@ export const PICK_VALUE = { 1: 90, 2: 45, 3: 24, 4: 13, 5: 7, 6: 4, 7: 2 };
 // rebuilders collect it)
 export const FUTURE_DISCOUNT = 0.6;
 
+// pick assets may be bare rounds (legacy/AI offers) or {round, from} entries —
+// the exact-entry form matters when a team holds TWO picks of the same round
+const pickRound = (k) => (k && k.round != null) ? k.round : k;
 function assetValue(league, picks, teamId, assets) {
   let v = 0;
   for (const pid of assets.players) {
     const p = league[teamId].find(x => x.id === pid);
     if (p) v += playerValue(p);
   }
-  for (const round of assets.picks) v += PICK_VALUE[round] || 0;
-  for (const round of assets.fpicks || []) v += (PICK_VALUE[round] || 0) * FUTURE_DISCOUNT;
+  for (const k of assets.picks) v += PICK_VALUE[pickRound(k)] || 0;
+  for (const k of assets.fpicks || []) v += (PICK_VALUE[pickRound(k)] || 0) * FUTURE_DISCOUNT;
   return v;
 }
 
@@ -495,7 +498,11 @@ export function execTrade(league, picks, aId, bId, aAssets, bAssets, futurePicks
   };
   const movePk = (book, fromId, toId, rounds) => {
     for (const r of rounds || []) {
-      const idx = book[fromId].findIndex(k => k.round === r);
+      // {round, from} moves that EXACT pick (two same-round picks are distinct
+      // assets — mid-draft they map to different board slots); a bare round
+      // keeps legacy behavior and moves the first match.
+      const rr = pickRound(r), origin = (r && r.round != null) ? r.from : null;
+      const idx = book[fromId].findIndex(k => k.round === rr && (origin == null || k.from === origin));
       if (idx !== -1) book[toId].push(book[fromId].splice(idx, 1)[0]);
     }
   };
