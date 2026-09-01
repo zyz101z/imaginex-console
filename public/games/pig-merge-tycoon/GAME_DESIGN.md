@@ -115,9 +115,10 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
   book size, lifetime coins (1K→1T), digs, crates (+golden), shop buys, maxed upgrade,
   Prize Breeds 5, full pen, 25 pigs at once, 4-of-a-kind, 5 names, all themes,
   rebirths (1→10). Each has a live `progress(s)` → bar + "x / y" in the panel.
-- Reward = `truffleValue(bestTier) × digs × ⅓` (15–300 digs; ⅓ nerf 2026-08-31 after
-  user playtest — was too generous), so it auto-scales with the economy. Coins also
-  count toward lifetimeCoins.
+- Reward = `truffleValue(bestTier) × STAGE_DIGS[stage]` — stages early 3 / mid 15 /
+  late 80 / end 400 / ultra 1500 digs (2026-08-31 rebalance after user playtest: a
+  flat curve felt too rich early and worthless late; the ⅓ global nerf that preceded
+  it is gone). Still auto-scales with the economy; coins count toward lifetimeCoins.
 - Lifetime `stats` counters (merges/crates/goldenCrates/bought/names) + `ribbons` ids
   are saved and NEVER reset by rebirth. Old saves migrate (counters at 0) and
   back-award anything the save already proves (best tier, coins, digs, rebirths).

@@ -5,7 +5,7 @@ import {
   mergePigs, doDig, cratePulls, openCrate, declineCrate, expireCrate, buyUpgrade, THEMES, buyTheme, setTheme, namePig,
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
   serialize, deserialize, RIBBONS, ribbonProgress, hasRibbon, ribbonReward, checkRibbons,
-  sellValue, sellPig,
+  sellValue, sellPig, STAGE_DIGS,
 } from "../src/engine.mjs";
 
 let pass = 0, fail = 0;
@@ -345,7 +345,10 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   // reward scales with best tier
   const lo = ribbonReward({ ...s, bestTier: 2 }, RIBBONS[0]), hi = ribbonReward({ ...s, bestTier: 12 }, RIBBONS[0]);
   check("ribbon reward scales with best tier", hi > lo * 100);
-  check("ribbon reward is ~1/3 of digs-worth", Math.abs(ribbonReward({ ...s, bestTier: 10 }, RIBBONS[0]) - truffleValue({ ...s, bestTier: 10 }, 10) * RIBBONS[0].digs / 3) <= 1);
+  check("every ribbon has a known stage", RIBBONS.every(r => STAGE_DIGS[r.stage] != null));
+  const at = (id) => ribbonReward({ ...s, bestTier: 10 }, RIBBONS.find(r => r.id === id));
+  check("endgame ribbons pay far more than early ones", at("tier30") > at("merge1") * 300 && at("rb10") > at("rb1") * 50 && at("coins1t") > at("coins1k") * 300);
+  check("stage curve strictly steepens", STAGE_DIGS.early < STAGE_DIGS.mid && STAGE_DIGS.mid < STAGE_DIGS.late && STAGE_DIGS.late < STAGE_DIGS.end && STAGE_DIGS.end < STAGE_DIGS.ultra);
   // crate + golden counters
   s.crate = { type: "golden", base: 3, cost: 1, expiresAt: 999 };
   openCrate(s, rng, 0);

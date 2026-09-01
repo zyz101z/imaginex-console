@@ -73,61 +73,64 @@ export const THEMES = {
 };
 
 // 🎀 BLUE RIBBONS — farm milestones. Each pays a coin lump sized in digs-worth of
-// your BEST pig's truffle (so a ribbon earned at tier 3 or tier 18 feels the same).
+// your BEST pig's truffle, on a STEEP difficulty curve (playtest 2026-08-31: flat
+// payouts felt huge early and worthless late): early ribbons are a tip, endgame
+// ribbons are a real windfall.
 // `progress(s)` → [current, goal]; earned when current >= goal. Never reset by rebirth.
 // Descriptions use tier NUMBERS, never names — undiscovered pigs stay a surprise.
 const stat = (k) => (s) => (s.stats && s.stats[k]) || 0;
+export const STAGE_DIGS = { early: 3, mid: 15, late: 80, end: 400, ultra: 1500 };
 export const RIBBONS = [
   // merging
-  { id: "merge1",    icon: "🤝", name: "First Merge",       desc: "merge two pigs",              goal: 1,    of: stat("merges"), digs: 15 },
-  { id: "merge25",   icon: "🔁", name: "Merge Master",      desc: "merge 25 times",             goal: 25,   of: stat("merges"), digs: 25 },
-  { id: "merge100",  icon: "🌀", name: "Merge Machine",     desc: "merge 100 times",            goal: 100,  of: stat("merges"), digs: 40 },
-  { id: "merge500",  icon: "🌪️", name: "Merge Tornado",     desc: "merge 500 times",            goal: 500,  of: stat("merges"), digs: 80 },
-  { id: "merge2000", icon: "♾️", name: "Merge Legend",      desc: "merge 2,000 times",          goal: 2000, of: stat("merges"), digs: 150 },
+  { id: "merge1",    icon: "🤝", name: "First Merge",       desc: "merge two pigs",              goal: 1,    of: stat("merges"), stage: "early" },
+  { id: "merge25",   icon: "🔁", name: "Merge Master",      desc: "merge 25 times",             goal: 25,   of: stat("merges"), stage: "early" },
+  { id: "merge100",  icon: "🌀", name: "Merge Machine",     desc: "merge 100 times",            goal: 100,  of: stat("merges"), stage: "mid" },
+  { id: "merge500",  icon: "🌪️", name: "Merge Tornado",     desc: "merge 500 times",            goal: 500,  of: stat("merges"), stage: "late" },
+  { id: "merge2000", icon: "♾️", name: "Merge Legend",      desc: "merge 2,000 times",          goal: 2000, of: stat("merges"), stage: "end" },
   // climbing the ladder
-  { id: "tier5",   icon: "🐖", name: "Growing Up",        desc: "reach pig tier 5",   goal: 5,  of: (s) => s.bestTier, digs: 20 },
-  { id: "tier8",   icon: "👑", name: "Farm Royalty",      desc: "reach pig tier 8",   goal: 8,  of: (s) => s.bestTier, digs: 30 },
-  { id: "tier10",  icon: "✨", name: "Double Digits",     desc: "reach pig tier 10",  goal: 10, of: (s) => s.bestTier, digs: 40 },
-  { id: "tier12",  icon: "🌟", name: "Star Farmer",       desc: "reach pig tier 12",  goal: 12, of: (s) => s.bestTier, digs: 50 },
-  { id: "tier16",  icon: "🏆", name: "Sweet Sixteen",     desc: "reach pig tier 16",  goal: 16, of: (s) => s.bestTier, digs: 70 },
-  { id: "tier20",  icon: "🚀", name: "Top Twenty",        desc: "reach pig tier 20",  goal: 20, of: (s) => s.bestTier, digs: 100 },
-  { id: "tier24",  icon: "💫", name: "Two Dozen Deep",    desc: "reach pig tier 24",  goal: 24, of: (s) => s.bestTier, digs: 150 },
-  { id: "tier30",  icon: "🌌", name: "The Final Form",    desc: "reach the very last pig", goal: MAX_TIER, of: (s) => s.bestTier, digs: 300 },
+  { id: "tier5",   icon: "🐖", name: "Growing Up",        desc: "reach pig tier 5",   goal: 5,  of: (s) => s.bestTier, stage: "early" },
+  { id: "tier8",   icon: "👑", name: "Farm Royalty",      desc: "reach pig tier 8",   goal: 8,  of: (s) => s.bestTier, stage: "mid" },
+  { id: "tier10",  icon: "✨", name: "Double Digits",     desc: "reach pig tier 10",  goal: 10, of: (s) => s.bestTier, stage: "mid" },
+  { id: "tier12",  icon: "🌟", name: "Star Farmer",       desc: "reach pig tier 12",  goal: 12, of: (s) => s.bestTier, stage: "late" },
+  { id: "tier16",  icon: "🏆", name: "Sweet Sixteen",     desc: "reach pig tier 16",  goal: 16, of: (s) => s.bestTier, stage: "late" },
+  { id: "tier20",  icon: "🚀", name: "Top Twenty",        desc: "reach pig tier 20",  goal: 20, of: (s) => s.bestTier, stage: "end" },
+  { id: "tier24",  icon: "💫", name: "Two Dozen Deep",    desc: "reach pig tier 24",  goal: 24, of: (s) => s.bestTier, stage: "end" },
+  { id: "tier30",  icon: "🌌", name: "The Final Form",    desc: "reach the very last pig", goal: MAX_TIER, of: (s) => s.bestTier, stage: "ultra" },
   // the pig book
-  { id: "book10", icon: "📖", name: "Bookworm",          desc: "discover 10 kinds of pig",  goal: 10, of: (s) => s.discovered.length, digs: 30 },
-  { id: "book16", icon: "📚", name: "Pig Scholar",       desc: "discover 16 kinds of pig",  goal: 16, of: (s) => s.discovered.length, digs: 60 },
-  { id: "book24", icon: "🎓", name: "Pig Professor",      desc: "discover 24 kinds of pig",  goal: 24, of: (s) => s.discovered.length, digs: 120 },
-  { id: "bookall", icon: "🏛️", name: "Complete Collection", desc: "discover every pig",     goal: MAX_TIER, of: (s) => s.discovered.length, digs: 300 },
+  { id: "book10", icon: "📖", name: "Bookworm",          desc: "discover 10 kinds of pig",  goal: 10, of: (s) => s.discovered.length, stage: "mid" },
+  { id: "book16", icon: "📚", name: "Pig Scholar",       desc: "discover 16 kinds of pig",  goal: 16, of: (s) => s.discovered.length, stage: "late" },
+  { id: "book24", icon: "🎓", name: "Pig Professor",      desc: "discover 24 kinds of pig",  goal: 24, of: (s) => s.discovered.length, stage: "end" },
+  { id: "bookall", icon: "🏛️", name: "Complete Collection", desc: "discover every pig",     goal: MAX_TIER, of: (s) => s.discovered.length, stage: "ultra" },
   // coins + truffles
-  { id: "coins1k",  icon: "🪙", name: "Pocket Money",     desc: "earn 1K coins in total",    goal: 1e3,  of: (s) => s.lifetimeCoins, digs: 15 },
-  { id: "coins100k", icon: "💰", name: "Truffle Tycoon",  desc: "earn 100K coins in total",  goal: 1e5,  of: (s) => s.lifetimeCoins, digs: 25 },
-  { id: "coins10m", icon: "💎", name: "Millionaire Hog",  desc: "earn 10M coins in total",   goal: 1e7,  of: (s) => s.lifetimeCoins, digs: 40 },
-  { id: "coins1b",  icon: "🏦", name: "Billionaire Bacon", desc: "earn 1B coins in total",    goal: 1e9,  of: (s) => s.lifetimeCoins, digs: 60 },
-  { id: "coins1t",  icon: "🌍", name: "Trillion Truffles", desc: "earn 1T coins in total",   goal: 1e12, of: (s) => s.lifetimeCoins, digs: 100 },
-  { id: "digs100",  icon: "🍄", name: "Snout Work",       desc: "dig up 100 truffles",       goal: 100,  of: (s) => s.digs, digs: 15 },
-  { id: "digs1k",   icon: "⛏️", name: "Truffle Miner",    desc: "dig up 1,000 truffles",     goal: 1e3,  of: (s) => s.digs, digs: 30 },
-  { id: "digs10k",  icon: "🏔️", name: "Truffle Mountain", desc: "dig up 10,000 truffles",    goal: 1e4,  of: (s) => s.digs, digs: 60 },
+  { id: "coins1k",  icon: "🪙", name: "Pocket Money",     desc: "earn 1K coins in total",    goal: 1e3,  of: (s) => s.lifetimeCoins, stage: "early" },
+  { id: "coins100k", icon: "💰", name: "Truffle Tycoon",  desc: "earn 100K coins in total",  goal: 1e5,  of: (s) => s.lifetimeCoins, stage: "mid" },
+  { id: "coins10m", icon: "💎", name: "Millionaire Hog",  desc: "earn 10M coins in total",   goal: 1e7,  of: (s) => s.lifetimeCoins, stage: "late" },
+  { id: "coins1b",  icon: "🏦", name: "Billionaire Bacon", desc: "earn 1B coins in total",    goal: 1e9,  of: (s) => s.lifetimeCoins, stage: "end" },
+  { id: "coins1t",  icon: "🌍", name: "Trillion Truffles", desc: "earn 1T coins in total",   goal: 1e12, of: (s) => s.lifetimeCoins, stage: "ultra" },
+  { id: "digs100",  icon: "🍄", name: "Snout Work",       desc: "dig up 100 truffles",       goal: 100,  of: (s) => s.digs, stage: "early" },
+  { id: "digs1k",   icon: "⛏️", name: "Truffle Miner",    desc: "dig up 1,000 truffles",     goal: 1e3,  of: (s) => s.digs, stage: "mid" },
+  { id: "digs10k",  icon: "🏔️", name: "Truffle Mountain", desc: "dig up 10,000 truffles",    goal: 1e4,  of: (s) => s.digs, stage: "late" },
   // crates
-  { id: "crate1",   icon: "📦", name: "What's Inside?",   desc: "open a mystery crate",      goal: 1,  of: stat("crates"), digs: 15 },
-  { id: "crate10",  icon: "🪵", name: "Crate Cracker",    desc: "open 10 crates",            goal: 10, of: stat("crates"), digs: 30 },
-  { id: "crate50",  icon: "⚙️", name: "Crate Collector",  desc: "open 50 crates",            goal: 50, of: stat("crates"), digs: 60 },
-  { id: "golden1",  icon: "🌟", name: "Golden Touch",     desc: "open a golden crate",       goal: 1,  of: stat("goldenCrates"), digs: 40 },
+  { id: "crate1",   icon: "📦", name: "What's Inside?",   desc: "open a mystery crate",      goal: 1,  of: stat("crates"), stage: "early" },
+  { id: "crate10",  icon: "🪵", name: "Crate Cracker",    desc: "open 10 crates",            goal: 10, of: stat("crates"), stage: "mid" },
+  { id: "crate50",  icon: "⚙️", name: "Crate Collector",  desc: "open 50 crates",            goal: 50, of: stat("crates"), stage: "late" },
+  { id: "golden1",  icon: "🌟", name: "Golden Touch",     desc: "open a golden crate",       goal: 1,  of: stat("goldenCrates"), stage: "mid" },
   // the farm itself
-  { id: "buy50",    icon: "🛒", name: "Regular Customer", desc: "buy 50 pigs from the shop", goal: 50, of: stat("bought"), digs: 25 },
+  { id: "buy50",    icon: "🛒", name: "Regular Customer", desc: "buy 50 pigs from the shop", goal: 50, of: stat("bought"), stage: "mid" },
   { id: "maxupg",   icon: "⬆️", name: "Maxed Out",        desc: "max out any upgrade",       goal: 1,
-    of: (s) => Object.keys(UPGRADES).some(k => s.upgrades[k] >= UPGRADES[k].max) ? 1 : 0, digs: 40 },
-  { id: "stock5",   icon: "🏅", name: "Prize Stock",      desc: "Prize Breeds level 5",      goal: 5,  of: (s) => s.upgrades.stock || 0, digs: 50 },
-  { id: "bigpen",   icon: "🚧", name: "Room to Roam",     desc: "fully expand the pen",      goal: EXPANSIONS.length - 1, of: (s) => s.expansion, digs: 50 },
-  { id: "packed",   icon: "🐷", name: "Packed Pen",       desc: "have 25 pigs at once",      goal: 25, of: (s) => s.pigs.length, digs: 40 },
+    of: (s) => Object.keys(UPGRADES).some(k => s.upgrades[k] >= UPGRADES[k].max) ? 1 : 0, stage: "late" },
+  { id: "stock5",   icon: "🏅", name: "Prize Stock",      desc: "Prize Breeds level 5",      goal: 5,  of: (s) => s.upgrades.stock || 0, stage: "late" },
+  { id: "bigpen",   icon: "🚧", name: "Room to Roam",     desc: "fully expand the pen",      goal: EXPANSIONS.length - 1, of: (s) => s.expansion, stage: "late" },
+  { id: "packed",   icon: "🐷", name: "Packed Pen",       desc: "have 25 pigs at once",      goal: 25, of: (s) => s.pigs.length, stage: "late" },
   { id: "quads",    icon: "👯", name: "Matching Set",     desc: "have 4 of the same pig at once", goal: 4,
-    of: (s) => { const c = {}; let m = 0; for (const p of s.pigs) { c[p.tier] = (c[p.tier] || 0) + 1; if (c[p.tier] > m) m = c[p.tier]; } return m; }, digs: 20 },
-  { id: "names5",   icon: "🏷️", name: "Name Tags",        desc: "name 5 pigs",               goal: 5,  of: stat("names"), digs: 20 },
-  { id: "themes",   icon: "🎨", name: "Interior Decorator", desc: "own every farm style",    goal: Object.keys(THEMES).length, of: (s) => s.themesOwned.length, digs: 80 },
+    of: (s) => { const c = {}; let m = 0; for (const p of s.pigs) { c[p.tier] = (c[p.tier] || 0) + 1; if (c[p.tier] > m) m = c[p.tier]; } return m; }, stage: "early" },
+  { id: "names5",   icon: "🏷️", name: "Name Tags",        desc: "name 5 pigs",               goal: 5,  of: stat("names"), stage: "early" },
+  { id: "themes",   icon: "🎨", name: "Interior Decorator", desc: "own every farm style",    goal: Object.keys(THEMES).length, of: (s) => s.themesOwned.length, stage: "end" },
   // rebirths
-  { id: "rb1",  icon: "🌱", name: "Fresh Start",      desc: "sell the farm once",       goal: 1,  of: (s) => s.rebirths, digs: 30 },
-  { id: "rb3",  icon: "🌿", name: "Serial Seller",    desc: "sell the farm 3 times",    goal: 3,  of: (s) => s.rebirths, digs: 50 },
-  { id: "rb5",  icon: "🌳", name: "Farm Flipper",     desc: "sell the farm 5 times",    goal: 5,  of: (s) => s.rebirths, digs: 80 },
-  { id: "rb10", icon: "🗿", name: "Statue Garden",    desc: "sell the farm 10 times",   goal: 10, of: (s) => s.rebirths, digs: 150 },
+  { id: "rb1",  icon: "🌱", name: "Fresh Start",      desc: "sell the farm once",       goal: 1,  of: (s) => s.rebirths, stage: "mid" },
+  { id: "rb3",  icon: "🌿", name: "Serial Seller",    desc: "sell the farm 3 times",    goal: 3,  of: (s) => s.rebirths, stage: "late" },
+  { id: "rb5",  icon: "🌳", name: "Farm Flipper",     desc: "sell the farm 5 times",    goal: 5,  of: (s) => s.rebirths, stage: "end" },
+  { id: "rb10", icon: "🗿", name: "Statue Garden",    desc: "sell the farm 10 times",   goal: 10, of: (s) => s.rebirths, stage: "ultra" },
 ];
 
 export function newGame(now = 0) {
@@ -331,10 +334,7 @@ export function sellPig(s, id) {
 // ---------------------------------------------------------------- ribbons
 export const ribbonProgress = (s, r) => [Math.min(r.goal, r.of(s)), r.goal];
 export const hasRibbon = (s, id) => s.ribbons.includes(id);
-// Payout nerfed to 1/3 (user 2026-08-31: too generous) — ribbons are bragging
-// rights with a tip, not an income source.
-export const RIBBON_PAY_SCALE = 1 / 3;
-export const ribbonReward = (s, r) => Math.max(1, Math.ceil(truffleValue(s, s.bestTier) * r.digs * RIBBON_PAY_SCALE));
+export const ribbonReward = (s, r) => Math.max(1, Math.ceil(truffleValue(s, s.bestTier) * STAGE_DIGS[r.stage]));
 // Award every newly-completed ribbon; returns [{ ribbon, reward }] for the UI to
 // celebrate. Called after any mutating action (cheap: ~40 closures).
 export function checkRibbons(s) {
