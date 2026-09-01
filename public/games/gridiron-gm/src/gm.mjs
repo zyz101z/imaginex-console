@@ -104,6 +104,29 @@ export function expireContracts(league) {
   return pool;
 }
 
+// FA asking price. Starters ask starter money; role players (≤74 ovr) know they're
+// shopping for a backup job and ask backup money (user report: "it's hard to get
+// guys that are cheap that are even good backups" — every 70-74 FA priced himself
+// like a starter, so the only affordable depth was 58-ovr trash).
+export function faAsking(rng, p) {
+  if (p.ovr <= 74) {
+    const c = contractFor(rng, p, 0.55);
+    c.salary = Math.max(0.8, Math.min(c.salary, Math.max(1.0, Math.round((1.0 + (p.ovr - 62) * 0.18) * 10) / 10)));
+    return c;
+  }
+  return contractFor(rng, p, 1.05);
+}
+
+// Mid-draft trade support: after picks change hands, re-derive who owns every
+// UNEXERCISED slot from the picks book (the same owner rule used at draft build).
+export function resyncDraftSlots(slots, fromIdx, picks) {
+  for (let j = fromIdx; j < slots.length; j++) {
+    const sl = slots[j];
+    sl.owner = Object.keys(picks).find(tid =>
+      picks[tid].some(k => k.round === sl.round && k.from === sl.slotTeam)) || sl.slotTeam;
+  }
+}
+
 // AI teams re-sign their own good expiring players before they hit the market
 export function aiResign(rng, league, pool, capMode, deadMoney, userTeamId) {
   const signed = [];

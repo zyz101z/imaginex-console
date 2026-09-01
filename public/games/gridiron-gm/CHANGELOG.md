@@ -1,5 +1,36 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-09-01 — Five user reports fixed + "situation coherence" battery doctrine
+1. **Losing teams punted their final possession**: the deficit-1-3 late branch only bled
+   probability toward the FG — punt mass survived. Now `remaining <= 2 && trailing ⇒ noPunt`
+   (desperation reroute; same draw counts).
+2. **"Ice the kicker" with nobody kicking**: the ask fired at the TOP of any late one-score
+   drive — before anyone knew if it would end in a kick. Ask relocated INSIDE `kickFG()` (fires
+   only on an actual attempt, ctx now carries `dist`; panel says "lining up a NN-yard field goal").
+   Decisions consume no rng, so the move is draw-neutral.
+3. **Dink-and-dunk stat lines (10+ catches < 30 yds; "50 throws + 40 rushes")**: per-drive
+   "any yards = a catch/carry" floors inflated touches. New `touches()` accumulator: catches/
+   carries = Δfloor(cumYards/rate) — deterministic, no new draws. Rates: WR1 13.5 / WR2 11 /
+   WR3 9.5 / TE 9 ypc (role-graded — flat 11.4 gave the leader 186 catches); RB 4.6, QB scramble 6.5.
+4. **No trades during the draft (and over-cap lockout)**: `tradesOpen()` now includes the draft
+   phase. Mid-draft pick trades re-slot the board via new `gm.resyncDraftSlots()` (same owner rule
+   as draft build); spent picks are dead assets (`pickLive()` filters UI + proposal). Salary-shed
+   trades were already always-legal — now reachable during the draft, which is exactly when rookie
+   deals shove you over.
+5. **Backups priced like starters**: new `gm.faAsking()` — FAs ≤74 ovr ask backup money
+   (0.55× premium, capped ~$1-3.2M, floored $0.8M); >74 unchanged. Wired into the offseason pool
+   (street pool inherits ×0.7 of it).
+- **NEW BATTERY DOCTRINE (born from these): "situation coherence + realism bands".** sim battery
+  adds: (a) 500-game hooks sweep — every `ask` must match what the drive DID (ice ⇒ FG/FG-MISS
+  + sane dist; twopt ⇒ TD; onside ⇒ points) — this catches the whole "call offered in a situation
+  that isn't happening" class; (b) reconstructed-situation sweep — no PUNT while trailing on the
+  final 2 slots; (c) league-wide touch-rate bands (ypc 8.5-13.5, ypcarry 3.4-5.4, team rec/car
+  per game, zero rec≥10-under-5ypc lines, leader receptions ≤165). gm battery adds faAsking
+  bands + resyncDraftSlots unit checks. ⚠️ Lesson: stats derived per-drive with "at least 1"
+  floors compound 22×/game — accumulate against a rate instead.
+- Batteries: sim **3,016** ✓ gm **18,848** ✓ (touch-count changes reshuffle no rng draws; chalk
+  bands held without retune). Cache `?v=20260901`. Synced.
+
 ## 2026-08-29 (later 4) — Name pools ×4 (user: rookie/FA names repeat too much)
 FIRST 50→190, LAST 50→320 (same mixed-origin flavor). Per 1,700 generated players (≈ a decade):
 max surname repeats 34→13, 277 distinct surnames in play, ~20 exact full-name coincidences

@@ -8,6 +8,7 @@ import { TEAMS, TEAM_BY_ID } from "./data_teams.mjs";
 import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd, playMusic, stopMusic, setDuck } from "./sfx.mjs";
 import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, capRoom,
+  faAsking, resyncDraftSlots,
   cutPlayer, contractFor, CAP_LIMIT, ROSTER_MAX,
   archiveSeasonStats, computeAwards, computeAllPro, statLine, careerTotals,
   SCHEMES, genCoach, coachFit, coachMods, playerValue, PICK_VALUE,
@@ -970,7 +971,16 @@ function viewCoach() {
 }
 
 function tradesOpen() {
-  return (S.phase === "season" && S.week <= 8) || S.phase === "freeagency";
+  // draft-day deals are classic GM play — and the cap-relief escape hatch when
+  // rookie contracts push you over (user report: "over cap and I can't do anything")
+  return (S.phase === "season" && S.week <= 8) || S.phase === "freeagency" || S.phase === "draft";
+}
+// During the draft, a current-year pick in the book is only tradeable while its
+// slot hasn't been exercised yet (stale book entries for spent picks stay dead).
+function pickLive(k) {
+  if (S.phase !== "draft" || !S.draft) return true;
+  const idx = S.draft.slots.findIndex(sl => sl.round === k.round && sl.slotTeam === k.from);
+  return idx >= S.draft.idx;
 }
 
 // ---------------------------------------------------------------- storylines
@@ -1126,10 +1136,14 @@ function shopPlayer(teamId, pid) {
 }
 
 function viewTrades() {
-  if (!tradesOpen()) return `<h2>Trade Center</h2><p class='dim'>Trades are open weeks 1–9 and during free agency. ${S.phase === "season" ? "The deadline has passed for this season." : ""}</p>`;
+  if (!tradesOpen()) return `<h2>Trade Center</h2><p class='dim'>Trades are open weeks 1–9, during free agency, and on draft day. ${S.phase === "season" ? "The deadline has passed for this season." : ""}</p>`;
   if (!S.tradeUI) S.tradeUI = { partner: S.teamId === "GB" ? "CHI" : "GB", mine: [], theirs: [], minePicks: [], theirPicks: [], mineFPicks: [], theirFPicks: [], verdict: null };
   if (!S.tradeUI.mineFPicks) { S.tradeUI.mineFPicks = []; S.tradeUI.theirFPicks = []; } // migrate open UIs
   let offerHtml = "";
+  if (S.phase === "draft") {
+    offerHtml += `<div class="coachcard" style="border-left:4px solid #ffc62f"><b>🏈 DRAFT-DAY TRADES ARE OPEN.</b>
+      <span class="dim">Deal players or remaining picks — the board re-slots instantly. Over the cap? Salary-shedding trades are always legal.</span></div>`;
+  }
   if (deadlineWindow()) {
     const weeksLeft = 9 - (S.week + 1);
     const sellers = sellerTeams();
@@ -1178,7 +1192,7 @@ function viewTrades() {
         <td class="dim tt" title="Trade value">${playerValue(p)}v</td></tr>`;
     }
     h += `</table></div><div>Picks: `;
-    for (const k of [...S.picks[teamId]].sort((x, y) => x.round - y.round)) {
+    for (const k of [...S.picks[teamId]].sort((x, y) => x.round - y.round).filter(pickLive)) {
       const on = picksSel.includes(k.round);
       h += `<label><input type="checkbox" ${on ? "checked" : ""}
         onchange="__gm.tradeTogglePick('${tag}', ${k.round})"> R${k.round}${k.from !== teamId ? " (via " + k.from + ")" : ""}</label> `;
@@ -1362,7 +1376,7 @@ function showDecisionPanel(ctx, onPick) {
     btns = `<button data-c="onside">🤯 ONSIDE KICK!<br><span>~18% to steal the ball back — fail = they get midfield</span></button>
       <button data-c="deep">🦵 KICK DEEP<br><span>trust the defense to get one stop</span></button>`;
   } else if (ctx.type === "ice") {
-    situation = `They're driving to ${ctx.diff === 0 ? "WIN it" : "tie or win"} — mess with the kicker?`;
+    situation = `They're lining up a ${ctx.dist ? ctx.dist + "-yard " : ""}field goal to ${ctx.diff === 0 ? "WIN it" : "tie or win"} — mess with the kicker?`;
     btns = `<button data-c="ice">🧊 ICE THE KICKER<br><span>call timeout — shaken kickers miss more</span></button>
       <button data-c="hold">😤 LET THEM KICK<br><span>save the drama — no mind games</span></button>`;
   } else {
@@ -1821,8 +1835,11 @@ function tradeTogglePick(side, round, future) {
 function tradePropose() {
   const T = S.tradeUI;
   if (!T || !tradesOpen()) return;
-  const myAssets = { players: T.mine, picks: T.minePicks, fpicks: T.mineFPicks || [] };
-  const theirAssets = { players: T.theirs, picks: T.theirPicks, fpicks: T.theirFPicks || [] };
+  // mid-draft: spent picks are dead assets — strip them so neither side trades a ghost
+  const liveRounds = teamId => new Set(S.picks[teamId].filter(pickLive).map(k => k.round));
+  const myLive = liveRounds(S.teamId), theirLive = liveRounds(T.partner);
+  const myAssets = { players: T.mine, picks: T.minePicks.filter(r => myLive.has(r)), fpicks: T.mineFPicks || [] };
+  const theirAssets = { players: T.theirs, picks: T.theirPicks.filter(r => theirLive.has(r)), fpicks: T.theirFPicks || [] };
   const sellerDiscount = deadlineWindow() && sellerTeams().includes(T.partner) ? 0.8 : 1;
   const mood = tradeMood(T.partner);
   const arch = gmArchetype(T.partner);
@@ -1859,6 +1876,8 @@ function tradePropose() {
   if (verdict.accept) {
     const names = T.theirs.map(pid => (S.league[T.partner].find(p => p.id === pid) || {}).name).filter(Boolean);
     execTrade(S.league, S.picks, S.teamId, T.partner, myAssets, theirAssets, S.futurePicks);
+    // draft-day deal: the board must re-slot the picks that just changed hands
+    if (S.phase === "draft" && S.draft) resyncDraftSlots(S.draft.slots, S.draft.idx, S.picks);
     S.news.unshift({ week: S.week + 1, season: S.seasonNum, text: `TRADE: ${teamName(S.teamId)} acquire ${names.join(", ") || "picks"} from the ${TEAM_BY_ID[T.partner].name}` });
     S.tradeUI = { partner: T.partner, mine: [], theirs: [], minePicks: [], theirPicks: [], mineFPicks: [], theirFPicks: [], verdict };
   }
@@ -2091,7 +2110,7 @@ function startOffseasonPipeline() {
     for (const n of news) if (n.type === "hof") S.hof.push({ ...n.inductee, seasonRetired: S.seasonNum });
     const pool = expireContracts(S.league);
     aiResign(rng, S.league, pool, S.capMode, S.deadMoney, S.teamId);
-    for (const p of pool) p.asking = contractFor(rng, p, 1.05);
+    for (const p of pool) p.asking = faAsking(rng, p);   // role players ask backup money
     S.fa = { pool, round: 0, news, signings: [] };
     // coaching carousel: bad AI teams change coaches; a fresh candidate market opens
     for (const t of TEAMS) {

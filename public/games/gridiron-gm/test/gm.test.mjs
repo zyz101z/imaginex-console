@@ -5,7 +5,7 @@ import { makeRng } from "../src/rng.mjs";
 import { buildLeague, depthChart, TEMPLATE, teamUnits, emptyStats } from "../src/players.mjs";
 import { makeSchedule, emptyStandings, playWeek, simPlayoffs } from "../src/season.mjs";
 import { TEAMS } from "../src/data_teams.mjs";
-import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound,
+import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyRound, faAsking, resyncDraftSlots,
   genDraftClass, draftOrder, aiPick, rookieContract, fillMinimums, payroll, CAP_LIMIT,
   ROSTER_MAX, archiveSeasonStats, computeAwards, hofScore, seedStreetFA } from "../src/gm.mjs";
 
@@ -257,6 +257,39 @@ check("all contracts valid", badC === 0, badC);
     pool.every(p => p.asking && p.asking.years === 1 && p.asking.salary >= 0.8 && p.asking.salary <= 3));
   check("street seed: covers QB and K", ["QB", "K"].every(pos => pool.some(p => p.pos === pos)));
   check("street seed: unowned + healthy", pool.every(p => p.teamId === null && p.injuredWeeks === 0));
+}
+
+// ---------- FA backup pricing + mid-draft slot resync (2026-09-01 user reports) ----------
+{
+  const rng = makeRng(55);
+  const lg = buildLeague(makeRng(56));
+  // role players (<=74) must ask affordable backup money; starters still ask starter money
+  let backupAsks = 0, backupTooRich = 0, starterAsks = 0, starterSum = 0;
+  for (const roster of Object.values(lg)) {
+    for (const p of roster) {
+      const ask = faAsking(rng, p);
+      check("faAsking sane", ask.salary >= 0.8 && Number.isFinite(ask.salary) && ask.years >= 1);
+      if (p.ovr >= 68 && p.ovr <= 74) { backupAsks++; if (ask.salary > 3.2) backupTooRich++; }
+      if (p.ovr >= 80) { starterAsks++; starterSum += ask.salary; }
+    }
+  }
+  check("decent backups (68-74) ask cheap (<=3.2M)", backupAsks > 50 && backupTooRich === 0,
+    `${backupTooRich}/${backupAsks} over`);
+  check("starters still ask starter money", starterSum / Math.max(1, starterAsks) > 5,
+    (starterSum / Math.max(1, starterAsks)).toFixed(1));
+
+  // resyncDraftSlots: after a pick trade, every unexercised slot's owner matches the book
+  const picks = {};
+  for (const t of ["AAA", "BBB", "CCC"]) picks[t] = [1, 2, 3].map(r => ({ round: r, from: t }));
+  const slots = [];
+  for (let r = 1; r <= 3; r++) for (const t of ["AAA", "BBB", "CCC"]) slots.push({ round: r, slotTeam: t, owner: t });
+  // AAA trades its R2 to BBB mid-draft (idx 2 already exercised)
+  picks.BBB.push(picks.AAA.splice(picks.AAA.findIndex(k => k.round === 2), 1)[0]);
+  resyncDraftSlots(slots, 2, picks);
+  const moved = slots.find(sl => sl.round === 2 && sl.slotTeam === "AAA");
+  check("resync: traded slot re-owned", moved.owner === "BBB", moved.owner);
+  check("resync: untouched slots keep owners", slots.filter(sl => sl.owner === sl.slotTeam).length === 8);
+  check("resync: exercised slots untouched", slots[0].owner === "AAA" && slots[1].owner === "BBB");
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

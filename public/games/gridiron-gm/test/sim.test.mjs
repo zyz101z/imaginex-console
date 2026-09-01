@@ -451,5 +451,77 @@ const band = (name, val, lo, hi) =>
   check("sweep: injury weeks never negative", badInjury === 0, `${badInjury}`);
 }
 
+
+// ---------- situational-football + stat-realism sweep (2026-09-01 user reports) ----------
+// Born from three live bug reports: (1) teams punting on their final possession
+// while losing, (2) "ice the kicker" asked when nobody was kicking, (3) receivers
+// with 10+ catches under 30 yards / cartoon team attempt counts. Each check locks
+// a CLASS of bug: decision asks must match what the drive actually did, late-game
+// choices must be football-sane, and league-wide touch rates must stay in
+// real-NFL bands.
+{
+  const lg = buildLeague(makeRng(1212));
+  const ids = Object.keys(lg);
+  let losingFinalPunts = 0, games = 0;
+  let badIceAsk = 0, badTwoPtAsk = 0, badOnsideAsk = 0, iceAsks = 0;
+  for (let i = 0; i < 500; i++) {
+    const A = ids[i % ids.length], B = ids[(i + 9) % ids.length];
+    if (A === B) continue;
+    // hooks with decide->null mark every ask moment without changing outcomes
+    const g = simGame(makeRng(90000 + i), { id: A, players: lg[A] }, { id: B, players: lg[B] }, A,
+      null, null, { teamId: B, decide: () => null });
+    games++;
+    // walk the log with running scores to reconstruct each drive's situation
+    let sA = 0, sB = 0;
+    const rows = g.log.filter(r => r.q !== 5);
+    for (let j = 0; j < rows.length; j++) {
+      const r = rows[j];
+      const offScore = r.off === A ? sA : sB, defScore = r.off === A ? sB : sA;
+      const remaining = 22 - j;   // drive slots left including this one
+      if (r.result === "PUNT" && offScore < defScore && remaining <= 2) losingFinalPunts++;
+      if (r.ask) {
+        // ask/drive coherence: each ask type may only mark a drive that could honor it
+        if (r.ask.type === "ice") {
+          iceAsks++;
+          if (r.result !== "FG" && r.result !== "FG-MISS") badIceAsk++;
+          if (!(r.ask.dist >= 18 && r.ask.dist <= 70)) badIceAsk++;
+        }
+        if (r.ask.type === "twopt" && r.result !== "TD") badTwoPtAsk++;
+        if (r.ask.type === "onside" && !(r.points > 0)) badOnsideAsk++;
+      }
+      if (r.off === A) sA += (r.points || 0); else sB += (r.points || 0);
+      if (r.defPoints) { if (r.off === A) sB += r.defPoints; else sA += r.defPoints; }
+    }
+  }
+  check("late: losing teams never punt their final possession", losingFinalPunts === 0, `${losingFinalPunts}`);
+  check("asks: ice only fires on an actual FG attempt (w/ real distance)", badIceAsk === 0, `${badIceAsk} of ${iceAsks}`);
+  check("asks: ice moments still occur", iceAsks > 5, `${iceAsks}`);
+  check("asks: 2-pt only fires on a TD drive", badTwoPtAsk === 0, `${badTwoPtAsk}`);
+  check("asks: onside only fires after points", badOnsideAsk === 0, `${badOnsideAsk}`);
+
+  // league-wide touch realism over a full season (the dink-and-dunk detector)
+  const league = buildLeague(makeRng(61));
+  const rng = makeRng(62);
+  const schedule = makeSchedule(rng, 1);
+  const standings = emptyStandings();
+  for (let w = 0; w < 18; w++) playWeek(rng, league, schedule, w, standings, {}, {}, null, null);
+  let rec = 0, recYd = 0, car = 0, rushYd = 0, teamGames = 0, dinkLines = 0, wr1Rec = 0, wr1N = 0;
+  for (const roster of Object.values(league)) {
+    teamGames += 17;
+    for (const p of roster) {
+      rec += p.stats.rec; recYd += p.stats.recYd; car += p.stats.car; rushYd += p.stats.rushYd;
+      // the reported bug shape: a season line full of catches worth nothing
+      if (p.stats.rec >= 10 && p.stats.recYd < p.stats.rec * 5) dinkLines++;
+      if (p.pos === "WR" && p.stats.rec > 0 && p.stats.gp >= 12) { wr1Rec = Math.max(wr1Rec, p.stats.rec); wr1N++; }
+    }
+  }
+  band("league yards per catch", recYd / Math.max(1, rec), 8.5, 13.5);
+  band("league yards per carry", rushYd / Math.max(1, car), 3.4, 5.4);
+  band("team receptions per game", rec / (teamGames / 1), 12, 26);
+  band("team carries per game", car / (teamGames / 1), 16, 34);
+  check("no 10-catch dink lines (rec>=10 with <5 yds/catch)", dinkLines === 0, `${dinkLines} players`);
+  band("league-leading WR receptions", wr1Rec, 55, 165);
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail > 0 ? 1 : 0);

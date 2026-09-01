@@ -92,7 +92,21 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
   const runYd = statYards - passYd;
   const qb = chart.QB[0]; const rbs = chart.RB; const wrs = chart.WR; const tes = chart.TE;
   if (qb) { qb.stats.passYd += passYd; }
-  // receivers
+  // Touch counting: catches/carries derive from CUMULATIVE season yards at a
+  // realistic yards-per-touch rate, instead of "any yards this drive = a touch".
+  // The old per-drive floor handed a receiver 1 catch for a 3-yard scrap on
+  // nearly every drive — box scores showed 10+ catches for under 30 yards, and
+  // team totals read like 50 pass attempts + 40 rushes a game (user report).
+  // floor(post/rate) - floor(pre/rate) is deterministic (no rng draws) and
+  // converges every player to ~rate yards per touch across a season.
+  const touches = (stats, key, got, rate) => {
+    const pre = stats[key];
+    stats[key] += got;
+    return Math.floor(stats[key] / rate) - Math.floor(pre / rate);
+  };
+  // receivers — yds/catch grades by role: WR1s work downfield, slot guys and the
+  // TE live short (a flat rate let a 2,100-yd mismatch monster rack up 180+ catches)
+  const YPC = [13.5, 11, 9.5, 9];
   let remaining = passYd;
   const targets = [...wrs.slice(0, 3), ...tes.slice(0, 1)].filter(p => p && p.injuredWeeks === 0);
   for (let i = 0; i < targets.length && remaining > 0; i++) {
@@ -101,8 +115,7 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
     const share = i === targets.length - 1 ? remaining
       : Math.round(remaining * (0.42 - i * 0.07) * mismatchBoost * (0.7 + rng.f() * 0.6));
     const got = Math.max(0, Math.min(remaining, share));
-    targets[i].stats.recYd += got;
-    targets[i].stats.rec += Math.max(got > 0 ? 1 : 0, Math.round(got / 11)); // yards imply a catch
+    targets[i].stats.rec += touches(targets[i].stats, "recYd", got, YPC[Math.min(i, YPC.length - 1)]);
     remaining -= got;
   }
   // rushers — mobile QBs take a scramble share first (Lamar runs; Goff does not)
@@ -113,20 +126,16 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
     const share = Math.min(0.4, (qbMob - 68) / 75); // mob 96 → ~37% of team rush yards
     const qbYd = Math.round(runYd * share * (0.6 + rng.f() * 0.8));
     if (qbYd > 0) {
-      qb.stats.rushYd += qbYd;
-      qb.stats.car += Math.max(1, Math.round(qbYd / 6.5)); // scrambles run longer per carry
+      qb.stats.car += touches(qb.stats, "rushYd", qbYd, 6.5);   // scrambles run long
       rbYd -= qbYd;
     }
   }
   if (rb1 && rb2) {
     const s1 = Math.round(rbYd * (0.62 + rng.f() * 0.2));
-    rb1.stats.rushYd += s1; rb2.stats.rushYd += rbYd - s1;
-    rb1.stats.car += Math.max(s1 > 0 ? 1 : 0, Math.round(s1 / 4.7));
-    // yards imply at least one carry (was possible: 2 rush yds, 0 car)
-    rb2.stats.car += Math.max((rbYd - s1) > 0 ? 1 : 0, Math.round((rbYd - s1) / 4.7));
+    rb1.stats.car += touches(rb1.stats, "rushYd", s1, 4.6);
+    rb2.stats.car += touches(rb2.stats, "rushYd", rbYd - s1, 4.6);
   } else if (rb1) {
-    rb1.stats.rushYd += rbYd;
-    rb1.stats.car += Math.max(rbYd > 0 ? 1 : 0, Math.round(rbYd / 4.7));
+    rb1.stats.car += touches(rb1.stats, "rushYd", rbYd, 4.6);
   }
   // TD credit (returns scorer text for the drive log / ticker)
   if (result === "TD") {
@@ -347,6 +356,10 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
         // a FG ties/wins: bleed toward the kick, keep some caution
         p.td += puntP * 0.15; p.fgAtt += puntP * 0.45; p.to += puntP * 0.15;
       }
+      // FINAL possession while trailing: punting is surrender — never do it.
+      // (User report: teams punted down 1-3 with almost no time left; the
+      // deficit-1-3 branch above still left punt probability mass on the table.)
+      if (remaining <= 2) noPunt = true;
       hurry = true;
     } else if (lateGame && diff > 0) {
       // leading: conservative, run-heavy, protect the ball, grind clock
@@ -354,16 +367,12 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
       milk = true;
     }
 
-    // 🧊 ICE THE KICKER (defensive coach's call): the opponent is close enough
-    // that a FG ties or wins — the human may burn a call slot to shake the kicker.
-    // Multiplies an existing make-probability, so the rng draw count NEVER changes.
+    // 🧊 ICE THE KICKER declarations — the ask itself now lives INSIDE kickFG,
+    // so it only ever fires when a field goal is actually being attempted.
+    // (User report: "ice the kicker and the other team isn't even kicking" —
+    // the old ask fired at the top of any late one-score drive, before anyone
+    // knew whether the drive would end in a kick, a TD, or a punt.)
     let iced = false, askIce = null;
-    if (hooks && hooks.teamId === def.t.id && lateGame && remaining <= 3 && diff >= -3 && diff <= 0) {
-      const ctxI = { drive: d, type: 'ice', quarter, diff, remaining, start, us: def.score, them: off.score };
-      const decI = hooks.decide ? hooks.decide(ctxI) : null;
-      if (!decI) askIce = ctxI;
-      else if (decI === 'ice') iced = true;
-    }
     // Kicker RANGE: nobody trots out the FG unit for a 67-yard prayer. Range
     // scales with the leg (kicker 70 → ~52 yds, 90 → ~57), and a desperate
     // crunch-time coach will try from a few yards deeper.
@@ -379,6 +388,16 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     const kickFG = (spot) => {
       spot = Math.min(97, spot);   // dist floor ~20 — chip shots read as chip shots
       const dist = 100 - spot + 17;
+      // 🧊 ICE THE KICKER (defensive coach's call): asked HERE, when the FG unit
+      // is actually trotting out and the kick ties or wins it. The decision
+      // consumes no rng draw, and `iced` only multiplies the make probability,
+      // so relocating the ask never changes the dice.
+      if (hooks && hooks.teamId === def.t.id && lateGame && remaining <= 3 && diff >= -3 && diff <= 0) {
+        const ctxI = { drive: d, type: 'ice', quarter, diff, remaining, start, dist, us: def.score, them: off.score };
+        const decI = hooks.decide ? hooks.decide(ctxI) : null;
+        if (!decI) askIce = ctxI;
+        else if (decI === 'ice') iced = true;
+      }
       const k = off.chart.K[0];
       const made = rng.chance(Math.max(0.3, Math.min(0.97,
         1.14 - dist * 0.0082 + (off.u.kicker - 75) * 0.006 + (weather ? weather.kick : 0))) * (iced ? 0.85 : 1));
