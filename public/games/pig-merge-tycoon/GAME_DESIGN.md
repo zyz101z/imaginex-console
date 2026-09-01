@@ -134,7 +134,9 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
   statically like divided-states.
 - Save: localStorage `pigmerge_save_v1`, autosave every action + 5s tick.
 - Score → postMessage `{type:'imaginex-score', gameId:'pig-merge-tycoon', score}`;
-  score = **lifetime best tier reached** ×100 + rebirths (single climbing number).
+  score = bestTier×10,000 + rebirths×2,000 + ribbons×20 + floor(log10(lifetimeCoins)×10)
+  (single climbing number; 2026-08-31 reformulated — old tier×100+rebirths tied Dad and
+  Noah at 1702. New scores are always > old ones so the server's keep-max supersedes).
 - games.ts registry entry stays UNCOMMITTED until user playtest (BREACH pattern).
 - Cover art: TBD at flip time (screenshot montage or Meshy).
 

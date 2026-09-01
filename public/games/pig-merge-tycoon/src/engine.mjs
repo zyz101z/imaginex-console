@@ -381,8 +381,15 @@ export function offlineEarnings(s, now) {
   return gain;
 }
 
-// leaderboard score: one climbing number — best tier dominates, rebirths break ties
-export const score = (s) => s.bestTier * 100 + s.rebirths;
+// leaderboard score: one climbing number. Best tier dominates, then rebirths, then
+// ribbons earned and (log-scaled) lifetime coins as tie-breakers. Every term only
+// ever grows, so the score never goes down. Old formula (tier×100+rebirths) tied
+// two farms at the same tier/rebirth count (2026-08-31: "Dave 1702 / Cool dude 1702").
+// Rebirth weight (2000) > max tie-breaker sum (49×20+150 = 1130).
+// Max ≈ 30×10000 + 99×2000 + 1130 < the console's 1,000,000 cap.
+export const score = (s) =>
+  s.bestTier * 10000 + Math.min(99, s.rebirths) * 2000 +
+  Math.min(49, (s.ribbons || []).length) * 20 + Math.min(150, Math.floor(Math.log10((s.lifetimeCoins || 0) + 1) * 10));
 
 // ---------------------------------------------------------------- misc
 export function fmt(n) {

@@ -230,8 +230,13 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   const s2 = deserialize(serialize(s));
   check("save round-trip", JSON.stringify(s2) === JSON.stringify(s));
   check("bad save rejected", deserialize('{"v":99}') === null);
-  s.bestTier = 12; s.rebirths = 3;
-  check("score formula", score(s) === 1203);
+  s.bestTier = 12; s.rebirths = 3; s.ribbons = []; s.lifetimeCoins = 0;
+  check("score formula", score(s) === 126000);
+  s.ribbons = ["a", "b"]; s.lifetimeCoins = 999;
+  check("ribbons + coins break ties", score(s) === 126000 + 40 + 30);
+  check("tie-breakers never outrank a rebirth", score({ ...s, ribbons: new Array(60).fill("x"), lifetimeCoins: 1e30 }) < score({ ...s, rebirths: 4, ribbons: [], lifetimeCoins: 0 }));
+  check("score never exceeds console cap", score({ bestTier: 30, rebirths: 500, ribbons: new Array(60).fill("x"), lifetimeCoins: 1e30 }) < 1_000_000);
+  check("score beats the old formula's range", score({ bestTier: 1, rebirths: 0, ribbons: [], lifetimeCoins: 0 }) > 30 * 100 + 99);
   check("fmt small", fmt(999) === "999");
   check("fmt K/M", fmt(1500) === "1.5K" && fmt(2_400_000) === "2.4M");
   check("fmt trims .0", fmt(2000) === "2K");
