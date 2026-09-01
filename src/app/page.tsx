@@ -789,6 +789,16 @@ export default function Console() {
   useEffect(() => {
     setProfile(getProfile());
     setProfileLoaded(true);
+    // deep link from the /play/<id> SEO landing pages: /?play=<id> boots the
+    // console straight into that game (after the usual boot/profile gates)
+    try {
+      const id = new URLSearchParams(window.location.search).get("play");
+      const g = id ? games.find((x) => x.id === id && x.status === "available") : null;
+      if (g) {
+        setSelectedGame(g);
+        setView("playing");
+      }
+    } catch {}
   }, []);
 
   const handleBootDone = useCallback(() => setBooted(true), []);
