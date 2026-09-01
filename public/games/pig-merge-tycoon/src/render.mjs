@@ -639,6 +639,109 @@ export function drawPig(ctx, p, tier, opts = {}) {
     ctx.beginPath(); ctx.ellipse(0, 0, s * 1.16, s * 0.93, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  if (T.frost) {
+    // ice crown of jagged spikes, icicles under the belly, drifting snowflakes
+    ctx.fillStyle = "#dff6ff";
+    ctx.beginPath();
+    ctx.moveTo(hx - s * 0.5, -s * 0.55);
+    for (let i = 0; i < 5; i++) {
+      const bx = hx - s * 0.5 + (i * s) / 4;
+      ctx.lineTo(bx + s * 0.125, -s * (0.85 + (i % 2 ? 0.25 : 0.05)));
+      ctx.lineTo(bx + s * 0.25, -s * 0.55);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#8fd4e8"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "rgba(230,248,255,0.95)";
+    for (const [ix, h] of [[-0.7, 0.35], [-0.35, 0.55], [0.05, 0.4], [0.4, 0.6]]) {
+      ctx.beginPath(); ctx.moveTo(ix * s - s * 0.08, s * 0.72); ctx.lineTo(ix * s, s * (0.72 + h)); ctx.lineTo(ix * s + s * 0.08, s * 0.72); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      const a = phase * 0.7 + (i * Math.PI * 2) / 3;
+      const fx2 = Math.cos(a) * s * 1.3, fy2 = -s * 0.3 + Math.sin(a) * s * 0.7;
+      for (let k = 0; k < 3; k++) {
+        const b = (k * Math.PI) / 3 + phase;
+        ctx.beginPath(); ctx.moveTo(fx2 - Math.cos(b) * s * 0.1, fy2 - Math.sin(b) * s * 0.1); ctx.lineTo(fx2 + Math.cos(b) * s * 0.1, fy2 + Math.sin(b) * s * 0.1); ctx.stroke();
+      }
+    }
+  }
+  if (T.shadow) {
+    // rising smoke wisps + glowing red eye
+    for (let i = 0; i < 4; i++) {
+      const k = ((phase * 0.5 + i * 0.7) % 2) / 2;
+      ctx.fillStyle = `rgba(176,76,255,${0.45 * (1 - k)})`;
+      ctx.beginPath(); ctx.arc(-s * 0.6 + i * s * 0.35 + Math.sin(k * 6 + i) * s * 0.1, -s * 0.4 - k * s * 1.0, s * (0.18 + k * 0.12), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#ff3b3b"; ctx.shadowColor = "#ff3b3b"; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(hx + s * 0.12, -s * 0.24, s * 0.09, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  if (T.ocean) {
+    // dorsal fin, wave stripe along the flank, rising bubbles
+    ctx.fillStyle = `hsl(${hue},${sat}%,${lit - 20}%)`;
+    ctx.beginPath(); ctx.moveTo(-s * 0.45, -s * 0.7); ctx.quadraticCurveTo(-s * 0.2, -s * 1.35, s * 0.15, -s * 0.75); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(232,251,255,0.9)"; ctx.lineWidth = s * 0.09; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-s * 0.85, s * 0.05);
+    ctx.quadraticCurveTo(-s * 0.5, -s * 0.35, -s * 0.15, s * 0.05); ctx.quadraticCurveTo(s * 0.2, s * 0.45, s * 0.55, s * 0.05); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5;
+    for (let i = 0; i < 3; i++) {
+      const k = ((phase * 0.6 + i * 0.66) % 2) / 2;
+      ctx.beginPath(); ctx.arc(hx + s * 0.55 + Math.sin(k * 8) * s * 0.08, -s * 0.2 - k * s * 1.1, s * (0.05 + k * 0.08), 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  if (T.titan) {
+    // stone cracks, moss patches, glowing runes
+    ctx.strokeStyle = "rgba(40,32,28,0.75)"; ctx.lineWidth = s * 0.05; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.8, -s * 0.2); ctx.lineTo(-s * 0.45, s * 0.05); ctx.lineTo(-s * 0.55, s * 0.45);
+    ctx.moveTo(-s * 0.1, -s * 0.6); ctx.lineTo(0.05 * s, -s * 0.2); ctx.lineTo(-s * 0.15, s * 0.3);
+    ctx.moveTo(0.4 * s, -s * 0.4); ctx.lineTo(0.55 * s, s * 0.1); ctx.stroke();
+    ctx.fillStyle = "#6fa84f";
+    for (const [mx, my, mr] of [[-0.6, 0.45, 0.22], [0.3, -0.55, 0.18], [0.6, 0.4, 0.16]]) {
+      ctx.beginPath(); ctx.ellipse(mx * s, my * s, mr * s * 1.4, mr * s, 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = "#ffb028"; ctx.lineWidth = s * 0.06; ctx.shadowColor = "#ffb028"; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.moveTo(0.1 * s, -s * 0.05); ctx.lineTo(0.25 * s, 0.15 * s); ctx.lineTo(0.1 * s, 0.35 * s);
+    ctx.moveTo(-0.35 * s, -s * 0.3); ctx.lineTo(-0.35 * s, -s * 0.0); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  if (T.angel) {
+    // feathered wings that beat slowly + a gold halo
+    const beat = Math.sin(phase * 1.4) * 0.18;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(-s * 0.2 + side * s * 0.15, -s * 0.5);
+      ctx.rotate(side * (0.35 + beat));
+      ctx.fillStyle = "#fff";
+      for (const [wx, wy, wr] of [[0, -0.55, 0.3], [-0.28, -0.95, 0.28], [-0.55, -1.25, 0.25]]) {
+        ctx.beginPath(); ctx.ellipse(wx * s, wy * s, wr * s * 1.3, wr * s * 0.7, -0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(255,220,120,0.6)"; ctx.lineWidth = 1.2;
+      for (const [wx, wy, wr] of [[0, -0.55, 0.3], [-0.28, -0.95, 0.28], [-0.55, -1.25, 0.25]]) {
+        ctx.beginPath(); ctx.ellipse(wx * s, wy * s, wr * s * 1.3, wr * s * 0.7, -0.6, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = s * 0.08; ctx.shadowColor = "#ffe9a8"; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.ellipse(hx, -s * 0.95, s * 0.42, s * 0.13, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  if (T.omega) {
+    // two tilted orbit rings spinning around the whole pig + a gold Ω overhead
+    for (const [tilt, sp] of [[0.5, 1], [-0.6, -0.8]]) {
+      ctx.save();
+      ctx.rotate(tilt);
+      ctx.strokeStyle = "rgba(255,215,0,0.85)"; ctx.lineWidth = s * 0.06;
+      ctx.beginPath(); ctx.ellipse(0, 0, s * 1.45, s * 0.4 * Math.abs(Math.cos(phase * 0.3 * sp)) + s * 0.15, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = s * 0.12; ctx.lineCap = "round";
+    ctx.shadowColor = "#ffd700"; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(-s * 0.1, -s * 1.25, s * 0.22, Math.PI * 0.8, Math.PI * 2.2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-s * 0.4, -s * 1.0); ctx.lineTo(-s * 0.22, -s * 1.0);
+    ctx.moveTo(0.02 * s, -s * 1.0); ctx.lineTo(0.2 * s, -s * 1.0); ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
   ctx.restore();
 }
 
@@ -672,8 +775,15 @@ const TRUFFLE_STYLES = {
   dragon:   ["#3f7d3a", "#66a85c",  "#a8ff8a"],
   phoenix:  ["#c9463c", "#f0973a",  "#ffb028"],
   infinity: ["#141020", "#2a2440",  "#e8d9ff"],
+  frost:    ["#bfe6f5", "#e8f8ff",  "#aef0ff"],
+  shadow:   ["#1a1226", "#2e2040",  "#b04cff"],
+  ocean:    ["#1f7f8f", "#4fc3d0",  "#7fe8ff"],
+  titan:    ["#5a5148", "#8a7f72",  "#ffb028"],
+  angel:    ["#fff8e8", "#ffffff",  "#ffe9a8"],
+  omega:    ["#0d0a14", "#3a2a50",  "#ffd700"],
 };
-const TIER_TRUFFLE = ["imperial", "magma", "storm", "galaxy", "cosmic", "robo", "dragon", "phoenix", "infinity"];
+const TIER_TRUFFLE = ["imperial", "magma", "storm", "galaxy", "cosmic", "robo", "dragon", "phoenix", "infinity",
+  "frost", "shadow", "ocean", "titan", "angel", "omega"];
 export function drawTruffle(ctx, x, y, tier = 1) {
   const r = 7 + Math.min(22, tier) * 0.85;                   // t1 ≈ 8px … t24 ≈ 26px
   const key = tier >= 16 ? (TIER_TRUFFLE[Math.min(TIER_TRUFFLE.length - 1, tier - 16)] || "infinity")
@@ -778,6 +888,64 @@ export function drawTruffle(ctx, x, y, tier = 1) {
     ctx.strokeStyle = "#fff"; ctx.lineWidth = r * 0.14; ctx.lineCap = "round";
     ctx.beginPath(); ctx.arc(x - r * 0.28, y, r * 0.26, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.arc(x + r * 0.28, y, r * 0.26, 0, Math.PI * 2); ctx.stroke();
+  } else if (key === "frost") {
+    // icicles dripping off the bottom + a snowflake
+    ctx.fillStyle = "#e8f8ff";
+    for (const [ix, h] of [[-0.5, 0.5], [-0.1, 0.8], [0.35, 0.6]]) {
+      ctx.beginPath(); ctx.moveTo(x + ix * r - r * 0.12, y + r * 0.6); ctx.lineTo(x + ix * r, y + r * (0.6 + h)); ctx.lineTo(x + ix * r + r * 0.12, y + r * 0.6); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.3;
+    for (let i = 0; i < 3; i++) {
+      const a = (i * Math.PI) / 3;
+      ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * r * 0.45, y - Math.sin(a) * r * 0.45); ctx.lineTo(x + Math.cos(a) * r * 0.45, y + Math.sin(a) * r * 0.45); ctx.stroke();
+    }
+  } else if (key === "shadow") {
+    // wisps of purple smoke + two glowing eyes
+    ctx.fillStyle = "rgba(176,76,255,0.45)";
+    for (const [wx, wy, wr] of [[-0.5, -0.7, 0.28], [0.1, -0.95, 0.24], [0.55, -0.6, 0.2]]) {
+      ctx.beginPath(); ctx.arc(x + wx * r, y + wy * r, wr * r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#ff3b3b";
+    ctx.beginPath(); ctx.arc(x - r * 0.25, y - r * 0.05, r * 0.11, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + r * 0.2, y - r * 0.05, r * 0.11, 0, Math.PI * 2); ctx.fill();
+  } else if (key === "ocean") {
+    // wave stripe + bubbles
+    ctx.strokeStyle = "#e8fbff"; ctx.lineWidth = r * 0.12; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - r * 0.7, y + r * 0.05);
+    ctx.quadraticCurveTo(x - r * 0.35, y - r * 0.35, x, y + r * 0.05); ctx.quadraticCurveTo(x + r * 0.35, y + r * 0.45, x + r * 0.7, y + r * 0.05); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.2;
+    for (const [bx, by, br] of [[-0.4, -0.9, 0.12], [0.2, -1.15, 0.16], [0.55, -0.8, 0.1]]) {
+      ctx.beginPath(); ctx.arc(x + bx * r, y + by * r, br * r, 0, Math.PI * 2); ctx.stroke();
+    }
+  } else if (key === "titan") {
+    // stone cracks + moss + a glowing rune
+    ctx.strokeStyle = "#2f2a26"; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(x - r * 0.6, y - r * 0.2); ctx.lineTo(x - r * 0.2, y + r * 0.1); ctx.lineTo(x - r * 0.3, y + r * 0.5);
+    ctx.moveTo(x + r * 0.2, y - r * 0.5); ctx.lineTo(x + r * 0.4, y + r * 0.1); ctx.stroke();
+    ctx.fillStyle = "#6fa84f";
+    ctx.beginPath(); ctx.ellipse(x + r * 0.35, y + r * 0.45, r * 0.3, r * 0.14, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffb028"; ctx.lineWidth = r * 0.1; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - r * 0.05, y - r * 0.35); ctx.lineTo(x + r * 0.05, y - r * 0.05); ctx.lineTo(x - r * 0.1, y + r * 0.2); ctx.stroke();
+  } else if (key === "angel") {
+    // halo + tiny feather wings
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = r * 0.12;
+    ctx.beginPath(); ctx.ellipse(x, y - r * 1.05, r * 0.5, r * 0.16, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#fff";
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(x + side * r * 0.6, y - r * 0.1);
+      ctx.quadraticCurveTo(x + side * r * 1.35, y - r * 0.9, x + side * r * 1.3, y - r * 0.1);
+      ctx.quadraticCurveTo(x + side * r * 1.0, y + r * 0.1, x + side * r * 0.6, y + r * 0.15); ctx.closePath(); ctx.fill();
+    }
+  } else if (key === "omega") {
+    // gold Ω + a rainbow ring
+    const g = ctx.createLinearGradient(x - r, y, x + r, y);
+    ["#ff6b6b", "#ffe66d", "#7be07b", "#6bc7ff", "#c792ea"].forEach((c, i, a2) => g.addColorStop(i / (a2.length - 1), c));
+    ctx.strokeStyle = g; ctx.lineWidth = r * 0.12;
+    ctx.beginPath(); ctx.arc(x, y, r * 1.15, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#ffd700"; ctx.lineWidth = r * 0.16; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(x, y - r * 0.05, r * 0.4, Math.PI * 0.8, Math.PI * 2.2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - r * 0.55, y + r * 0.42); ctx.lineTo(x - r * 0.22, y + r * 0.42);
+    ctx.moveTo(x + r * 0.22, y + r * 0.42); ctx.lineTo(x + r * 0.55, y + r * 0.42); ctx.stroke();
   }
   // sparkle (everyone gets one; brighter with a glow)
   ctx.fillStyle = glow ? "#ffffff" : "#ffe9a8";

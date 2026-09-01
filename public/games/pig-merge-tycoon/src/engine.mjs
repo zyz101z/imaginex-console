@@ -26,6 +26,12 @@ export const TIERS = [
   { name: "Dragon Boar",   hue: 115, sat: 55, size: 2.26, glow: true, dragon: true, tusks: true, light: 55 },
   { name: "Phoenix Sow",   hue: 22,  sat: 95, size: 2.36, glow: true, phoenix: true, light: 55 },
   { name: "INFINITY HOG",  hue: 270, sat: 35, size: 2.52, glow: true, infinity: true, galaxy: true, light: 24 },
+  { name: "Frost King",    hue: 200, sat: 70, size: 2.62, glow: true, frost: true, light: 80 },
+  { name: "Shadow Boar",   hue: 275, sat: 40, size: 2.72, glow: true, shadow: true, tusks: true, light: 18 },
+  { name: "Tidal Sow",     hue: 178, sat: 65, size: 2.82, glow: true, ocean: true, light: 52 },
+  { name: "Titan Hog",     hue: 30,  sat: 18, size: 2.94, glow: true, titan: true, tusks: true, light: 46 },
+  { name: "Seraph Sow",    hue: 48,  sat: 40, size: 3.06, glow: true, angel: true, light: 92 },
+  { name: "OMEGA PIG",     hue: -1,  sat: 95, size: 3.20, glow: true, omega: true, rainbow: true, crown: true, stars: true, emperor: true },
 ];
 export const MAX_TIER = TIERS.length;
 
@@ -85,11 +91,13 @@ export const RIBBONS = [
   { id: "tier12",  icon: "🌟", name: "Star Farmer",       desc: "reach pig tier 12",  goal: 12, of: (s) => s.bestTier, digs: 50 },
   { id: "tier16",  icon: "🏆", name: "Sweet Sixteen",     desc: "reach pig tier 16",  goal: 16, of: (s) => s.bestTier, digs: 70 },
   { id: "tier20",  icon: "🚀", name: "Top Twenty",        desc: "reach pig tier 20",  goal: 20, of: (s) => s.bestTier, digs: 100 },
-  { id: "tier24",  icon: "💫", name: "The Final Form",    desc: "reach pig tier 24",  goal: 24, of: (s) => s.bestTier, digs: 200 },
+  { id: "tier24",  icon: "💫", name: "Two Dozen Deep",    desc: "reach pig tier 24",  goal: 24, of: (s) => s.bestTier, digs: 150 },
+  { id: "tier30",  icon: "🌌", name: "The Final Form",    desc: "reach the very last pig", goal: MAX_TIER, of: (s) => s.bestTier, digs: 300 },
   // the pig book
   { id: "book10", icon: "📖", name: "Bookworm",          desc: "discover 10 kinds of pig",  goal: 10, of: (s) => s.discovered.length, digs: 30 },
   { id: "book16", icon: "📚", name: "Pig Scholar",       desc: "discover 16 kinds of pig",  goal: 16, of: (s) => s.discovered.length, digs: 60 },
-  { id: "book24", icon: "🎓", name: "Complete Collection", desc: "discover every pig",      goal: 24, of: (s) => s.discovered.length, digs: 200 },
+  { id: "book24", icon: "🎓", name: "Pig Professor",      desc: "discover 24 kinds of pig",  goal: 24, of: (s) => s.discovered.length, digs: 120 },
+  { id: "bookall", icon: "🏛️", name: "Complete Collection", desc: "discover every pig",     goal: MAX_TIER, of: (s) => s.discovered.length, digs: 300 },
   // coins + truffles
   { id: "coins1k",  icon: "🪙", name: "Pocket Money",     desc: "earn 1K coins in total",    goal: 1e3,  of: (s) => s.lifetimeCoins, digs: 15 },
   { id: "coins100k", icon: "💰", name: "Truffle Tycoon",  desc: "earn 100K coins in total",  goal: 1e5,  of: (s) => s.lifetimeCoins, digs: 25 },

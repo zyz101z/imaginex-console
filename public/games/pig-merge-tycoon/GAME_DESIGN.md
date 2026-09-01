@@ -32,13 +32,18 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 6. Reach the deep tiers → **SELL THE FARM (rebirth)**: reset pigs+coins for a
    permanent ×2 profit multiplier and a golden trophy pig statue by the barn.
 
-## Tiers (20)
+## Tiers (30)
 1 Piglet · 2 Pig · 3 Spotted Pig · 4 Boar · 5 Muddy Champ · 6 Ribbon Winner ·
 7 Truffle Hound · 8 Royal Pig · 9 Knight Pig (helmed) · 10 Golden Hog · 11 Crystal Pig ·
 12 Star Swine · 13 Rainbow Racer · 14 Moon Boar · 15 Sun Sow · 16 **HOG EMPEROR** ·
 17 Volcano Hog (magma cracks) · 18 Storm Sow (cloud + bolt) · 19 Galaxy Boar (nebula) ·
 20 COSMIC PIG · 21 Robo Hog (antenna + seams) · 22 Dragon Boar (wings + fire) ·
-23 Phoenix Sow (flame crest) · 24 **INFINITY HOG** (∞ halo, the true final form)
+23 Phoenix Sow (flame crest) · 24 **INFINITY HOG** (∞ halo) ·
+25 Frost King (ice crown, icicles, snowflakes) · 26 Shadow Boar (smoke wisps, red eye) ·
+27 Tidal Sow (dorsal fin, wave stripe, bubbles) · 28 Titan Hog (stone cracks, moss, runes) ·
+29 Seraph Sow (feathered wings, halo) · 30 **OMEGA PIG** (orbit rings, Ω, rainbow — the end)
+- ⚠️ SURPRISE RULE (user 2026-08-31): never describe new tiers in chat — Dad + Noah
+  want to meet them via the discovery banner. Names live here and in engine.mjs only.
 - Every tier 16+ digs its OWN signature truffle (imperial/magma/storm/galaxy/ringed-
   cosmic/robo/dragon/phoenix/infinity); tiers 1-15 use banded styles.
 - ~~Shiny pigs~~ — built 2026-08-30, REMOVED same day at Noah's request (he didn't
@@ -106,7 +111,7 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 - Tracked in `stats.sold` (no ribbon yet).
 
 ## 🎀 Blue Ribbons (2026-08-31)
-- ~40 farm milestones in `RIBBONS` (engine): merges (1→2000), best tier (5→24),
+- ~41 farm milestones in `RIBBONS` (engine): merges (1→2000), best tier (5→24, MAX_TIER),
   book size, lifetime coins (1K→1T), digs, crates (+golden), shop buys, maxed upgrade,
   Prize Breeds 5, full pen, 25 pigs at once, 4-of-a-kind, 5 names, all themes,
   rebirths (1→10). Each has a live `progress(s)` → bar + "x / y" in the panel.

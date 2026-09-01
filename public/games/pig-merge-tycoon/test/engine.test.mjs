@@ -17,8 +17,9 @@ const makeRng = (seed) => { let a = seed >>> 0; return () => {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 
 // ---------- 1. data ----------
-check("24 tiers", TIERS.length === 24 && MAX_TIER === 24);
-check("tier names unique", new Set(TIERS.map(t => t.name)).size === 24);
+check("30 tiers", TIERS.length === 30 && MAX_TIER === 30);
+check("tier names unique", new Set(TIERS.map(t => t.name)).size === 30);
+check("top-tier ribbons track MAX_TIER", RIBBONS.find(r => r.id === "tier30").goal === MAX_TIER && RIBBONS.find(r => r.id === "bookall").goal === MAX_TIER);
 check("tier sizes ascend", TIERS.every((t, i) => i === 0 || t.size > TIERS[i - 1].size));
 check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPANSIONS[i - 1]));
 
