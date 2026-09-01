@@ -345,6 +345,7 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   // reward scales with best tier
   const lo = ribbonReward({ ...s, bestTier: 2 }, RIBBONS[0]), hi = ribbonReward({ ...s, bestTier: 12 }, RIBBONS[0]);
   check("ribbon reward scales with best tier", hi > lo * 100);
+  check("ribbon reward is ~1/3 of digs-worth", Math.abs(ribbonReward({ ...s, bestTier: 10 }, RIBBONS[0]) - truffleValue({ ...s, bestTier: 10 }, 10) * RIBBONS[0].digs / 3) <= 1);
   // crate + golden counters
   s.crate = { type: "golden", base: 3, cost: 1, expiresAt: 999 };
   openCrate(s, rng, 0);

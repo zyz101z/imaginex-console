@@ -331,7 +331,10 @@ export function sellPig(s, id) {
 // ---------------------------------------------------------------- ribbons
 export const ribbonProgress = (s, r) => [Math.min(r.goal, r.of(s)), r.goal];
 export const hasRibbon = (s, id) => s.ribbons.includes(id);
-export const ribbonReward = (s, r) => Math.ceil(truffleValue(s, s.bestTier) * r.digs);
+// Payout nerfed to 1/3 (user 2026-08-31: too generous) — ribbons are bragging
+// rights with a tip, not an income source.
+export const RIBBON_PAY_SCALE = 1 / 3;
+export const ribbonReward = (s, r) => Math.max(1, Math.ceil(truffleValue(s, s.bestTier) * r.digs * RIBBON_PAY_SCALE));
 // Award every newly-completed ribbon; returns [{ ribbon, reward }] for the UI to
 // celebrate. Called after any mutating action (cheap: ~40 closures).
 export function checkRibbons(s) {
