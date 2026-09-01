@@ -37,7 +37,10 @@ look; bouncy animations; big rounded buttons; constant little rewards popping.
 7 Truffle Hound · 8 Royal Pig · 9 Knight Pig (helmed) · 10 Golden Hog · 11 Crystal Pig ·
 12 Star Swine · 13 Rainbow Racer · 14 Moon Boar · 15 Sun Sow · 16 **HOG EMPEROR** ·
 17 Volcano Hog (magma cracks) · 18 Storm Sow (cloud + bolt) · 19 Galaxy Boar (nebula) ·
-20 COSMIC PIG · 21 Robo Hog (antenna + seams) · 22 Dragon Boar (wings + fire) ·
+20 COSMIC PIG (redesigned 2026-09-01 — old rainbow+crown+stars look was Rainbow Racer's twin;
+now deep-space navy via `cosmic` flag: tilted glowing planet-ring drawn back-pass/front-pass so
+the body sits inside it, orbiting moon, constellation star-chart flank, aurora sheen, crown kept) ·
+21 Robo Hog (antenna + seams) · 22 Dragon Boar (wings + fire) ·
 23 Phoenix Sow (flame crest) · 24 **INFINITY HOG** (∞ halo) ·
 25 Frost King (ice crown, icicles, snowflakes) · 26 Shadow Boar (smoke wisps, red eye) ·
 27 Tidal Sow (dorsal fin, wave stripe, bubbles) · 28 Titan Hog (stone cracks, moss, runes) ·

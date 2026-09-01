@@ -356,6 +356,15 @@ export function drawPig(ctx, p, tier, opts = {}) {
     rr(ctx, lx * s - s * 0.09, s * 0.4 - lo, s * 0.22, s * 0.4, s * 0.1); ctx.fill();
   }
 
+  // cosmic ring, back pass: the full tilted planet-ring goes down first so the
+  // body overlaps its middle — reads as the pig sitting INSIDE the ring
+  if (T.cosmic) {
+    ctx.save();
+    ctx.rotate(-0.32);
+    ctx.strokeStyle = "rgba(159,216,255,0.55)"; ctx.lineWidth = s * 0.13;
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 1.5, s * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
   // body
   if (T.rainbow && !golden) {
     const g = ctx.createLinearGradient(-s, 0, s, 0);
@@ -368,6 +377,27 @@ export function drawPig(ctx, p, tier, opts = {}) {
   ctx.fillStyle = "rgba(255,255,255,0.25)";
   ctx.beginPath(); ctx.ellipse(-s * 0.15, -s * 0.25, s * 0.6, s * 0.35, -0.3, 0, Math.PI * 2); ctx.fill();
 
+  // cosmic flank: a twinkling constellation joined by faint lines (distinct from
+  // the galaxy tier's nebula swirl — this is a star CHART, not a star cloud)
+  if (T.cosmic) {
+    const pts = [[-0.6, -0.2], [-0.2, -0.42], [0.2, -0.15], [-0.05, 0.2], [0.4, 0.3]];
+    ctx.strokeStyle = "rgba(220,236,255,0.4)"; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    pts.forEach(([px2, py2], i) => ctx[i === 0 ? "moveTo" : "lineTo"](px2 * s, py2 * s));
+    ctx.stroke();
+    for (let i = 0; i < pts.length; i++) {
+      const tw = 0.6 + 0.4 * Math.abs(Math.sin(phase * 1.3 + i * 1.7));
+      ctx.fillStyle = `rgba(255,255,255,${tw})`;
+      ctx.beginPath(); ctx.arc(pts[i][0] * s, pts[i][1] * s, s * (i === 1 ? 0.07 : 0.045), 0, Math.PI * 2); ctx.fill();
+    }
+    // aurora sheen along the back
+    ctx.globalAlpha = 0.3;
+    const au = ctx.createLinearGradient(-s, -s * 0.6, s, 0);
+    au.addColorStop(0, "#7be0c8"); au.addColorStop(0.5, "#9f8aff"); au.addColorStop(1, "transparent");
+    ctx.fillStyle = au;
+    ctx.beginPath(); ctx.ellipse(-s * 0.1, -s * 0.4, s * 0.85, s * 0.35, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
   // spots
   if (T.spots) {
     ctx.fillStyle = "rgba(90,50,60,0.45)";
@@ -725,6 +755,22 @@ export function drawPig(ctx, p, tier, opts = {}) {
     ctx.strokeStyle = "#ffd700"; ctx.lineWidth = s * 0.08; ctx.shadowColor = "#ffe9a8"; ctx.shadowBlur = 10;
     ctx.beginPath(); ctx.ellipse(hx, -s * 0.95, s * 0.42, s * 0.13, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.shadowBlur = 0;
+  }
+  if (T.cosmic) {
+    // cosmic ring, front pass: the lower arc rides OVER the body, closing the illusion
+    ctx.save();
+    ctx.rotate(-0.32);
+    ctx.strokeStyle = "#cfeaff"; ctx.lineWidth = s * 0.13; ctx.lineCap = "round";
+    ctx.shadowColor = "#9fd8ff"; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 1.5, s * 0.42, 0, 0.15, Math.PI - 0.15); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    // one tiny moon riding the ring
+    const a = phase * 0.8;
+    const mx = Math.cos(a) * s * 1.5, my = Math.sin(a) * s * 0.42;
+    const rx = mx * Math.cos(-0.32) - my * Math.sin(-0.32), ry = mx * Math.sin(-0.32) + my * Math.cos(-0.32);
+    ctx.fillStyle = "#e8ecfa";
+    ctx.beginPath(); ctx.arc(rx, ry, s * 0.1, 0, Math.PI * 2); ctx.fill();
   }
   if (T.omega) {
     // two tilted orbit rings spinning around the whole pig + a gold Ω overhead

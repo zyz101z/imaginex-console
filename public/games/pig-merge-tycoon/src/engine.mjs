@@ -21,7 +21,7 @@ export const TIERS = [
   { name: "Volcano Hog",   hue: 15,  sat: 85, size: 1.78, glow: true, magma: true, light: 46 },
   { name: "Storm Sow",     hue: 212, sat: 28, size: 1.86, glow: true, bolt: true, light: 62 },
   { name: "Galaxy Boar",   hue: 258, sat: 55, size: 1.94, glow: true, galaxy: true, tusks: true, light: 42 },
-  { name: "COSMIC PIG",    hue: -1,  sat: 90, size: 2.06, glow: true, rainbow: true, crown: true, stars: true, sun: true },
+  { name: "COSMIC PIG",    hue: 228, sat: 60, size: 2.06, glow: true, cosmic: true, crown: true, light: 30 },
   { name: "Robo Hog",      hue: 195, sat: 25, size: 2.16, glow: true, robo: true, light: 74 },
   { name: "Dragon Boar",   hue: 115, sat: 55, size: 2.26, glow: true, dragon: true, tusks: true, light: 55 },
   { name: "Phoenix Sow",   hue: 22,  sat: 95, size: 2.36, glow: true, phoenix: true, light: 55 },
