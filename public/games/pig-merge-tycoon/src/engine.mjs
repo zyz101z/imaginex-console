@@ -72,6 +72,92 @@ export const THEMES = {
   beach:   { name: "Beach Farm",   icon: "🏖️", cost: 20_000_000 },
 };
 
+// 🎨 FARM CUSTOMIZATION (2026-09-01, user+Noah picks): decor you place yourself,
+// fence & barn paint, ambient critters, and a music box. ALL cosmetics: bought
+// with coins (deep late-game sinks), never reset by rebirth.
+export const DECOR = {
+  haybale:   { name: "Hay Bale",        icon: "🌾", cost: 25_000 },
+  flowers:   { name: "Flower Patch",    icon: "🌸", cost: 60_000 },
+  scarecrow: { name: "Scarecrow",       icon: "🎩", cost: 150_000 },
+  mailbox:   { name: "Farm Mailbox",    icon: "📬", cost: 400_000 },
+  tree:      { name: "Shade Oak",       icon: "🌳", cost: 1_000_000 },
+  pond:      { name: "Duck Pond",       icon: "🪷", cost: 4_000_000 },
+  tractor:   { name: "Rusty Tractor",   icon: "🚜", cost: 15_000_000 },
+  gnome:     { name: "Garden Gnome",    icon: "🧙", cost: 60_000_000 },
+  windmill:  { name: "Windmill",        icon: "🌀", cost: 250_000_000 },
+  fountain:  { name: "Golden Fountain", icon: "⛲", cost: 1_000_000_000 },
+};
+export const DECOR_MAX = 40;   // total placed pieces
+export const FENCES = {
+  classic: { name: "Classic Wood",  cost: 0 },
+  picket:  { name: "White Picket",  cost: 250_000 },
+  stone:   { name: "Stone Wall",    cost: 10_000_000 },
+  neon:    { name: "Neon Rails",    cost: 500_000_000 },
+};
+export const BARN_PAINTS = {
+  red:    { name: "Barn Red",       cost: 0,             wall: ["#d95548", "#b03a30"], roof: ["#8a2a22", "#a83228"] },
+  blue:   { name: "Lake Blue",      cost: 1_000_000,     wall: ["#4f86d8", "#33619f"], roof: ["#24457a", "#2f5a99"] },
+  green:  { name: "Meadow Green",   cost: 1_000_000,     wall: ["#4fae62", "#357a44"], roof: ["#245a30", "#2f7a40"] },
+  teal:   { name: "Tidal Teal",     cost: 25_000_000,    wall: ["#3fb8b0", "#2a827c"], roof: ["#1e615c", "#28807a"] },
+  purple: { name: "Royal Purple",   cost: 25_000_000,    wall: ["#8a5ad8", "#623a9f"], roof: ["#45256e", "#5a3391"] },
+  gold:   { name: "Solid Gold",     cost: 2_000_000_000, wall: ["#f5c33b", "#c99a1e"], roof: ["#a87d12", "#c99a1e"] },
+};
+export const CRITTERS = {
+  chickens: { name: "Chickens",       icon: "🐔", cost: 200_000,   desc: "three hens peck the grass" },
+  ducks:    { name: "Ducks",          icon: "🦆", cost: 1_000_000, desc: "a pair paddles the wallow" },
+  cat:      { name: "Barn Cat",       icon: "🐈", cost: 10_000_000, desc: "naps on the fence, judges everyone" },
+  goat:     { name: "Stubborn Goat",  icon: "🐐", cost: 100_000_000, desc: "headbutts the scenery" },
+};
+export const MUSICBOX = {
+  nature: { name: "Nature Sounds", icon: "🦗", cost: 500_000,    desc: "birdsong by day, crickets by night" },
+  choir:  { name: "Pig Choir",     icon: "🎼", cost: 5_000_000,  desc: "the herd hums along in harmony" },
+  djhog:  { name: "DJ Hog",        icon: "🎧", cost: 50_000_000, desc: "a lo-fi beat to merge pigs to" },
+};
+
+export function buyDecor(s, k, rng) {
+  const d = DECOR[k];
+  if (!d || s.coins < d.cost || s.decor.length >= DECOR_MAX) return null;
+  s.coins -= d.cost;
+  const piece = { id: s.nextDecorId++, k, x: 0.15 + rng() * 0.7, y: 0.1 + rng() * 0.25 };
+  s.decor.push(piece);
+  return piece;
+}
+export function moveDecor(s, id, x, y) {
+  const piece = s.decor.find(p => p.id === id);
+  if (!piece) return false;
+  piece.x = Math.max(0, Math.min(1, x));
+  piece.y = Math.max(0, Math.min(1, y));
+  return true;
+}
+// selling back a decoration refunds half — redecorating shouldn't be free money
+export function removeDecor(s, id) {
+  const i = s.decor.findIndex(p => p.id === id);
+  if (i === -1) return 0;
+  const refund = Math.floor(DECOR[s.decor[i].k].cost / 2);
+  s.decor.splice(i, 1);
+  s.coins += refund;
+  return refund;
+}
+const buyCosmetic = (s, catalog, key, ownedList) => {
+  const c = catalog[key];
+  if (!c || ownedList.includes(key) || s.coins < c.cost) return false;
+  s.coins -= c.cost;
+  ownedList.push(key);
+  return true;
+};
+export function buyFence(s, k) { return buyCosmetic(s, FENCES, k, s.paintOwned.fences) && (s.paint.fence = k, true); }
+export function setFence(s, k) { if (!FENCES[k] || !s.paintOwned.fences.includes(k)) return false; s.paint.fence = k; return true; }
+export function buyBarn(s, k) { return buyCosmetic(s, BARN_PAINTS, k, s.paintOwned.barns) && (s.paint.barn = k, true); }
+export function setBarn(s, k) { if (!BARN_PAINTS[k] || !s.paintOwned.barns.includes(k)) return false; s.paint.barn = k; return true; }
+export function buyCritter(s, k) { return buyCosmetic(s, CRITTERS, k, s.critters); }
+export function buyMusic(s, k) { return buyCosmetic(s, MUSICBOX, k, s.musicbox.owned) && (s.musicbox.on.includes(k) || s.musicbox.on.push(k), true); }
+export function toggleMusic(s, k) {
+  if (!s.musicbox.owned.includes(k)) return false;
+  const i = s.musicbox.on.indexOf(k);
+  if (i === -1) s.musicbox.on.push(k); else s.musicbox.on.splice(i, 1);
+  return true;
+}
+
 // 🎀 BLUE RIBBONS — farm milestones. Each pays a coin lump sized in digs-worth of
 // your BEST pig's truffle, on a STEEP difficulty curve (playtest 2026-08-31: flat
 // payouts felt huge early and worthless late): early ribbons are a tip, endgame
@@ -151,6 +237,12 @@ export function newGame(now = 0) {
     discovered: [1],                 // tier-book entries
     theme: "classic",
     themesOwned: ["classic"],
+    decor: [],                       // placed pieces { id, k, x, y } — x/y 0..1 farm space
+    nextDecorId: 1,
+    paint: { fence: "classic", barn: "red" },
+    paintOwned: { fences: ["classic"], barns: ["red"] },
+    critters: [],                    // owned critter keys
+    musicbox: { owned: [], on: [] },
     stats: { merges: 0, crates: 0, goldenCrates: 0, bought: 0, names: 0 },   // lifetime, never reset
     ribbons: [],                     // ribbon ids earned (lifetime)
     lastSeen: now,
@@ -414,5 +506,11 @@ export function deserialize(json) {
   // already proves (best tier, coins, digs, rebirths…) will award on the first check
   if (!s.stats) s.stats = { merges: 0, crates: 0, goldenCrates: 0, bought: 0, names: 0 };
   if (!s.ribbons) s.ribbons = [];
+  // pre-customization saves (2026-09-01 farm decor pass)
+  if (!s.decor) { s.decor = []; s.nextDecorId = 1; }
+  if (!s.paint) s.paint = { fence: "classic", barn: "red" };
+  if (!s.paintOwned) s.paintOwned = { fences: ["classic"], barns: ["red"] };
+  if (!s.critters) s.critters = [];
+  if (!s.musicbox) s.musicbox = { owned: [], on: [] };
   return s;
 }

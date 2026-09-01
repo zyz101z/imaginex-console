@@ -6,6 +6,8 @@ import {
   buyExpansion, rebirthRequirement, canRebirth, doRebirth, offlineEarnings, score, fmt,
   serialize, deserialize, RIBBONS, ribbonProgress, hasRibbon, ribbonReward, checkRibbons,
   sellValue, sellPig, STAGE_DIGS, OFFLINE_RATE,
+  DECOR, DECOR_MAX, FENCES, BARN_PAINTS, CRITTERS, MUSICBOX,
+  buyDecor, moveDecor, removeDecor, buyFence, setFence, buyBarn, setBarn, buyCritter, buyMusic, toggleMusic,
 } from "../src/engine.mjs";
 
 let pass = 0, fail = 0;
@@ -406,6 +408,52 @@ check("capacity ladder ascends", EXPANSIONS.every((c, i) => i === 0 || c > EXPAN
   }
   check("buy→sell never profits", !exploit);
   check("higher tiers sell for more", sellValue(s, { tier: 9 }) > sellValue(s, { tier: 3 }) * 50);
+}
+
+// ---------- 14. farm customization (decor / paint / critters / music box) ----------
+{
+  const rng = makeRng(88);
+  const s = newGame();
+  check("catalogs sane", Object.keys(DECOR).length === 10 && Object.keys(FENCES).length === 4 &&
+    Object.keys(BARN_PAINTS).length === 6 && Object.keys(CRITTERS).length === 4 && Object.keys(MUSICBOX).length === 3);
+  check("cannot afford decor at start", buyDecor(s, "haybale", rng) === null);
+  s.coins = 1e12;
+  const h1 = buyDecor(s, "haybale", rng), h2 = buyDecor(s, "haybale", rng);
+  check("duplicates allowed, unique ids", h1 && h2 && h1.id !== h2.id && s.decor.length === 2);
+  check("decor placed inside 0..1", s.decor.every(d => d.x >= 0 && d.x <= 1 && d.y >= 0 && d.y <= 1));
+  check("moveDecor clamps", moveDecor(s, h1.id, -5, 9) && h1.x === 0 && h1.y === 1);
+  const before = s.coins;
+  check("remove refunds half", removeDecor(s, h2.id) === Math.floor(DECOR.haybale.cost / 2) &&
+    s.coins === before + Math.floor(DECOR.haybale.cost / 2) && s.decor.length === 1);
+  check("remove missing = 0", removeDecor(s, 9999) === 0);
+  for (let i = s.decor.length; i < DECOR_MAX; i++) buyDecor(s, "flowers", rng);
+  check("decor cap enforced", s.decor.length === DECOR_MAX && buyDecor(s, "haybale", rng) === null);
+  // paint
+  check("cannot set unowned fence", !setFence(s, "stone") && s.paint.fence === "classic");
+  check("buy fence switches", buyFence(s, "picket") && s.paint.fence === "picket");
+  check("no re-buy", !buyFence(s, "picket"));
+  check("switch back free", setFence(s, "classic") && s.paint.fence === "classic");
+  check("barn paint works", buyBarn(s, "teal") && s.paint.barn === "teal" && setBarn(s, "red"));
+  // critters + music
+  check("buy critter once", buyCritter(s, "cat") && !buyCritter(s, "cat") && s.critters.includes("cat"));
+  check("music buy auto-enables", buyMusic(s, "choir") && s.musicbox.on.includes("choir"));
+  check("music toggles", toggleMusic(s, "choir") && !s.musicbox.on.includes("choir") && toggleMusic(s, "choir"));
+  check("cannot toggle unowned", !toggleMusic(s, "djhog"));
+  // rebirth keeps every cosmetic
+  s.pigs = [{ id: 1, tier: 10, x: 0, y: 0 }];
+  doRebirth(s);
+  check("cosmetics survive rebirth", s.decor.length === DECOR_MAX && s.paintOwned.fences.includes("picket") &&
+    s.critters.includes("cat") && s.musicbox.owned.includes("choir"));
+  // save round-trip + legacy migration
+  const rt = deserialize(serialize(s));
+  check("customization survives save round-trip", rt.decor.length === DECOR_MAX && rt.paint.barn === "red" &&
+    rt.critters.length === 1 && rt.musicbox.owned.length === 1 && rt.nextDecorId === s.nextDecorId);
+  const legacy = JSON.parse(serialize(newGame()));
+  delete legacy.decor; delete legacy.nextDecorId; delete legacy.paint; delete legacy.paintOwned;
+  delete legacy.critters; delete legacy.musicbox;
+  const mig = deserialize(JSON.stringify(legacy));
+  check("pre-customization saves migrate", mig.decor.length === 0 && mig.paint.fence === "classic" &&
+    mig.paintOwned.barns.includes("red") && mig.musicbox.on.length === 0);
 }
 
 console.log(`\n=== pigmerge: ${pass} passed, ${fail} failed ===`);

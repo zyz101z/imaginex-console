@@ -2,11 +2,18 @@
 // HUD/overlays, saves. Engine stays pure; all timing/randomness injected from here.
 
 import * as E from "./engine.mjs";
-import { W, H, PEN, STAND, penX, penY, drawScene, drawPig, drawTruffle, drawCrate, drawStar, drawHintRing } from "./render.mjs";
+import { W, H, PEN, STAND, penX, penY, drawScene, drawPig, drawTruffle, drawCrate, drawStar, drawHintRing, drawDecor, drawCritters } from "./render.mjs";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game"), ctx = canvas.getContext("2d");
-const SAVE_KEY = "pigmerge_save_v1";
+// 👨‍👦 FARM SLOTS: two farms on one device (Dad + Noah). Slot 1 keeps the legacy
+// key so existing saves stay put; the meta record tracks names + which is active.
+const SLOT_KEYS = { 1: "pigmerge_save_v1", 2: "pigmerge_save_s2" };
+const META_KEY = "pigmerge_slots";
+let slotMeta = { active: 1, names: { 1: "Farm 1", 2: "Farm 2" } };
+try { const m = JSON.parse(localStorage.getItem(META_KEY) || "null"); if (m && SLOT_KEYS[m.active]) slotMeta = m; } catch (e) {}
+const saveMeta = () => { try { localStorage.setItem(META_KEY, JSON.stringify(slotMeta)); } catch (e) {} };
+const SAVE_KEY = SLOT_KEYS[slotMeta.active];
 const nowSec = () => Date.now() / 1000;
 const rng = Math.random;
 
@@ -21,6 +28,12 @@ const anim = new Map();   // id -> { px, py, tx, ty, phase, nextDig, dir, settle
 const fx = [];            // flying truffles / coin pops / rings / confetti
 let cratePos = null;      // canvas position of the live crate
 let drag = null;          // { id, dx, dy }
+let arranging = false;    // ARRANGE FARM mode: drag decor instead of pigs
+let decorDrag = null;     // { id } while arranging
+let visiting = null;      // read-only view of the OTHER slot's farm { S, name }
+// decor 0..1 space → canvas (grass strip through the pen)
+const decorX = (u) => 30 + u * (W - 60);
+const decorY = (v) => 168 + v * (H - 190);
 let lastReportedScore = 0;
 let toastT = 0;
 
@@ -77,6 +90,41 @@ const sfx = {
   deny() { beep(140, 0.12, "square", 0.1, 90); },
   ribbon() { [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, 0.16, "triangle", 0.15), i * 80)); setTimeout(() => beep(1568, 0.3, "sine", 0.12), 340); },
 };
+
+// 🎵 MUSIC BOX layers — all obey the global mute and the per-layer toggles.
+// nature: birdsong by day / crickets on the night theme. choir: an occasional
+// three-oink chord from the herd. djhog: a lo-fi beat that REPLACES the mp3
+// while it's on (two music tracks at once is soup).
+const musicOn = (k) => !muted && S.musicbox && S.musicbox.on.includes(k);
+setInterval(() => {
+  if (!AC || !musicOn("nature")) return;
+  if (S.theme === "night") {
+    for (let i = 0; i < 3; i++) setTimeout(() => beep(4200, 0.03, "square", 0.03), i * 90);   // cricket
+  } else {
+    const base = 1800 + Math.random() * 900;   // little bird phrase
+    [0, 120, 260].forEach((d, i) => setTimeout(() => beep(base * (1 + i * 0.12), 0.09, "sine", 0.045, base * 1.4), d));
+  }
+}, 9000);
+setInterval(() => {
+  if (!AC || !musicOn("choir") || !S.pigs.length) return;
+  const root = 180 - Math.min(60, S.bestTier * 2);
+  [1, 1.26, 1.5].forEach((iv, i) => setTimeout(() => beep(root * iv * 1.6, 0.25, "square", 0.05, root * iv), i * 140));
+}, 26000);
+let djStep = 0;
+setInterval(() => {
+  const on = musicOn("djhog");
+  if (music) {   // DJ Hog owns the speakers while enabled
+    if (on && !music.paused) music.pause();
+    else if (!on && music.paused && !muted && AC) music.play().catch(() => {});
+  }
+  if (!AC || !on) return;
+  djStep = (djStep + 1) % 8;
+  if (djStep % 4 === 0) beep(95, 0.18, "sine", 0.16, 38);                        // kick
+  if (djStep % 2 === 1) beep(6800, 0.03, "square", 0.025);                       // hat
+  if (djStep === 2 || djStep === 6) beep(2400, 0.06, "triangle", 0.05, 1800);    // snap
+  const bass = [55, 55, 65, 49][Math.floor(djStep / 2)];
+  if (djStep % 2 === 0) beep(bass, 0.22, "triangle", 0.07);
+}, 250);
 $("soundBtn").textContent = muted ? "♪ OFF" : "♪ ON";
 $("soundBtn").onclick = () => {
   muted = !muted;
@@ -198,6 +246,63 @@ $("buyBtn").onclick = () => {
   refreshHud(); save(); reportScore();
 };
 
+// ---- 👨‍👦 FARM SLOTS panel: rename, switch, or visit the other farm ----
+$("farmsBtn").onclick = () => { audio(); renderFarms(); $("farmsBox").classList.remove("hidden"); };
+$("farmsClose").onclick = () => $("farmsBox").classList.add("hidden");
+$("arrangeBtn").onclick = () => {
+  arranging = false; decorDrag = null;
+  $("arrangeBtn").classList.add("hidden");
+  toast("🖐️ Farm arranged!");
+  save();
+};
+$("visitLeave").onclick = () => {
+  visiting = null;
+  $("visitLeave").classList.add("hidden");
+  $("stage").classList.remove("visiting");
+};
+function otherSlot() { return slotMeta.active === 1 ? 2 : 1; }
+function renderFarms() {
+  const rows = $("farmsRows");
+  rows.innerHTML = "";
+  for (const n of [1, 2]) {
+    const mineNow = n === slotMeta.active;
+    let peek = null;
+    try { peek = E.deserialize(localStorage.getItem(SLOT_KEYS[n]) || ""); } catch (e) {}
+    const desc = mineNow ? "this is your farm right now"
+      : peek ? `best: ${E.TIERS[peek.bestTier - 1].name} · ${peek.rebirths} rebirths · 🪙 ${E.fmt(peek.coins)}`
+      : "empty — switch here to start a fresh farm";
+    const row = document.createElement("div");
+    row.className = "prow" + (mineNow ? " won" : "");
+    row.innerHTML = `<div class="ic">${mineNow ? "🐷" : peek ? "🚜" : "🌱"}</div>
+      <div class="info"><b>${slotMeta.names[n]}</b> ${mineNow ? "<span class='small'>(active)</span>" : ""}<span>${desc}</span></div>
+      <div style="display:flex;gap:0.4em;flex-wrap:wrap;justify-content:flex-end">
+        <button data-a="rename" data-n="${n}">✏️</button>
+        ${mineNow ? "" : `<button data-a="switch" data-n="${n}">SWITCH</button>`}
+        ${!mineNow && peek ? `<button data-a="visit" data-n="${n}">👀 VISIT</button>` : ""}
+      </div>`;
+    rows.appendChild(row);
+  }
+  rows.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const n = +b.dataset.n, a = b.dataset.a;
+    if (a === "rename") {
+      const name = prompt("Name this farm:", slotMeta.names[n]);
+      if (name && name.trim()) { slotMeta.names[n] = name.trim().slice(0, 16); saveMeta(); renderFarms(); }
+    } else if (a === "switch") {
+      save(); slotMeta.active = n; saveMeta();
+      location.reload();   // cleanest world-swap there is
+    } else if (a === "visit") {
+      let other = null;
+      try { other = E.deserialize(localStorage.getItem(SLOT_KEYS[n]) || ""); } catch (e) {}
+      if (!other) { toast("That farm is empty"); return; }
+      visiting = { S: other, name: slotMeta.names[n] };
+      $("farmsBox").classList.add("hidden");
+      $("visitLeave").classList.remove("hidden");
+      $("stage").classList.add("visiting");   // hides YOUR hud — it's their farm on screen
+      sfx.pop();
+    }
+  });
+}
+
 $("ribbonBtn").onclick = () => { audio(); renderRibbons(); $("ribbonBox").classList.remove("hidden"); };
 $("ribbonClose").onclick = () => $("ribbonBox").classList.add("hidden");
 function renderRibbons() {
@@ -291,10 +396,86 @@ function renderUpgrades() {
         ${inUse ? "IN USE" : owned ? "USE" : "🪙 " + E.fmt(th.cost)}</button>`);
     rows.appendChild(trow);
   }
+  // ---- 🪴 FARM CUSTOMIZATION (decor / paint / critters / music box) ----
+  const hd = (txt) => {
+    const el = document.createElement("div");
+    el.style.cssText = "margin:0.9em 0 0.2em;font-size:0.75em;font-weight:900;letter-spacing:2px;color:#8a6a48;";
+    el.textContent = txt;
+    rows.appendChild(el);
+  };
+  hd("— 🪴 DECOR SHOP —");
+  const arrangeRow = mk(`<div class="ic">🖐️</div>
+    <div class="info"><b>Arrange the farm</b><span>${S.decor.length}/${E.DECOR_MAX} pieces placed — drag them anywhere; double-tap sells one back (half price)</span></div>
+    <button data-k="arrange" ${S.decor.length ? "" : "disabled"}>ARRANGE</button>`);
+  rows.appendChild(arrangeRow);
+  for (const [key, d] of Object.entries(E.DECOR)) {
+    const owned = S.decor.filter(p => p.k === key).length;
+    const row = mk(`<div class="ic">${d.icon}</div>
+      <div class="info"><b>${d.name}</b><span>${owned ? "placed ×" + owned : "adds character to the farm"}</span></div>
+      <button data-k="decor:${key}" ${S.coins < d.cost || S.decor.length >= E.DECOR_MAX ? "disabled" : ""}>🪙 ${E.fmt(d.cost)}</button>`);
+    rows.appendChild(row);
+  }
+  hd("— 🚧 FENCE STYLE —");
+  for (const [key, f] of Object.entries(E.FENCES)) {
+    const owned = S.paintOwned.fences.includes(key), inUse = S.paint.fence === key;
+    const row = mk(`<div class="ic">🚧</div>
+      <div class="info"><b>${f.name}</b><span>${inUse ? "around the pen right now" : owned ? "owned — tap to switch" : "a new look for the pen"}</span></div>
+      <button data-k="fence:${key}" ${inUse || (!owned && S.coins < f.cost) ? "disabled" : ""}>${inUse ? "IN USE" : owned ? "USE" : "🪙 " + E.fmt(f.cost)}</button>`);
+    rows.appendChild(row);
+  }
+  hd("— 🏠 BARN PAINT —");
+  for (const [key, b2] of Object.entries(E.BARN_PAINTS)) {
+    const owned = S.paintOwned.barns.includes(key), inUse = S.paint.barn === key;
+    const row = mk(`<div class="ic"><span style="display:inline-block;width:0.9em;height:0.9em;border-radius:3px;background:${b2.wall[0]};border:2px solid rgba(0,0,0,0.25)"></span></div>
+      <div class="info"><b>${b2.name}</b><span>${inUse ? "on the barn right now" : owned ? "owned — tap to repaint" : "a fresh coat for the barn"}</span></div>
+      <button data-k="barn:${key}" ${inUse || (!owned && S.coins < b2.cost) ? "disabled" : ""}>${inUse ? "IN USE" : owned ? "USE" : "🪙 " + E.fmt(b2.cost)}</button>`);
+    rows.appendChild(row);
+  }
+  hd("— 🐔 CRITTERS —");
+  for (const [key, c] of Object.entries(E.CRITTERS)) {
+    const owned = S.critters.includes(key);
+    const row = mk(`<div class="ic">${c.icon}</div>
+      <div class="info"><b>${c.name}</b><span>${c.desc}</span></div>
+      <button data-k="critter:${key}" ${owned || S.coins < c.cost ? "disabled" : ""}>${owned ? "LIVES HERE" : "🪙 " + E.fmt(c.cost)}</button>`);
+    rows.appendChild(row);
+  }
+  hd("— 🎵 MUSIC BOX —");
+  for (const [key, m] of Object.entries(E.MUSICBOX)) {
+    const owned = S.musicbox.owned.includes(key), on = S.musicbox.on.includes(key);
+    const row = mk(`<div class="ic">${m.icon}</div>
+      <div class="info"><b>${m.name}</b><span>${m.desc}</span></div>
+      <button data-k="music:${key}" ${!owned && S.coins < m.cost ? "disabled" : ""}>${owned ? (on ? "🔊 ON" : "🔇 OFF") : "🪙 " + E.fmt(m.cost)}</button>`);
+    rows.appendChild(row);
+  }
+
   rows.querySelectorAll("button").forEach(b => b.onclick = () => {
     const k = b.dataset.k;
     let ok;
-    if (k.startsWith("theme:")) {
+    if (k === "arrange") {
+      arranging = true;
+      $("upgBox").classList.add("hidden");
+      toast("🖐️ ARRANGE MODE — drag decor; double-tap sells; tap ARRANGE DONE to finish");
+      $("arrangeBtn").classList.remove("hidden");
+      return;
+    } else if (k.startsWith("decor:")) {
+      ok = !!E.buyDecor(S, k.slice(6), rng);
+      if (ok) toast(`${E.DECOR[k.slice(6)].icon} Placed! Use ARRANGE to move it`);
+    } else if (k.startsWith("fence:")) {
+      const key = k.slice(6);
+      ok = S.paintOwned.fences.includes(key) ? E.setFence(S, key) : E.buyFence(S, key);
+      if (ok) toast(`🚧 ${E.FENCES[key].name}!`);
+    } else if (k.startsWith("barn:")) {
+      const key = k.slice(5);
+      ok = S.paintOwned.barns.includes(key) ? E.setBarn(S, key) : E.buyBarn(S, key);
+      if (ok) toast(`🏠 ${E.BARN_PAINTS[key].name}!`);
+    } else if (k.startsWith("critter:")) {
+      ok = E.buyCritter(S, k.slice(8));
+      if (ok) toast(`${E.CRITTERS[k.slice(8)].icon} ${E.CRITTERS[k.slice(8)].name} moved in!`);
+    } else if (k.startsWith("music:")) {
+      const key = k.slice(6);
+      ok = S.musicbox.owned.includes(key) ? E.toggleMusic(S, key) : E.buyMusic(S, key);
+      if (ok) toast(`${E.MUSICBOX[key].icon} ${E.MUSICBOX[key].name} ${S.musicbox.on.includes(key) ? "ON" : "OFF"}`);
+    } else if (k.startsWith("theme:")) {
       const key = k.slice(6);
       ok = S.themesOwned.includes(key) ? E.setTheme(S, key) : E.buyTheme(S, key);
       if (ok) toast(`🎨 ${E.THEMES[key].name}!`);
@@ -410,9 +591,36 @@ $("crateOpen").onclick = () => {
 // it expire; there's no way to lose it by mis-clicking anymore.
 $("crateLeave").onclick = () => { closeCrateModal(); };
 
+// ---- ARRANGE MODE + VISITING guards ride in front of normal pig input ----
+let lastDecorTap = { id: -1, at: 0 };
 canvas.addEventListener("pointerdown", (ev) => {
   audio();
   const { x, y } = canvasPos(ev);
+  if (visiting) return;   // look, don't touch
+  if (arranging) {
+    // nearest decor piece within reach
+    let best = null, bestD = 46;
+    for (const p of S.decor) {
+      const d = Math.hypot(x - decorX(p.x), y - (decorY(p.y) - 20));
+      if (d < bestD) { best = p; bestD = d; }
+    }
+    if (best) {
+      if (lastDecorTap.id === best.id && nowSec() - lastDecorTap.at < 0.45) {
+        const refund = Math.floor(E.DECOR[best.k].cost / 2);
+        if (confirm(`Sell this ${E.DECOR[best.k].name} back for 🪙 ${E.fmt(refund)}?`)) {
+          E.removeDecor(S, best.id);
+          sfx.coin(); toast(`💸 Sold for 🪙 ${E.fmt(refund)}`);
+          refreshHud(); save();
+        }
+        lastDecorTap = { id: -1, at: 0 };
+        return;
+      }
+      lastDecorTap = { id: best.id, at: nowSec() };
+      decorDrag = { id: best.id };
+      canvas.setPointerCapture(ev.pointerId);
+    }
+    return;
+  }
   // crate first — opens the what's-inside dialog
   if (S.crate && cratePos && Math.hypot(x - cratePos.x, y - cratePos.y) < 42) {
     sfx.pop();
@@ -479,6 +687,11 @@ $("nameSave").onclick = () => {
 };
 $("nameCancel").onclick = () => { namingPigId = null; $("nameBox").classList.add("hidden"); };
 canvas.addEventListener("pointermove", (ev) => {
+  if (decorDrag) {
+    const { x, y } = canvasPos(ev);
+    E.moveDecor(S, decorDrag.id, (x - 30) / (W - 60), (y + 20 - 168) / (H - 190));
+    return;
+  }
   if (!drag) return;
   const { x, y } = canvasPos(ev);
   const p = S.pigs.find(q => q.id === drag.id);
@@ -492,6 +705,7 @@ canvas.addEventListener("pointermove", (ev) => {
 });
 let lastTap = { id: -1, at: 0 };
 canvas.addEventListener("pointerup", (ev) => {
+  if (decorDrag) { decorDrag = null; save(); return; }
   dragMatches = new Set();
   if (!drag) return;
   const p = S.pigs.find(q => q.id === drag.id);
@@ -634,8 +848,39 @@ function frame(now) {
 }
 
 function render(t) {
+  // 👀 VISITING: render the OTHER farm read-only and skip everything live
+  const V = visiting ? visiting.S : null;
+  const R = V || S;
   ctx.clearRect(0, 0, W, H);
-  drawScene(ctx, { time: t, rebirths: S.rebirths, theme: S.theme, ribbons: S.ribbons.length });
+  drawScene(ctx, { time: t, rebirths: R.rebirths, theme: R.theme, ribbons: R.ribbons.length,
+    fence: R.paint.fence, barnCols: E.BARN_PAINTS[R.paint.barn], critters: undefined });
+  drawCritters(ctx, R.critters, t);
+  if (V) {
+    // their pigs idle at their saved spots; their decor sits where they left it
+    const drawables = [
+      ...V.decor.map(p => ({ y: decorY(p.y), draw: () => drawDecor(ctx, decorX(p.x), decorY(p.y), p.k, t) })),
+      ...V.pigs.map(p => ({ y: penY(p.y), draw: () => {
+        drawPig(ctx, { x: penX(p.x), y: penY(p.y) }, p.tier, { phase: t * 2 + p.id });
+        if (p.name) {
+          const ps = E.TIERS[p.tier - 1].size * 30;
+          ctx.font = "900 13px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+          ctx.fillStyle = "#fff"; ctx.strokeStyle = "rgba(20,20,30,0.75)"; ctx.lineWidth = 3;
+          ctx.strokeText(p.name, penX(p.x), penY(p.y) - ps * 1.35 - 8);
+          ctx.fillText(p.name, penX(p.x), penY(p.y) - ps * 1.35 - 8);
+        }
+      } })),
+    ].sort((a, b) => a.y - b.y);
+    for (const d of drawables) d.draw();
+    ctx.fillStyle = "rgba(20,32,14,0.85)";
+    ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 3;
+    const bw = 540;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W / 2 - bw / 2, 12, bw, 44, 14) : ctx.rect(W / 2 - bw / 2, 12, bw, 44);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#ffe9a8"; ctx.font = "900 19px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+    // tier NUMBER, not name: their best pig might be one you haven't discovered
+    ctx.fillText(`👀 Visiting ${visiting.name} — best: tier ${V.bestTier} · ${V.rebirths} rebirths · look, don't touch!`, W / 2, 40);
+    return;
+  }
 
   // crate
   if (S.crate && cratePos) {
@@ -655,10 +900,22 @@ function render(t) {
     }
   }
 
-  // pigs, y-sorted for depth
+  // pigs + decor, y-sorted together for depth (a pig walks BEHIND the oak)
+  for (const p of S.decor) {
+    if (decorY(p.y) < PEN.y + 20) drawDecor(ctx, decorX(p.x), decorY(p.y), p.k, t);   // background strip
+  }
   const sorted = [...S.pigs].sort((a, b) => animFor(a).py - animFor(b).py);
+  const penDecor = S.decor.filter(p => decorY(p.y) >= PEN.y + 20).sort((a, b) => decorY(a.y) - decorY(b.y));
+  let di = 0;
+  const flushDecorUpTo = (yy) => {
+    while (di < penDecor.length && decorY(penDecor[di].y) <= yy) {
+      const p = penDecor[di++];
+      drawDecor(ctx, decorX(p.x), decorY(p.y), p.k, t);
+    }
+  };
   for (const p of sorted) {
     const a = animFor(p);
+    flushDecorUpTo(a.py);
     const tf = a.trickFx || { yOff: 0, rot: 0 };
     drawPig(ctx, { x: a.px, y: a.py + tf.yOff }, p.tier,
       { phase: a.phase, dir: a.dir, rot: tf.rot, lift: drag && drag.id === p.id && drag.moved });
@@ -669,6 +926,14 @@ function render(t) {
       ctx.strokeStyle = "rgba(20,20,30,0.75)"; ctx.lineWidth = 3;
       ctx.strokeText(p.name, a.px, a.py + tf.yOff - ps * 1.35 - 8);
       ctx.fillText(p.name, a.px, a.py + tf.yOff - ps * 1.35 - 8);
+    }
+  }
+  flushDecorUpTo(1e9);   // decor below the lowest pig
+  if (arranging) {   // gentle pulse under every piece so they read as grabbable
+    for (const p of S.decor) {
+      ctx.strokeStyle = `rgba(255,209,102,${0.4 + 0.3 * Math.sin(t * 4)})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(decorX(p.x), decorY(p.y) + 3, 34, 10, 0, 0, Math.PI * 2); ctx.stroke();
     }
   }
 

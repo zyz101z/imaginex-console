@@ -47,6 +47,20 @@
     font-weight:900; font-size:0.88em; cursor:pointer; font-family:inherit;
     box-shadow:0 0.2em 0 rgba(0,0,0,0.25); text-shadow:0 1px 2px rgba(0,0,0,0.4); }
   #ribbonBtn:active { transform:translateY(0.15em); box-shadow:none; }
+  #farmsBtn { position:absolute; top:6.4em; right:0.75em; background:linear-gradient(180deg,#ffb37a,#d97a3c);
+    color:#fff; border:2px solid rgba(255,255,255,0.35); border-radius:0.6em; padding:0.35em 0.85em;
+    font-weight:900; font-size:0.88em; cursor:pointer; font-family:inherit;
+    box-shadow:0 0.2em 0 rgba(0,0,0,0.25); text-shadow:0 1px 2px rgba(0,0,0,0.4); }
+  #farmsBtn:active { transform:translateY(0.15em); box-shadow:none; }
+  #arrangeBtn { left:50%; transform:translateX(-50%); top:0.6em; font-size:1em; padding:0.6em 1.4em;
+    background:linear-gradient(180deg,#ffd97a,#f5a93c); z-index:8; }
+  #arrangeBtn:active { transform:translateX(-50%) translateY(0.15em); }
+  #visitLeave { left:50%; transform:translateX(-50%); bottom:0.9em; font-size:1.1em; padding:0.7em 1.6em;
+    background:linear-gradient(180deg,#9fe8b8,#53b877); z-index:8; }
+  #visitLeave:active { transform:translateX(-50%) translateY(0.15em); }
+  /* visiting another farm: your own HUD makes no sense over their pen */
+  #stage.visiting .pill, #stage.visiting .btn:not(#visitLeave), #stage.visiting #soundBtn,
+  #stage.visiting #ribbonBtn, #stage.visiting #farmsBtn, #stage.visiting .toast { display:none !important; }
   .prow.won { background:linear-gradient(90deg,#e6f0ff,rgba(255,255,255,0.7)); border-color:#7fa6ee; }
   .prow .bar { height:0.45em; background:rgba(0,0,0,0.12); border-radius:999px; margin-top:0.35em; overflow:hidden; }
   .prow .bar i { display:block; height:100%; background:linear-gradient(90deg,#8fb8ff,#3f6fd8); border-radius:999px; }
@@ -99,6 +113,9 @@
   <div class="pill" id="tierPill">🐷 <span id="penTxt">0/6</span> · best: <span id="bestTxt">Piglet</span></div>
   <button id="soundBtn">♪ ON</button>
   <button id="ribbonBtn">🎀 0/0</button>
+  <button id="farmsBtn">👨‍👦 FARMS</button>
+  <button class="btn hidden" id="arrangeBtn">🖐️ ARRANGE DONE</button>
+  <button class="btn hidden" id="visitLeave">🏠 BACK TO MY FARM</button>
   <button class="btn" id="buyBtn">🐷 BUY PIGLET<small id="buyCost">🪙 12</small></button>
   <button class="btn" id="upgBtn">⬆ UPGRADES</button>
   <button class="btn" id="bookBtn">📖 PIG BOOK</button>
@@ -117,6 +134,13 @@
     <p class="sub">merge two matching pigs to discover the next one!</p>
     <div class="bookGrid" id="bookGrid"></div>
     <button class="closeBtn" id="bookClose">DONE</button>
+  </div></div>
+
+  <div class="overlay hidden" id="farmsBox"><div class="panel" style="min-width:26em; max-width:30em;">
+    <h1>👨‍👦 FARMS</h1>
+    <p class="sub">two farms, one device — switch between them or pay the other a visit</p>
+    <div id="farmsRows"></div>
+    <button class="closeBtn" id="farmsClose">DONE</button>
   </div></div>
 
   <div class="overlay hidden" id="ribbonBox"><div class="panel" style="min-width:30em; max-width:34em;">

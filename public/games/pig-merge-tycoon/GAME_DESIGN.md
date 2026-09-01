@@ -106,6 +106,24 @@ the body sits inside it, orbiting moon, constellation star-chart flank, aurora s
 - Approved-for-later backlog: daily gift crate, farm goals/quests, Farmhand
   auto-merger, statue bonuses, save slots, County Fair, Mythic Barn (25+).
 
+## 🎨 Farm Customization pass (2026-09-01, user+Noah picked 1/2/7/9/10 from rec list)
+- 🪴 **Decor Shop**: 10 placeable pieces (hay bale 25K → golden fountain 1B), duplicates
+  allowed, 40-piece cap, sell-back at half price. ARRANGE mode: drag anywhere on the
+  farm (0..1 space, y-sorted with pigs so they walk behind the oak); double-tap sells.
+- 🚧 **Fence styles** (classic/picket 250K/stone 10M/neon 500M) + 🏠 **barn paints**
+  (red/blue 1M/green 1M/teal 25M/purple 25M/gold 2B) — buy once, switch free, independent
+  of theme (render gets fence + barnCols via drawScene opts).
+- 🐔 **Critters**: chickens 200K / ducks 1M / barn cat 10M / goat 100M — ambient,
+  deterministic paths from time, no save state beyond ownership.
+- 🎵 **Music box**: nature 500K (birdsong day / crickets on night theme), pig choir 5M
+  (periodic oink chord), DJ Hog 50M (lo-fi WebAudio beat — PAUSES the mp3 while on).
+  Own once, toggle each independently.
+- 👨‍👦 **Farm slots + visits**: 2 slots (slot 1 = legacy save key), rename, SWITCH
+  (reload-swap), 👀 VISIT renders the other slot read-only (their theme/paint/decor/
+  critters/pigs idle at saved spots; HUD hidden; banner shows best TIER NUMBER — never
+  the name, surprise rule). Meta in `pigmerge_slots`.
+- All cosmetics survive rebirth + migrate onto old saves. Battery 215.
+
 ## 💸 Sell a pig (2026-08-31, user request: stranded odd-one-out pigs)
 - Double-tap a pig → the name dialog now also has **SELL** (two taps: arm → "REALLY
   SELL?" → gone; a stray double-tap can't lose a pig).
