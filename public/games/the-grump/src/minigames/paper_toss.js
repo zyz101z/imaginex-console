@@ -8,9 +8,12 @@ import { GRUMPY, PAT_QUOTES } from '../state.js';
 
 const G = 1500, START = { x: 300, y: 520 }, FLOOR = 640;
 class PaperToss extends MiniGame {
-  constructor(api, def) { super(api, def); this.dur = 11; this.baskets = 0; this.misses = 0; this.ball = null; this.drag = null; this.newRound(); this.said = false; this.feedT = 0; this.feed = ''; }
+  constructor(api, def) { super(api, def); this.dur = 24; this.memos = 5; this.thrown = 0; this.baskets = 0; this.misses = 0; this.ball = null; this.drag = null; this.newRound(); this.said = false; this.feedT = 0; this.feed = ''; }
   newRound() { this.bin = { x: rand(760, 1150), w: 90, h: 110 }; this.wind = rand(-1, 1) * (250 + 250 * (this.diff - 1)) * (Math.random() < 0.25 ? 0 : 1); this.ball = { x: START.x, y: START.y, vx: 0, vy: 0, live: false, trail: [] }; }
-  launch(vx, vy) { if (!this.ball || this.ball.live || this.done) return; this.ball.vx = vx; this.ball.vy = vy; this.ball.live = true; this.api.sfx('swish'); }
+  launch(vx, vy) { if (!this.ball || this.ball.live || this.done) return; this.ball.vx = vx; this.ball.vy = vy; this.ball.live = true; this.thrown++; this.api.sfx('swish'); }
+  get memosLeft() { return this.memos - this.thrown; }
+  // a round is over when the 3rd basket drops, the last memo has landed, or the (generous) clock runs out
+  wrap() { if (this.done) return; if (this.baskets >= 3) { this.api.S.relief(); this.mood = 'smirk'; this.api.score(200, 'BONUS +200', 640, 300); this.finish(true, `${this.baskets} BASKETS`, { sub: 'Pat unplugged the fan in defeat.', pat: 'niceshot' }); } else if (this.memosLeft <= 0 || this.t >= this.dur) this.finish(false, `ONLY ${this.baskets} BASKET${this.baskets === 1 ? '' : 'S'}`, { sub: 'Needed 3 of 5. The fan wins today.', pat: pick(['missed', 'showyou', 'fanup']) }); }
   update(dt) {
     super.update(dt); if (this.done) return;
     this.feedT = Math.max(0, this.feedT - dt);
@@ -21,11 +24,11 @@ class PaperToss extends MiniGame {
       const top = FLOOR - this.bin.h;
       if (b.vy > 0 && b.y >= top - 6 && b.y <= top + 26 && Math.abs(b.x - this.bin.x) < this.bin.w / 2 - 8) {
         this.baskets++; this.hot = this.lastWasBasket ? (this.hot || 1) + 1 : 1; this.lastWasBasket = true; const pts = 200 + (this.hot > 1 ? 100 : 0); this.api.score(pts, this.hot > 1 ? `ON FIRE +${pts}` : '+200', this.bin.x, top - 40); this.api.sfx('basket'); this.api.particles.emit(this.bin.x, top, { n: 14, colors: ['#ffe600', '#fff', '#22c55e'] }); this.api.particles.text(pick(['SWISH', 'NOTHING BUT BIN', 'BUCKETS']), this.bin.x, top - 90, { impact: true, size: 46, color: '#ffe600' });
-        if (this.baskets % 2 === 0) this.api.say('niceshot'); this.newRound(); this.feed = ''; return;
+        if (this.baskets % 2 === 0) this.api.say('niceshot'); this.newRound(); this.feed = ''; this.wrap(); return;
       }
-      if (b.y >= FLOOR || b.x > W + 40 || b.x < -40) { this.misses++; this.lastWasBasket = false; this.hot = 0; this.api.grumpy(3, 'MISSED THE BIN'); this.api.sfx('wrong'); this.api.particles.papers(clamp(b.x, 0, W), FLOOR, 4); const q = this.missLine(); if (this.misses % 2 === 1) this.api.say(q); this.feed = PAT_QUOTES[q].text; this.feedT = 1.2; this.newRound(); this.wind = this.wind; }
+      if (b.y >= FLOOR || b.x > W + 40 || b.x < -40) { this.misses++; this.lastWasBasket = false; this.hot = 0; this.api.grumpy(3, 'MISSED THE BIN'); this.api.sfx('wrong'); this.api.particles.papers(clamp(b.x, 0, W), FLOOR, 4); const q = this.missLine(); if (this.misses % 2 === 1) this.api.say(q); this.feed = PAT_QUOTES[q].text; this.feedT = 1.2; this.newRound(); this.wrap(); }
     }
-    if (this.t >= this.dur) { if (this.baskets >= 3) { this.api.S.relief(); this.mood = 'smirk'; this.api.score(200, 'BONUS +200', 640, 300); this.finish(true, `${this.baskets} BASKETS`, { sub: 'Pat unplugged the fan in defeat.', pat: 'niceshot' }); } else this.finish(false, `ONLY ${this.baskets} BASKET${this.baskets === 1 ? '' : 'S'}`, { sub: 'Needed 3. The fan wins today.', pat: pick(['missed', 'showyou', 'fanup']) }); }
+    if (this.t >= this.dur && !(this.ball && this.ball.live)) this.wrap();
   }
   drawPaper(ctx, x, y, idle) {
     if (idle) { const k = (this.t * 1.6) % 1; ctx.strokeStyle = `rgba(255,230,0,${1 - k})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, 28 + k * 26, 0, 7); ctx.stroke(); txt(ctx, this.drag ? 'RELEASE!' : 'FLICK ME', x, y - 52, { size: 20, color: '#ffe600', stroke: '#111', strokeW: 4 }); }
@@ -58,10 +61,10 @@ class PaperToss extends MiniGame {
     // preview + ball
     for (const p of this.preview()) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill(); }
     if (this.ball) { for (const [i, p] of this.ball.trail.entries()) { ctx.fillStyle = `rgba(255,255,255,${i / 30})`; ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 7); ctx.fill(); } this.drawPaper(ctx, this.ball.x, this.ball.y, !this.ball.live); }
-    txt(ctx, 'FLICK MEMOS INTO THE BIN · 3 TO WIN', 640, HUD_H + 24, { size: 24, color: '#fff', stroke: '#111', strokeW: 5 });
-    txt(ctx, `${this.baskets} / 3`, 640, HUD_H + 56, { size: 22, color: '#ffe600', stroke: '#111', strokeW: 4 });
+    txt(ctx, 'FLICK MEMOS INTO THE BIN · 3 OF 5 TO WIN', 640, HUD_H + 24, { size: 24, color: '#fff', stroke: '#111', strokeW: 5 });
+    txt(ctx, `${this.baskets} / 3 · memos left: ${this.memosLeft}`, 640, HUD_H + 54, { size: 18, color: '#ffe600', stroke: '#111', strokeW: 4 });
     if (this.feedT > 0) bubble(ctx, 900, 380, 240, 56, this.feed, { tail: 'right', size: 17 });
-    drawTimer(ctx, this.dur - this.t, this.dur, txt, fillR);
+    for (let i = 0; i < this.memos; i++) { const used = i < this.thrown; fillR(ctx, 1040 + i * 44, 104, 36, 26, 6, used ? '#374151' : '#fff', '#111', 2); if (!used) { ctx.fillStyle = '#9ca3af'; for (let r = 0; r < 3; r++) ctx.fillRect(1046 + i * 44, 110 + r * 6, 24, 2); } }
   }
 }
 registerMinigame({ id: 'paper_toss', title: 'PAPER TOSS', tagline: "Flick memos into the bin. Pat's fan disagrees.", pat: true, create: (api, def) => new PaperToss(api, def) });

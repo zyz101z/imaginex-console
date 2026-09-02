@@ -7,16 +7,19 @@ import { bubble } from '../draw.js';
 import { SCORE, GRUMPY, PAT_QUOTES } from '../state.js';
 import { USELESS } from './meeting_declined.js';
 
-const BOSS_HP = 24;
+const BOSS_HP = 18;
 class JustOneMoreThing extends MiniGame {
   constructor(api, def) {
-    super(api, def); this.hp = BOSS_HP; this.btn = new Button(560, 420, 240, 80, 'DECLINE', { color: '#ef4444', size: 34 });
+    super(api, def); this.hp = api.S.bossHp ?? BOSS_HP; this.btn = new Button(560, 420, 260, 88, 'DECLINE', { color: '#ef4444', size: 34 });
     this.moveT = 0.9; this.invites = []; this.spawnT = 1.5; this.intro = 2.2; this.hitT = 0; this.phase = 1; this.hits = 0; this.taunt = 'NEW MEETING — 4:59 PM'; this.tauntT = 0;
-    this.vx = 260; this.vy = 180; this.decoys = []; // phase-2 trap buttons that shadow the real one
+    this.vx = 260; this.vy = 180; this.decoys = [];
+    if (this.hp < BOSS_HP) { this.phase = this.hp <= Math.floor(BOSS_HP / 2) ? 2 : 1; this.intro = 1.0; this.taunt = 'STILL PENDING: ' + this.hp + ' MORE'; this.tauntT = 2; }   // resumed after a Full Soung Mode interruption — damage sticks // phase-2 trap buttons that shadow the real one
     api.audio.startMusic('musicBoss'); this.lineT = 2.4; this.line = 'meeting'; this.lines = ['meeting', 'addedyou', 'five', 'saidyes', 'look', 'toldthem', 'idea', 'hearmeout'];
   }
   moveBtn() { // burst to a new heading (the button GLIDES, it doesn't teleport)
-    const sp = (this.phase === 2 ? 420 : 300) * Math.sqrt(this.diff), a = rand(0, Math.PI * 2); this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp; this.moveT = rand(0.5, 0.9);
+    // slows as the meeting takes damage, so the fight always converges (was: constant speed → could drag on forever)
+    const tired = 1 - 0.45 * (1 - this.hp / BOSS_HP);
+    const sp = (this.phase === 2 ? 360 : 260) * tired, a = rand(0, Math.PI * 2); this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp; this.moveT = rand(0.6, 1.0);
     if (this.phase === 2 && this.decoys.length < 2) this.decoys.push(new Button(rand(440, 1000), rand(260, 560), 240, 80, pick(['ACCEPT ALL', 'REPLY ALL']), { color: '#b91c1c', size: 30 }));
   }
   glide(dt) {
@@ -30,19 +33,20 @@ class JustOneMoreThing extends MiniGame {
     if (this.t < this.intro) return;
     this.lineT -= dt; if (this.lineT <= 0) { this.line = this.lines[(this.lines.indexOf(this.line) + 1) % this.lines.length]; this.api.say(this.line); this.lineT = 4.6; }
     this.moveT -= dt; if (this.moveT <= 0) this.moveBtn(); this.glide(dt);
-    this.spawnT -= dt; if (this.spawnT <= 0) { const side = Math.random() < 0.5; this.invites.push({ x: side ? -100 : W + 100, y: rand(150, 600), vx: (side ? 1 : -1) * rand(150, 230) * (this.phase === 2 ? 1.4 : 1), title: pick(USELESS) }); this.spawnT = (this.phase === 2 ? 0.8 : 1.3) / this.diff; this.api.sfx('meeting'); }
+    this.spawnT -= dt; if (this.spawnT <= 0) { const side = Math.random() < 0.5; this.invites.push({ x: side ? -100 : W + 100, y: rand(150, 600), vx: (side ? 1 : -1) * rand(150, 230) * (this.phase === 2 ? 1.4 : 1), title: pick(USELESS) }); this.spawnT = (this.phase === 2 ? 1.1 : 1.6); this.api.sfx('meeting'); }
     const keep = [];
-    for (const inv of this.invites) { inv.x += inv.vx * dt; if (Math.abs(inv.x - 330) < 50) { this.api.grumpy(4, 'INVITE HIT'); this.api.shake(5, 0.15); this.api.sfx('wrong'); } else if (inv.x > -150 && inv.x < W + 150) keep.push(inv); }
+    for (const inv of this.invites) { inv.x += inv.vx * dt; if (Math.abs(inv.x - 330) < 50) { this.api.grumpy(2, 'INVITE HIT'); this.api.shake(5, 0.15); this.api.sfx('wrong'); } else if (inv.x > -150 && inv.x < W + 150) keep.push(inv); }
     this.invites = keep;
   }
   pointerDown(p) {
     if (this.done || this.t < this.intro) return;
     for (const d of this.decoys) if (d.hit(p)) { this.api.grumpy(GRUMPY.QUICK_QUESTION, d.label); this.api.sfx('wrong'); this.api.shake(8, 0.25); this.api.say(d.label === 'REPLY ALL' ? 'replyall' : 'saidyes'); this.api.particles.text(d.label + '?!', p.x, p.y - 40, { impact: true, size: 50, color: '#ff6b6b' }); d.x = rand(440, 1000); d.y = rand(260, 560); return; }
-    if (this.btn.hit(p)) {
-      this.hp--; this.hits++; this.hitT = 0.25; this.api.sfx('bam'); if (this.hits % 4 === 1) this.api.say('soung_no'); this.api.shake(10, 0.2); this.api.particles.papers(p.x, p.y, 8);
+    const near = p.x >= this.btn.x - 18 && p.x <= this.btn.x + this.btn.w + 18 && p.y >= this.btn.y - 18 && p.y <= this.btn.y + this.btn.h + 18;   // forgiving edge
+    if (near) {
+      this.hp--; this.hits++; this.api.S.bossHp = this.hp; this.hitT = 0.25; this.api.sfx('bam'); if (this.hits % 4 === 1) this.api.say('soung_no'); this.api.shake(10, 0.2); this.api.particles.papers(p.x, p.y, 8);
       this.api.particles.text(pick(['NO.', 'DECLINE!', 'NOPE', 'ABSOLUTELY NOT', 'BAM!', 'WHAM!']), p.x, p.y - 40, { impact: true, size: 54, color: pick(['#ffe600', '#ff6b6b', '#fff']) });
       if (this.hp === Math.floor(BOSS_HP / 2)) { this.phase = 2; this.taunt = 'RESCHEDULED: 4:59:30 PM'; this.tauntT = 2; this.api.sfx('patAlarm'); this.line = 'saidyes'; this.lineT = 3.2; this.api.say('saidyes'); this.api.flash('#ef4444', 0.25); }
-      if (this.hp <= 0) { this.api.score(SCORE.BOSS, '+1500', 640, 300); this.api.S.stats.meetingsDeclined++; this.api.sfx('victory'); this.api.slowmo(0.25, 0.8); this.api.flash('#fff', 0.5); this.api.audio.stopMusic(); this.finish(true, 'MEETING DECLINED', { sub: 'The calendar is quiet.', boss: true }); }
+      if (this.hp <= 0) { this.api.score(SCORE.BOSS, '+1500', 640, 300); this.api.S.stats.meetingsDeclined++; this.api.sfx('victory'); this.api.slowmo(0.25, 0.8); this.api.flash('#fff', 0.5); this.api.audio.stopMusic(); this.api.S.bossHp = undefined; this.finish(true, 'MEETING DECLINED', { sub: 'The calendar is quiet.', boss: true }); }
       this.moveBtn(); return;
     }
     for (let i = this.invites.length - 1; i >= 0; i--) { const inv = this.invites[i]; if (Math.abs(p.x - inv.x) < 130 && Math.abs(p.y - inv.y) < 34) { this.invites.splice(i, 1); this.api.score(100, '+100', inv.x, inv.y); this.api.sfx('decline'); this.api.particles.emit(inv.x, inv.y, { n: 6 }); return; } }
