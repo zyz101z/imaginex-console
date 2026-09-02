@@ -8,17 +8,17 @@ def req(method, path, payload=None, raw=False):
     data=json.dumps(payload).encode() if payload is not None else None
     r=urllib.request.Request(BASE+path, data=data, headers={'Content-Type':'application/json'}, method=method)
     with urllib.request.urlopen(r, timeout=120) as resp: return resp.read() if raw else json.loads(resp.read())
-profs = req('GET','/profiles'); narr = next((p for p in profs if p['name']=='Narrator'), None)
-if not narr:
-    narr = req('POST','/profiles',{'name':'Narrator','description':'Movie-trailer narrator for The Grump intro','language':'en','voice_type':'preset','preset_engine':'kokoro','preset_voice_id':'am_onyx','default_engine':'kokoro'})
-    print('created Narrator profile', narr['id'])
-NARR = narr['id']
+profs = req('GET','/profiles')
+# Narrator = the user's cloned 'kris' profile (2026-09-02; replaced the Kokoro 'Onyx' preset profile 'Narrator').
+narr = next((p for p in profs if p['name'].lower()=='kris'), None) or next((p for p in profs if p['name']=='Narrator'), None)
+NARR = narr['id']; NARR_ENGINE = None if narr['voice_type']=='cloned' else 'kokoro'
+print('narrator profile:', narr['name'], NARR)
 LINES = [
- ('narr_offices', NARR, 'kokoro', 'Amazon Corporate Offices. Monday. Eight A.M.'),
- ('narr_monday',  NARR, 'kokoro', 'For most people... it was just another Monday.'),
- ('narr_soung',   NARR, 'kokoro', 'For Song...'),
- ('narr_worse',   NARR, 'kokoro', 'It was about to get... much worse.'),
- ('narr_goal',    NARR, 'kokoro', 'He had one goal. Survive until five P.M.'),
+ ('narr_offices', NARR, NARR_ENGINE, 'Amazon Corporate Offices. Monday. Eight A.M.'),
+ ('narr_monday',  NARR, NARR_ENGINE, 'For most people... it was just another Monday.'),
+ ('narr_soung',   NARR, NARR_ENGINE, 'For Song...'),
+ ('narr_worse',   NARR, NARR_ENGINE, 'It was about to get... much worse.'),
+ ('narr_goal',    NARR, NARR_ENGINE, 'He had one goal. Survive until five P.M.'),
  ('pat_grab_chair', PAT, None, "I'll just grab a chair."),
  ('pat_intro_coming', PAT, None, 'Hey Song! I was just coming over because you'),
 ]

@@ -87,8 +87,8 @@ another Monday." / "For Soung..." / "it was about to get much worse.") → "He h
 five minutes." → GRUMPY METER: 17% → Pat: "I'll just grab a chair." (Soung: rage) → THE GRUMP slams in (bam, flash) → A Corporate Survival Game → workday.
 Beat times live in the exported `T` table at the top of intro.js. Music: `musicCinematic` / `musicEpic` /
 `musicHorror` + `sting` SFX in audio.js (all procedural, replaceable via `CUSTOM_FILES`).
-Narrator VO = Voicebox preset profile "Narrator" (Kokoro engine, voice `am_onyx`, deep male; profile id
-6cbb03e2-ab46-481c-a20b-600ebd84358a) — `test/voicebox_intro_lines.py` generates (skips existing files; delete a
+Narrator VO = the user's cloned Voicebox profile "kris" (id dd1a3193-6dbc-4330-82d3-916d590a5f3b, 2026-09-02; before that
+the Kokoro `am_onyx` preset profile "Narrator" 6cbb03e2-…, kept in Voicebox as a fallback) — `test/voicebox_intro_lines.py` generates (skips existing files; delete a
 wav to redo it). The first attempt (Pat's clone pitched down via a WAV-header trick) was rejected by the user as
 "weird" — don't bring it back. Swap the narrator by dropping new `audio/narr_*.wav` files.
 
