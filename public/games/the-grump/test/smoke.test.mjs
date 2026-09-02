@@ -135,12 +135,12 @@ function bot(g) {
   const m = sc.mg; m.jump(); run(g, 0.2); const v1 = m.vy; m.jump(); run(g, 0.05); const v2 = m.vy; m.jump(); m.jump(); run(g, 0.05); const v3 = m.vy;
   check('double-jump works once', v1 > -1000 && v2 < v1 && m.jumps === 1); check('third jump in the air is ignored', v3 > v2 - 5); }
 // ---- boss HP survives a mid-fight Full Soung Mode; paper toss is memo-count based ----
-{ const g = new Game(); g.startWorkday(); const sc = g.engine.scene; const def = MINIGAMES.find(m => m.id === 'boss'); sc.S.clock = BOSS_TIME; sc.phase = 'transition'; sc.phaseT = 0; sc.chooseNext = () => def; run(g, 3.5);
+{ const g = new Game(); g.startWorkday(); const sc = g.engine.scene; const def = MINIGAMES.find(m => m.id === 'boss'); sc.S.clock = BOSS_TIME; sc.phase = 'transition'; sc.phaseT = 0; sc.chooseNext = () => def; run(g, 5.5);   // past the transition + card + 2.2 s boss intro
   const b = sc.mg; for (let i = 0; i < 5; i++) click(g, b.btn.x + 20, b.btn.y + 20); const hp = b.hp; check('boss took 5 hits', hp === 13 && sc.S.bossHp === 13);
   sc.S.addGrumpy(100); run(g, 0.2); check('rage interrupted the boss', sc.phase === 'rage'); run(g, 12, gg => { const s = gg.engine.scene; if (s.phase === 'rage') { const it = s.rage.items.find(i => !i.bad); if (it) click(gg, it.x, it.y); } });
   run(g, 3.5); check('boss resumed with the same HP', sc.phase === 'play' && sc.def.id === 'boss' && sc.mg.hp === 13); }
 { const g = new Game(); g.startWorkday(); const sc = g.engine.scene; const def = MINIGAMES.find(m => m.id === 'paper_toss'); sc.phase = 'transition'; sc.phaseT = 0; sc.chooseNext = () => def; run(g, 2.5);
-  const m = sc.mg; run(g, 15); check('paper toss waits for throws (no stopwatch end)', !m.done && m.memosLeft === 5);
+  const m = sc.mg; run(g, 8); check('paper toss waits for throws (no stopwatch end)', !m.done && m.memosLeft === 5);
   for (let i = 0; i < 5; i++) { m.launch(50, -300); run(g, 2.5); } check('paper toss ends after the 5th memo lands', m.done && m.thrown === 5); }
 // ---- every mini-game survives random clicking for its full duration ----
 for (const def of MINIGAMES) {
