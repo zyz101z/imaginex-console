@@ -67,7 +67,7 @@ Result banners: Pat comments on ~65% (was 100%). Title peek every 11 s (was 7). 
 - WIN STREAKS: consecutive mini-game wins from the 2nd pay +100×streak (cap 500) with an orange STREAK ×N stamp on the
   result banner; `S.streak`, `stats.bestStreak` (shown on the end screens). Boss doesn't count either way.
 - In-game rewards: Slack CHAIN (swats <0.7 s apart: +25/link, cap +150), Whack COMBO (3+ bonks in a row: +50/extra),
-  Paper ON FIRE (back-to-back baskets +100), Elevator ☕ pickups (+50, float at jump height between obstacles),
+  Paper ON FIRE (back-to-back baskets +100), (Elevator ☕ pickups were REMOVED 2026-09-02 — user: floated past them with no effect; obstacles are now drawn props: A-frame sign, office chair, taped box, mail cart),
   Hide & Seek "not today +50" when the beam sweeps over you while hidden.
 - REPORT CARD: grade stamp S/A/B/C/D (`grade()` in state.js: 26k/19k/13k/7k) with a one-liner on win + game-over.
 

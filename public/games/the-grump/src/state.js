@@ -107,7 +107,7 @@ export const SOUNG_VOICE = { notnow: 'soung_not_now', nobitcoin: 'soung_no_bitco
 // Lines Pat uses when he barges in before a mini-game (weighted toward the user's favorites).
 export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec', 'five', 'idea', 'meeting', 'look', 'busy', 'notbusy', 'quickcall', 'hearmeout', 'toldthem', 'mentioned'];
 
-export const BUILD = '2026-09-02s';
+export const BUILD = '2026-09-02t';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';
