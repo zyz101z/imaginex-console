@@ -6,7 +6,7 @@ export const runtime = "edge";
 
 const redis = Redis.fromEnv();
 
-const KNOWN_GAMES = new Set(["tennis-world", "bloot", "froggo-adventure", "divided-states", "tank-wars", "creature-cove", "wilson", "pig-merge-tycoon"]);
+const KNOWN_GAMES = new Set(["tennis-world", "bloot", "froggo-adventure", "divided-states", "tank-wars", "creature-cove", "wilson", "pig-merge-tycoon", "the-grump"]);
 const MAX_SCORE = 1_000_000;
 // Creature Cove's metric is LIFETIME gold — it legitimately grows past 1M (the Mythic
 // Cove Tree alone requires 2.5M earned).

@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/kyootbot": ["./node_modules/cycletls/dist/index"],
   },
+  async redirects() {
+    return [
+      // Unlisted game: reachable only by URL (not on the shelf).
+      { source: "/the-grump", destination: "/games/the-grump/index.html", permanent: false },
+      { source: "/the_grump", destination: "/games/the-grump/index.html", permanent: false },
+      { source: "/thegrump", destination: "/games/the-grump/index.html", permanent: false },
+    ];
+  },
   async headers() {
     return [
       {
