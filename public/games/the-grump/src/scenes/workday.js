@@ -71,6 +71,7 @@ export class WorkdayScene {
   startRage() {
     if (!this.S.rage()) { this.game.gameOver(this.S); return; }
     this.phase = 'rage'; this.rage = new FullSoungMode(this.api); this.mg = null; setTimeout(() => audio.say('grumpy'), 1700);
+    // the meter shows the cool-down live: it starts at 100 and drains as he smashes (endRage clamps it)
   }
 
   update(dt) {

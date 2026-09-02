@@ -16,7 +16,7 @@ NARR = narr['id']
 LINES = [
  ('narr_offices', NARR, 'kokoro', 'Amazon Corporate Offices. Monday. Eight A.M.'),
  ('narr_monday',  NARR, 'kokoro', 'For most people... it was just another Monday.'),
- ('narr_soung',   NARR, 'kokoro', 'For David Song...'),
+ ('narr_soung',   NARR, 'kokoro', 'For Song...'),
  ('narr_worse',   NARR, 'kokoro', 'It was about to get... much worse.'),
  ('narr_goal',    NARR, 'kokoro', 'He had one goal. Survive until five P.M.'),
  ('pat_grab_chair', PAT, None, "I'll just grab a chair."),

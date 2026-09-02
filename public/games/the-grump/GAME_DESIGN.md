@@ -2,7 +2,7 @@
 
 (Renamed from "Don't Be A Soung" on 2026-09-02 — folder `the-grump`, gameId `the-grump`, save key `grump_best`.)
 
-Parody arcade game: WarioWare-style rapid mini-games about surviving a workday as David Soung,
+Parody arcade game: WarioWare-style rapid mini-games about surviving a workday as Soung (pronounced "Song"; never his full name — user request 2026-09-02),
 a grumpy employee who just wants to be left alone. Pat is the relentlessly optimistic coworker.
 Playful, not cruel. Source prompt + reference portraits: `D:\DontBeSoung\`.
 
@@ -11,7 +11,10 @@ Playful, not cruel. Source prompt + reference portraits: `D:\DontBeSoung\`.
 - Between games: corporate transition card ("ALIGNING STAKEHOLDERS...") → title card (⚠ PAT DETECTED ⚠ when Pat is involved, +5 grumpy) → play → result banner.
 - Lunch Defense fires once, the first game after the clock passes noon (flagged done when it STARTS — a Full Soung Mode mid-lunch used to re-queue it over and over).
 - Grumpy meter 0–100. Failures add (Slack +5, meeting +15, quick question +10, away +15, wrong button +5). Clean wins relieve −5.
-- 100% → FULL SOUNG MODE (8 s smash-fest, +2000, +50 per object, screen shake, slow-mo, BAM text) → meter resets to 30%.
+- 100% → FULL SOUNG MODE (9 s, +2000, +50 per object): every smash COOLS the meter −9%; it ends early under 20% ("COOLED DOWN")
+  or when time runs out ("STILL FUMING") — and the meter STAYS where it landed (clamped 15–75). 22% of spawns are his own
+  stuff (green outline: coffee, lunch, family photo, RKTs) = +12% if smashed; clicking peeking Pat = HR COMPLAINT +15%.
+  (Reworked 2026-09-02 — user: old loop "click a few things and it goes back to 30%" wasn't a loop.)
 - Each Full Soung Mode spends one of 3 PATIENCE (😤 icons in HUD). Hitting 100% with none left → SOUNG HAS HAD ENOUGH (game over).
 - Difficulty scales 1.0 → 1.7 across the day (spawn rates, speeds, timers).
 
@@ -29,6 +32,7 @@ Design rule from that pass: every game is continuous ACTION — move, dodge, swa
 | whack_a_pat | WHACK-A-PAT | Pat pops up over 7 cubicle walls; click to bonk (+150; "₿ BITCOIN?" Pat +300 → Soung: "No. No bitcoin."). Coworkers pop up too — bonking one = HR COMPLAINT. ≤2 questions slipped = win +300 | each un-bonked Pat +5, coworker +10 |
 | paper_toss | PAPER TOSS | drag-and-release to flick memos into the bin; Pat's desk fan = wind (arrows show it); dotted preview while aiming; bin relocates per basket. 3 baskets in 11 s = win (+200 each, +200 bonus) | each miss +3 |
 | rkt_run | RKT RUN | red light / green light: HOLD (click/SPACE) to creep across the break room to the RKT tray while Pat is busy at the coffee machine ("☕ ..."); "hm?" warning 0.38 s, then 👀 LOOKING — any movement (momentum counts!) = caught, knocked back 200 px. Reach the tray in 12 s = +500 | caught +10 each; timeout = NO RKTs TODAY |
+| paper_barrage | PAPER BARRAGE | Pat lobs paper balls at Soung's head (0.45 s wind-up "!"); click/SPACE while a ball is inside the ring around his head (green = NOW) to catch (+150, streak +50/each); 3 in a row = RETURN FIRE (+200, Pat "Ow!"). Curveballs later in the day. ≤1 hit in 11 s = win +300 | each bonk +5 |
 | boss (4:58) | JUST ONE MORE THING | DECLINE button GLIDES and rebounds; 24 hits; phase 2 adds ACCEPT ALL / REPLY ALL trap buttons that shadow it; invites fly in to swat (+1500) | invite hit +4, trap +10 |
 
 ## Pause (2026-09-02)
@@ -76,7 +80,7 @@ Full Soung Mode 2000 · smash 50 · boss 1500 · survive 5000. Best score/days i
 Plays on a player's FIRST EVER "START WORKDAY" (localStorage `grump_intro_seen`) and CANNOT be skipped that time; afterwards it is skipped, and "▶ INTRO" on the title replays it (skippable);
 any click/key skips straight into the workday (except on that mandatory first viewing). Deadly-serious AAA opening, joke never explained — ≈57 s:
 black slate (AMAZON CORPORATE OFFICES / MONDAY / 08:00 AM, low drone) → narration ("For most people, it was just
-another Monday." / "For David Soung..." / "it was about to get much worse.") → "He had one goal. Survive until 5:00 PM." → slow-mo coffee walk (epic fanfare)
+another Monday." / "For Soung..." / "it was about to get much worse.") → "He had one goal. Survive until 5:00 PM." → slow-mo coffee walk (epic fanfare)
 → sits, laptop opens, UNREAD counter spins to 247 (eyeroll) → 8:01 AM clock close-up (silence) → DING "PAT: There he is!" → DING "Hey Soung..." → DING "Quick question."
 (horror sting + music) → face close-up, eye twitch → GRUMPY METER: 3% → footsteps → Pat walks in → ⚠ PAT DETECTED ⚠
 (alarm, shake) → Pat: "Hey Soung! I was just coming over because y—" → Soung: ". . ." → "This should only take

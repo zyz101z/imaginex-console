@@ -82,7 +82,7 @@ export class IntroScene {
       return;
     }
     const gone = t > T.narrOut - 0.6 ? 1 - (t - (T.narrOut - 0.6)) / 0.6 : 1;
-    const lines = [[T.n1, 'For most people, it was just another Monday.', '#d1d5db', 30], [T.n2, 'For David Soung...', '#fff', 36], [T.n3, 'it was about to get much worse.', '#fca5a5', 36], [T.n4, 'He had one goal. Survive until 5:00 PM.', '#ffe600', 30]];
+    const lines = [[T.n1, 'For most people, it was just another Monday.', '#d1d5db', 30], [T.n2, 'For Soung...', '#fff', 36], [T.n3, 'it was about to get much worse.', '#fca5a5', 36], [T.n4, 'He had one goal. Survive until 5:00 PM.', '#ffe600', 30]];
     lines.forEach(([at, s, c, size], i) => { const a = this.fade(t, at, 1.0) * gone; if (a > 0) txt(ctx, s, 640, 270 + i * 70, { size, color: c, weight: 500, alpha: a }); });
   }
 

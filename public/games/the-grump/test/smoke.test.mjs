@@ -49,8 +49,8 @@ class Game {
 }
 
 // ---- registry ----
-check('10 mini-games registered', MINIGAMES.length === 10);
-check('8 regular', regularMinigames().length === 8);
+check('11 mini-games registered', MINIGAMES.length === 11);
+check('9 regular', regularMinigames().length === 9);
 check('lunch special', specialMinigame('lunch')?.id === 'lunch_defense');
 check('boss special', specialMinigame('boss')?.id === 'boss');
 check('fmtClock start', fmtClock(DAY_START) === '8:01 AM');
@@ -76,10 +76,10 @@ const click = (g, x, y) => g.engine.scene.pointerDown({ x, y });
 // ---- idle run: nobody touches anything → grumpy climbs → 3 rages → game over ----
 {
   const g = new Game(); g.startWorkday(); const sc = g.engine.scene; let sawRage = false, resetOk = false, phases = new Set(), seen = new Set(), maxT = 0;
-  run(g, 600, gg => { const s = gg.engine.scene; if (s.phase) phases.add(s.phase); if (s.def) seen.add(s.def.id); if (s.phase === 'rage') sawRage = true; if (sawRage && s.phase === 'transition' && s.S.grumpy === 30) resetOk = true; });
+  run(g, 600, gg => { const s = gg.engine.scene; if (s.phase) phases.add(s.phase); if (s.def) seen.add(s.def.id); if (s.phase === 'rage') sawRage = true; if (sawRage && s.phase === 'transition' && s.S.grumpy >= 15 && s.S.grumpy <= 75) resetOk = true; });
   check('idle run ends in game over', g.state === 'over');
   check('idle run reached Full Soung Mode', sawRage);
-  check('rage resets grumpy to 30', resetOk);
+  check('rage leaves grumpy in 15–75 (earned cool-down)', resetOk);
   check('patience exhausted at game over', g.S.patience === 0 && g.S.stats.fullSoung === MAX_PATIENCE);
   check('score credited for rages', g.S.score >= 2000 * MAX_PATIENCE);
   check('phases cycled', ['transition', 'intro', 'play', 'result', 'rage'].every(p => phases.has(p)));
@@ -90,7 +90,7 @@ const click = (g, x, y) => g.engine.scene.pointerDown({ x, y });
 // ---- perfect bot: plays every mini-game correctly → survives to 5:00 PM ----
 function bot(g) {
   const s = g.engine.scene; if (!s.phase) return;
-  if (s.phase === 'rage') { const it = s.rage.items[0]; if (it) click(g, it.x, it.y); return; }
+  if (s.phase === 'rage') { const it = s.rage.items.find(i => !i.bad); if (it) click(g, it.x, it.y); return; }
   if (s.phase !== 'play') return;
   const m = s.mg, id = s.def.id;
   if (id === 'hide_and_seek') { const safe = m.covers.filter(c => c.blown <= 0 && c.warn <= 0); const side = safe.filter(c => (c.x - m.x) * (m.patX - m.x) <= 0 || Math.abs(c.x - m.x) < 60); const cands = side.length ? side : safe; cands.sort((a, b) => Math.abs(a.x - m.x) - Math.abs(b.x - m.x)); m.targetX = cands[0]?.x ?? m.x; }
@@ -101,6 +101,7 @@ function bot(g) {
   else if (id === 'lunch_defense') { if (m.pat) click(g, m.pat.x, 500); for (const h of [...m.hands]) { if (h.slapped <= 0 && h.k > 0.3) { const q = m.pos(h); click(g, q.x, q.y); } } }
   else if (id === 'whack_a_pat') { for (const p of m.pops) if (p.state === 'rise' && p.kind !== 'coworker' && p.t > 0.2) { const [cx, cy] = CUBES[p.cube]; click(g, cx, cy - 95 * m.height(p)); } }
   else if (id === 'paper_toss') { if (m.ball && !m.ball.live) { const T = 0.75, dx = m.bin.x - 300, dy = (640 - m.bin.h) - 520; m.launch((dx - 0.5 * m.wind * T * T) / T, (dy - 0.5 * 1500 * T * T) / T); } }
+  else if (id === 'paper_barrage') { if (m.balls.some(b => b.k >= 0.76 && b.k <= 0.95)) m.catchNow(); }
   else if (id === 'rkt_run') { m.hold = m.state === 'busy' && m.stateT > 0.35; }
   else if (id === 'boss') { if (m.t >= m.intro) { const p = { x: m.btn.x + 10, y: m.btn.y + 10 }; if (!m.decoys.some(d => d.hit(p))) click(g, p.x, p.y); for (const inv of [...m.invites]) click(g, inv.x, inv.y); } }
 }

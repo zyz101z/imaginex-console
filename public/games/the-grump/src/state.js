@@ -43,7 +43,10 @@ export class RunState {
     this.patience--; this.stats.fullSoung++; this.addScore(SCORE.FULL_SOUNG, 'FULL SOUNG MODE');
     return true;
   }
-  endRage() { this.grumpy = 30; }
+  // Rage over: the meter stays wherever the smashing left it (floor 15, ceiling 75 so you're never instantly back at 100).
+  endRage() { this.grumpy = Math.max(15, Math.min(75, this.grumpy)); this.pendingRage = false; }
+  // Smashing during Full Soung Mode cools him down; smashing the WRONG thing heats him back up.
+  cool(n) { this.grumpy = Math.max(0, this.grumpy - n); }
   advanceClock(min) { this.clock = Math.min(BOSS_TIME, this.clock + min); }
   get bossReady() { return this.clock >= BOSS_TIME - 0.001; }
   get lunchReady() { return !this.lunchDone && this.clock >= 12 * 60; }
@@ -92,6 +95,10 @@ export const PAT_QUOTES = {
   wasthatyou: { text: 'Soung?! Was that you?', voice: 'wasthatyou' },
   dontmove: { text: "Don't. Move.", voice: 'dontmove' },
   gotcha:   { text: 'Gotcha!', voice: 'gotcha' },
+  headsup:  { text: 'Heads up!', voice: 'headsup' },
+  thinkfast:{ text: 'Think fast!', voice: 'thinkfast' },
+  catch:    { text: 'Catch!', voice: 'catch' },
+  hr:       { text: 'Okay, THAT is going to HR.', voice: 'hr' },
 };
 // What Pat's Slack pings say (Slack Attack + title screen + Full Soung Mode targets).
 export const PAT_PINGS = ['quick question', 'got a sec?', "you're not busy, right?", 'hear me out', 'jump on a quick call?', 'I added you to the meeting', "I told them you'd handle it", 'I may have mentioned your name', 'are you ignoring me?', 'ping', 'bump', '👀', 'you there?', 'lunch?', 'I have an idea', 'this should only take 5 min', 'have you heard of Bitcoin?', 'following up on my follow-up', 'circling back', '???'];
@@ -100,7 +107,7 @@ export const SOUNG_VOICE = { notnow: 'soung_not_now', nobitcoin: 'soung_no_bitco
 // Lines Pat uses when he barges in before a mini-game (weighted toward the user's favorites).
 export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec', 'five', 'idea', 'meeting', 'look', 'busy', 'notbusy', 'quickcall', 'hearmeout', 'toldthem', 'mentioned'];
 
-export const BUILD = '2026-09-02p';
+export const BUILD = '2026-09-02r';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';

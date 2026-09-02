@@ -58,7 +58,7 @@ export class HowToScene {
     const lines = [
       ['🕒', 'Survive from 8:01 AM to 5:00 PM. Each mini-game moves the clock.'],
       ['😤', 'The GRUMPY meter rises with every interruption. Wins calm it slightly.'],
-      ['🔥', 'At 100% — FULL SOUNG MODE. Smash everything for points. Meter resets to 30%.'],
+      ['🔥', 'At 100% — FULL SOUNG MODE. Smash to COOL DOWN. Where the meter lands is where it stays.'],
       ['💀', 'Full Soung Mode uses one PATIENCE. Hit 100% with none left = Soung has had enough.'],
       ['⚠', 'When Pat shows up, something annoying is about to happen. Act fast.'],
       ['🖱', 'Mouse / touch for most games. Arrow keys or drag in the hallway.'],

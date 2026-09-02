@@ -8,5 +8,6 @@ import './lunch_defense.js';
 import './whack_a_pat.js';
 import './paper_toss.js';
 import './rkt_run.js';
+import './paper_barrage.js';
 import './boss.js';
 export { MINIGAMES, registerMinigame, regularMinigames, specialMinigame } from './registry.js';
