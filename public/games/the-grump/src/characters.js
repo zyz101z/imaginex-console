@@ -17,7 +17,7 @@ export const SPRITES = {
               walk:  { file: 'assets/soung_body_walk.png',  neck: { x: 252, top: 236, w: 96, v: 300 }, faceW: 200 },
               rage:  { file: 'assets/soung_body_rage.png',  neck: { x: 275, top: 250, w: 110, v: 320 }, faceW: 215 } } },
   pat:   { file: 'assets/pat_happy.png', w: 400, h: 520, eyes: [[140, 250], [260, 250]], mouth: [200, 390], eyeR: 22, skin: '#f0c3a0',
-    moods: { happy: 'assets/pat_happy.png', excited: 'assets/pat_excited.png' }, bodies: { stand: { file: 'assets/pat_body.png' } } },
+    moods: { happy: 'assets/pat_happy.png', excited: 'assets/pat_excited.png' }, bodies: { stand: { file: 'assets/pat_body.png' }, back: { file: 'assets/pat_back.png' } } },   // back = seen from behind (RKT Run)
 };
 // To add a mood: drop assets/<name>_<mood>.png (400x520, transparent) and list it in moods.
 // Head-sprite geometry (measured on the 400x520 heads): chin row / height, face width / sprite width.
@@ -167,7 +167,8 @@ export function drawSoung(ctx, x, y, s = 1, o = {}) {
 // --- Pat: white tee, always delighted. Same contract as drawSoung.
 export function drawPat(ctx, x, y, s = 1, o = {}) {
   const mood = o.mood || 'happy', t = o.t || 0, hw = 122 * s;
-  if (images['pat:body_stand']) return drawFigure(ctx, 'pat', 'stand', x, y, s, mood, o);
+  const pose = o.back && images['pat:body_back'] ? 'back' : 'stand';
+  if (images['pat:body_' + pose]) return drawFigure(ctx, 'pat', pose, x, y, s, mood, o);
   const bob = o.walk ? Math.sin(t * 12) * 4 * s : Math.sin(t * 3) * 3 * s;
   const bodyTop = y - 210 * s + bob, cx = x;
   ctx.save();

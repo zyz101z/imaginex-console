@@ -51,7 +51,9 @@ class RktRun extends MiniGame {
     // Pat by the coffee machine (busy) or turned toward the room (looking)
     const looking = this.state === 'looking', turning = this.state === 'turning';
     if (looking) { ctx.fillStyle = 'rgba(220,38,38,0.16)'; ctx.fillRect(0, 0, W, H); const g = ctx.createLinearGradient(1180, 0, 100, 0); g.addColorStop(0, 'rgba(255,240,150,0.45)'); g.addColorStop(1, 'rgba(255,240,150,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(1150, 380); ctx.lineTo(60, 300); ctx.lineTo(60, H); ctx.lineTo(1150, 640); ctx.closePath(); ctx.fill(); }
-    drawPat(ctx, 1190, 700, 1.0, { t: this.t, arms: looking ? 'point' : 'none', tilt: looking ? -0.12 : turning ? -0.05 + Math.sin(this.t * 40) * 0.03 : 0.08 });
+    // busy = back turned (real rear-view sprite); turning = a quick squash-flip; looking = facing the room
+    if (turning) { const k = 1 - this.stateT / 0.38, flip = Math.cos(k * Math.PI); ctx.save(); ctx.translate(1190, 0); ctx.scale(Math.max(0.08, Math.abs(flip)), 1); ctx.translate(-1190, 0); drawPat(ctx, 1190, 700, 1.0, { t: this.t, back: flip > 0, arms: 'none', tilt: 0 }); ctx.restore(); }
+    else drawPat(ctx, 1190, 700, 1.0, { t: this.t, back: !looking && !this.done, arms: looking ? 'point' : 'none', tilt: looking ? -0.12 : 0.03 });
     if (looking) { txt(ctx, '👀', 1190, 250, { size: 54 }); }
     else if (turning) { bubble(ctx, 960, 250, 130, 54, 'hm?', { tail: 'right', size: 22 }); }
     else if (!this.done) { bubble(ctx, 940, 250, 160, 54, '☕ ...', { tail: 'right', size: 22 }); }

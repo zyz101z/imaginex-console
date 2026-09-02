@@ -23,6 +23,8 @@ PNGs have their own head CLEARED as a feathered ellipse so nothing peeks out aro
 `node test/clear_head.js assets/soung_body_<pose>.png <cx> <chin> <headH>` — redo after regenerating a pose.
 Pose pick: `arms:'up'` → rage, `walk` → walk, else stand (desk scenes hide the legs behind the desk).
 
+**Pat from behind:** `assets/pat_back.png` (520×800, Meshy i2i from pat_body.png: "the EXACT same cartoon man … seen from BEHIND", keyed with the same script; `drawPat(..., { back: true })`). Used by RKT Run while he's busy at the coffee machine.
+
 **Pat full body:** `assets/pat_body.png` (520×800, feet at the bottom) — same Meshy recipe, prompt
 "FULL BODY, head to feet, waving". `drawPat` uses it as a one-piece figure (bob + lean for walking)
 and falls back to the procedural body only if the file is missing. Key with

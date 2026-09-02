@@ -39,11 +39,11 @@ class Game {
   for (const m of ['base', 'annoyed', 'angry', 'rage', 'eyeroll', 'deadpan', 'smirk', 'cool', 'shocked']) _injectSpriteForTest('soung:' + m, fake(400, 520));
   for (const m of ['base', 'happy', 'excited']) _injectSpriteForTest('pat:' + m, fake(400, 520));
   for (const p of ['stand', 'walk', 'rage']) _injectSpriteForTest('soung:body_' + p, fake(520, 800));
-  _injectSpriteForTest('pat:body_stand', fake(520, 800));
+  _injectSpriteForTest('pat:body_stand', fake(520, 800)); _injectSpriteForTest('pat:body_back', fake(520, 800));
   let ok = true;
   try {
     for (const o of [{}, { walk: true, arms: 'walk' }, { arms: 'up', mood: 'rage', steam: true }, { seated: true, arms: 'typing', sweat: true, mood: 'cool' }, { mood: 'shocked', tilt: 0.2 }]) { const r = drawSoung(ctx, 300, 600, 1, { t: 1.2, ...o }); if (!(r.headY < 600 && r.top < r.headY)) ok = false; }
-    for (const o of [{}, { walk: true }, { arms: 'none', tilt: -0.3 }, { mood: 'excited' }]) { const r = drawPat(ctx, 900, 600, 1, { t: 0.5, ...o }); if (!(r.headY < 600)) ok = false; }
+    for (const o of [{}, { walk: true }, { arms: 'none', tilt: -0.3 }, { mood: 'excited' }, { back: true }]) { const r = drawPat(ctx, 900, 600, 1, { t: 0.5, ...o }); if (!(r.headY < 600)) ok = false; }
   } catch (e) { ok = false; console.log('  sprite draw threw: ' + e.message); }
   check('full-body sprite paths draw (Soung 3 poses, Pat)', ok);
 }
