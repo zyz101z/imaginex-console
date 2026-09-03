@@ -8,6 +8,8 @@ import { TitleScene, HowToScene } from '../src/scenes/title.js';
 import { WorkdayScene } from '../src/scenes/workday.js';
 import { IntroScene, T as INTRO_T } from '../src/scenes/intro.js';
 import { GameOverScene, WinScene } from '../src/scenes/end.js';
+import { CoworkersScene, LeaderboardScene } from '../src/scenes/extras.js';
+import { loadName, loadCoworkers, coworkerName, refreshCoworkers } from '../src/state.js';
 import { drawSoung, drawPat, _injectSpriteForTest } from '../src/characters.js';
 
 let pass = 0, fail = 0;
@@ -26,6 +28,8 @@ class Game {
   constructor() { this.engine = new Engine(null); this.engine.ctx = ctx; this.state = 'title'; }
   showTitle() { this.state = 'title'; this.engine.go(new TitleScene(this)); }
   showHowTo() { this.state = 'howto'; this.engine.go(new HowToScene(this)); }
+  showCoworkers() { this.state = 'coworkers'; this.engine.go(new CoworkersScene(this)); }
+  showLeaderboard() { this.state = 'top'; this.engine.go(new LeaderboardScene(this)); }
   showIntro(replay = false) { this.state = 'intro'; this.engine.go(new IntroScene(this, { mandatory: !replay && !introSeen() })); }
   play() { if (introSeen()) this.startWorkday(); else this.showIntro(); }
   startWorkday() { this.state = 'workday'; this.engine.go(new WorkdayScene(this)); }
@@ -119,6 +123,7 @@ function bot(g) {
   check('max grumpy stayed sane', g.S.stats.maxGrumpy < 100);
   for (let i = 0; i < 12 * 60; i++) { g.engine.step(1 / 60); g.engine.render(); }
   check('win scene renders full cinematic', g.engine.scene.t > 9.6);
+  { const sc = g.engine.scene; if (sc.nameBox && sc.nameBox.active) { for (const k of ['KeyM', 'KeyE']) sc.keyDown(k); sc.keyDown('Enter'); run(g, 0.2); } check('win screen asked for a name first', loadName() === 'ME'); }
   click(g, W / 2 + 200, 635); check('win → another workday', g.state === 'workday');
   console.log('  perfect: score', g.S.score, 'games', g.S.gamesPlayed, 'maxGrumpy', g.S.stats.maxGrumpy, 'stats', JSON.stringify(g.S.stats));
 }
@@ -142,6 +147,20 @@ function bot(g) {
 { const g = new Game(); g.startWorkday(); const sc = g.engine.scene; const def = MINIGAMES.find(m => m.id === 'paper_toss'); sc.phase = 'transition'; sc.phaseT = 0; sc.chooseNext = () => def; run(g, 2.5);
   const m = sc.mg; run(g, 8); check('paper toss waits for throws (no stopwatch end)', !m.done && m.memosLeft === 5);
   for (let i = 0; i < 5; i++) { m.launch(50, -300); run(g, 2.5); } check('paper toss ends after the 5th memo lands', m.done && m.thrown === 5); }
+// ---- nickname: first game over asks for a name (typed), later ones post automatically ----
+{ localStorage.removeItem('grump_name'); const posts = []; globalThis.fetch = (url, o) => { if (o && o.method === 'POST') posts.push(JSON.parse(o.body)); return Promise.resolve({ ok: true, json: () => Promise.resolve([]) }); };
+  const g = new Game(); const S = new RunState(); S.score = 4242; g.gameOver(S); const sc = g.engine.scene; run(g, 1);
+  check('no name yet → entry is open', sc.nameBox.active && posts.length === 0);
+  for (const k of ['KeyK', 'KeyR', 'KeyI', 'KeyS']) sc.keyDown(k); sc.keyDown('Enter'); run(g, 0.5);
+  check('typed name saved + score posted under it', loadName() === 'KRIS' && posts.length === 1 && posts[0].nickname === 'KRIS' && posts[0].score === 4242 && posts[0].gameId === 'the-grump');
+  const g2 = new Game(); const S2 = new RunState(); S2.score = 99; g2.gameOver(S2); run(g2, 0.5); check('second time posts automatically', posts.length === 2 && !g2.engine.scene.nameBox.active);
+  click(g2, 100, 657); check('"change" reopens the entry', g2.engine.scene.nameBox.active); g2.engine.scene.keyDown('Escape'); check('cancel closes it', !g2.engine.scene.nameBox.active);
+  const g3 = new Game(); g3.showTitle(); click(g3, W / 2 - 90, 696); check('TOP 10 opens from the title', g3.state === 'top'); run(g3, 1); }
+// ---- coworkers: add/remove names, and the games use them ----
+{ const g = new Game(); g.showTitle(); click(g, W / 2 + 90, 696); check('COWORKERS opens from the title', g.state === 'coworkers'); const sc = g.engine.scene;
+  for (const k of ['KeyB', 'KeyO', 'KeyB']) sc.keyDown(k); sc.keyDown('Enter'); run(g, 0.2); check('coworker added + saved', loadCoworkers().length === 1 && loadCoworkers()[0] === 'BOB');
+  refreshCoworkers(); check('coworkerName() serves it', coworkerName() === 'BOB');
+  click(g, sc.chip(0).x + 10, sc.chip(0).y + 10); check('click removes it', loadCoworkers().length === 0); refreshCoworkers(); }
 // ---- every mini-game survives random clicking for its full duration ----
 for (const def of MINIGAMES) {
   const g = new Game(); g.startWorkday(); const sc = g.engine.scene; sc.S.clock = def.special === 'boss' ? BOSS_TIME : def.special === 'lunch' ? 12 * 60 + 1 : DAY_START;

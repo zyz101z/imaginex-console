@@ -2,7 +2,7 @@
 import { MiniGame, registerMinigame, drawTimer } from './registry.js';
 import { W, H, rand, pick, clamp } from '../engine.js';
 import { txt, fillR, bubble } from '../draw.js';
-import { drawOffice, HUD_H } from '../office.js';
+import { drawOffice, HUD_H, hint } from '../office.js';
 import { drawSoung, drawPat } from '../characters.js';
 import { GRUMPY, PAT_QUOTES } from '../state.js';
 

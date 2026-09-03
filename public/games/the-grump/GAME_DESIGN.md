@@ -71,6 +71,17 @@ Result banners: Pat comments on ~65% (was 100%). Title peek every 11 s (was 7). 
   Hide & Seek "not today +50" when the beam sweeps over you while hidden.
 - REPORT CARD: grade stamp S/A/B/C/D (`grade()` in state.js: 26k/19k/13k/7k) with a one-liner on win + game-over.
 
+## Coworker pass 2026-09-02 (user picked recommendations 1, 2, 4)
+- LEADERBOARD NICKNAME: first end screen pops a canvas text box + on-screen QWERTY (`src/ui/textentry.js`); saved in
+  localStorage `grump_name`; later games post automatically ("posted as NAME · change" re-opens it). Score POSTs to
+  /api/leaderboard as that nickname (was hard-coded "Soung"). Title → 🏆 TOP 10 fetches `?gameId=the-grump`.
+- COWORKERS: title → 👥 COWORKERS, up to 8 first names (`grump_coworkers`). They become hallway walkers
+  ("NAME: Got a sec?"), cover-stealers ("NAME's spot"), lunch thieves ("NAME TOOK A BITE"), named cubicle pop-ups in
+  Whack-a-Pat. `coworkerName()` in state.js; empty list = the old generic lines. Slack pings stay Pat's (user's rule).
+- TOUCH: engine.touch (touch-capable or last pointer was a finger) → ◀ ▶ thumb pads in Hallway + Hide and Seek
+  (`drawPads`/`padDir` in office.js; drag still works), TAP/HOLD wording via `hint(engine, mouse, touch)`, ⛶ fullscreen
+  button on the title. Not device-tested here — needs a phone report.
+
 ## Scoring
 Pat avoided 500 · useless meeting declined 250 · Slack ignored 100 · lunch protected 1000 ·
 Full Soung Mode 2000 · smash 50 · boss 1500 · survive 5000. Best score/days in localStorage

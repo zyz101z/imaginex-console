@@ -4,7 +4,7 @@ import { W, H, rand, pick } from '../engine.js';
 import { txt, fillR, bubble, impact } from '../draw.js';
 import { drawOffice, HUD_H } from '../office.js';
 import { drawSoung, drawPat } from '../characters.js';
-import { SCORE, GRUMPY, PAT_QUOTES } from '../state.js';
+import { SCORE, GRUMPY, PAT_QUOTES, coworkerName } from '../state.js';
 
 const PLATE = { x: 640, y: 508 };   // on the table top (y 500–540), in front of Soung
 const LANES = [[-1, 0], [-1, -0.45], [-1, 0.5], [1, 0], [1, -0.45], [1, 0.5], [0, -1], [-0.6, -1], [0.6, -1]]; // direction the hand comes FROM
@@ -13,7 +13,7 @@ class LunchDefense extends MiniGame {
   constructor(api, def) { super(api, def); this.dur = 10; this.hands = []; this.spawnT = 0.5; this.pat = null; this.patT = 2.5; this.steals = 0; this.slaps = 0; this.hurtT = 0; this.patVisits = 0; }
   spawn() {
     const [dx, dy] = pick(LANES); const len = 520; const sx = PLATE.x + dx * len, sy = PLATE.y + dy * 300;
-    this.hands.push({ sx, sy, k: 0, speed: rand(0.45, 0.68) * Math.sqrt(this.diff), skin: pick(SKINS), sleeve: pick(['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#111827']), slapped: 0, msg: pick(['just one chip', 'you gonna eat that?', 'sharing is caring', 'for the team', 'ooh what is that']) });
+    this.hands.push({ sx, sy, k: 0, speed: rand(0.45, 0.68) * Math.sqrt(this.diff), skin: pick(SKINS), sleeve: pick(['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#111827']), slapped: 0, who: coworkerName(), msg: pick(['just one chip', 'you gonna eat that?', 'sharing is caring', 'for the team', 'ooh what is that']) });
   }
   pos(h) { return { x: h.sx + (PLATE.x - h.sx) * h.k, y: h.sy + (PLATE.y - h.sy) * h.k }; }
   update(dt) {
@@ -27,7 +27,7 @@ class LunchDefense extends MiniGame {
     for (const h of this.hands) {
       if (h.slapped > 0) { h.slapped -= dt; h.k -= dt * 1.8; if (h.k > -0.2) keep.push(h); continue; }
       h.k += h.speed * dt;
-      if (h.k >= 0.86) { this.hit(pick(['CHIP STOLEN', 'A BITE. THEY TOOK A BITE.', 'FRIES: GONE']), GRUMPY.SLACK); continue; }
+      if (h.k >= 0.86) { this.hit(h.who ? h.who.toUpperCase() + ' TOOK A BITE' : pick(['CHIP STOLEN', 'A BITE. THEY TOOK A BITE.', 'FRIES: GONE']), GRUMPY.SLACK); continue; }
       keep.push(h);
     }
     this.hands = keep;
@@ -59,7 +59,7 @@ class LunchDefense extends MiniGame {
     ctx.beginPath(); ctx.ellipse(10, 0, 34, 26, 0, 0, 7); ctx.fill(); ctx.stroke();
     for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(28, i * 11 - 5, 26 - Math.abs(i) * 5, 10, 5) : ctx.rect(28, i * 11 - 5, 26 - Math.abs(i) * 5, 10); ctx.fill(); ctx.stroke(); }
     ctx.restore();
-    if (h.k > 0.25 && h.k < 0.6 && h.slapped <= 0) bubble(ctx, q.x - 80, q.y - 90, 160, 44, h.msg, { size: 15 });
+    if (h.k > 0.25 && h.k < 0.6 && h.slapped <= 0) bubble(ctx, q.x - 90, q.y - 90, 180, 44, h.who ? h.who + ': ' + h.msg : h.msg, { size: h.who ? 13 : 15 });
   }
   draw(ctx) {
     drawOffice(ctx, this.t, 'cafeteria');

@@ -17,6 +17,7 @@ export class Engine {
     this.flashT = 0; this.flashD = 0; this.flashColor = '#fff';
     this._last = 0;
     this.running = false;
+    this.touch = typeof window !== 'undefined' && ('ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0);   // phones/tablets: show pads + TAP hints
     if (canvas) this._bind();
   }
 
@@ -30,6 +31,7 @@ export class Engine {
     c.addEventListener('pointerdown', e => {
       const p = this._toLogical(e);
       this.pointer.x = p.x; this.pointer.y = p.y; this.pointer.down = true;
+      if (e.pointerType === 'touch') this.touch = true; else if (e.pointerType === 'mouse') this.touch = false;
       this.activity += 1;
       this.scene?.pointerDown?.(p);
       e.preventDefault();

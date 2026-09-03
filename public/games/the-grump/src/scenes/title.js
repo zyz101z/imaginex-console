@@ -8,7 +8,7 @@ import { SLACK_MSGS } from '../minigames/slack_attack.js';
 import { PAT_QUOTES, BUILD } from '../state.js';
 
 export class TitleScene {
-  constructor(game) { this.game = game; this.t = 0; this.notes = []; this.noteT = 1; this.start = new Button(W / 2 - 170, 520, 340, 74, 'START WORKDAY', { color: '#22c55e', size: 30 }); this.how = new Button(W / 2 - 170, 610, 200, 60, 'HOW TO PLAY', { color: '#3b82f6', size: 22 }); this.intro = new Button(W / 2 + 40, 610, 130, 60, '▶ INTRO', { color: '#7c3aed', size: 22 }); this.best = loadBest(); }
+  constructor(game) { this.game = game; this.t = 0; this.notes = []; this.noteT = 1; this.start = new Button(W / 2 - 170, 520, 340, 74, 'START WORKDAY', { color: '#22c55e', size: 30 }); this.how = new Button(W / 2 - 170, 610, 200, 60, 'HOW TO PLAY', { color: '#3b82f6', size: 22 }); this.intro = new Button(W / 2 + 40, 610, 130, 60, '▶ INTRO', { color: '#7c3aed', size: 22 }); this.top = new Button(W / 2 - 170, 678, 160, 36, '🏆 TOP 10', { color: '#b45309', size: 17, shadow: 3 }); this.team = new Button(W / 2 + 10, 678, 160, 36, '👥 COWORKERS', { color: '#0e7490', size: 16, shadow: 3 }); this.fs = new Button(20, 22, 56, 48, '⛶', { color: '#0b1220', size: 24, shadow: 0 }); this.best = loadBest(); }
   enter() { this.t = 0; this.notes = []; }
   update(dt) {
     this.t += dt; this.noteT -= dt;
@@ -22,6 +22,9 @@ export class TitleScene {
     audio.ensure(); audio.startMusic('musicTitle');
     if (this.start.hit(p)) { audio.play('click'); this.game.play(); }
     else if (this.intro.hit(p)) { audio.play('click'); this.game.showIntro(true); }
+    else if (this.top.hit(p)) { audio.play('click'); this.game.showLeaderboard(); }
+    else if (this.team.hit(p)) { audio.play('click'); this.game.showCoworkers(); }
+    else if (this.fs.hit(p)) { try { const el = document.getElementById('wrap') || document.body; if (document.fullscreenElement) document.exitFullscreen(); else (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch {} }
     else if (this.how.hit(p)) { audio.play('click'); this.game.showHowTo(); }
   }
   keyDown(code) { if (code === 'Enter' || code === 'Space') { audio.ensure(); this.game.play(); } }
@@ -40,9 +43,9 @@ export class TitleScene {
     fillR(ctx, 640, 320, 400, 44, 22, '#111827', '#ffe600', 3); txt(ctx, 'A Corporate Survival Game', 840, 342, { size: 24, color: '#fff' });
     txt(ctx, 'MISSION: SURVIVE UNTIL 5:00 PM', 840, 400, { size: 26, color: '#ffe600', stroke: '#111', strokeW: 5 });
     if (this.best.score > 0) txt(ctx, `BEST: ${this.best.score.toLocaleString()}  ·  DAYS SURVIVED: ${this.best.survived}`, 840, 440, { size: 18, color: '#fff', stroke: '#111', strokeW: 3 });
-    this.start.draw(ctx, this.start.hit(this.game.engine.pointer)); this.how.draw(ctx, this.how.hit(this.game.engine.pointer)); this.intro.draw(ctx, this.intro.hit(this.game.engine.pointer));
+    this.start.draw(ctx, this.start.hit(this.game.engine.pointer)); this.how.draw(ctx, this.how.hit(this.game.engine.pointer)); this.intro.draw(ctx, this.intro.hit(this.game.engine.pointer)); this.top.draw(ctx, this.top.hit(this.game.engine.pointer)); this.team.draw(ctx, this.team.hit(this.game.engine.pointer)); if (typeof document !== 'undefined') this.fs.draw(ctx, false);
     drawMute(ctx, audio.muted);
-    txt(ctx, `build ${BUILD} · click anywhere for sound`, 640, 705, { size: 14, color: '#d1d5db', weight: 500 });
+    txt(ctx, `build ${BUILD} · click anywhere for sound`, 640, 12, { size: 12, color: 'rgba(255,255,255,0.55)', weight: 500 });
   }
 }
 

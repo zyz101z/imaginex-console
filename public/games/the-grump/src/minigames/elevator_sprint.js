@@ -2,7 +2,7 @@
 import { MiniGame, registerMinigame } from './registry.js';
 import { W, H, rand, pick } from '../engine.js';
 import { txt, fillR, bubble, impact } from '../draw.js';
-import { HUD_H } from '../office.js';
+import { HUD_H, hint } from '../office.js';
 import { drawSoung, drawPat } from '../characters.js';
 import { GRUMPY, PAT_QUOTES } from '../state.js';
 
@@ -88,7 +88,7 @@ class ElevatorSprint extends MiniGame {
     if (this.stumbleT > 0.4) impact(ctx, ['OOF', 'WHOA', 'AGH'][this.hits % 3], 300, GROUND - 200, 50, '#ff6b6b');
     // HUD: distance bar + Pat gap
     fillR(ctx, 340, HUD_H + 60, 600, 16, 8, '#0b1220'); fillR(ctx, 343, HUD_H + 63, 594 * Math.min(1, this.dist / this.goal), 10, 5, '#38bdf8'); txt(ctx, '🛗', 950, HUD_H + 68, { size: 22 });
-    txt(ctx, 'RUN! click / SPACE to jump (double-jump ok)', 640, HUD_H + 26, { size: 22, color: '#fff', stroke: '#111', strokeW: 5 });
+    txt(ctx, hint(this.api.engine, 'RUN! click / SPACE to jump (double-jump ok)', 'RUN! TAP to jump (tap again in the air)'), 640, HUD_H + 26, { size: 22, color: '#fff', stroke: '#111', strokeW: 5 });
     fillR(ctx, 340, HUD_H + 86, 600, 10, 5, '#0b1220'); fillR(ctx, 343, HUD_H + 88, 594 * this.patGap, 6, 3, this.patGap < 0.35 ? '#ef4444' : '#22c55e'); txt(ctx, 'LEAD ON PAT', 640, HUD_H + 112, { size: 14, color: '#111' });
   }
 }

@@ -3,7 +3,7 @@
 import { MiniGame, registerMinigame, drawTimer } from './registry.js';
 import { W, H, rand, pick, clamp } from '../engine.js';
 import { txt, fillR, bubble, impact } from '../draw.js';
-import { drawOffice, HUD_H } from '../office.js';
+import { drawOffice, HUD_H, hint } from '../office.js';
 import { drawSoung, drawPat } from '../characters.js';
 import { GRUMPY, PAT_QUOTES } from '../state.js';
 
@@ -59,10 +59,10 @@ class RktRun extends MiniGame {
     else if (!this.done) { bubble(ctx, 940, 250, 160, 54, '☕ ...', { tail: 'right', size: 22 }); }
     drawSoung(ctx, this.x, 700, 0.95, { mood: this.hurtT > 0 ? 'shocked' : looking ? 'deadpan' : this.done ? this.mood : 'annoyed', t: this.t, walk: this.v > 5, sweat: looking && !this.done, arms: this.v > 5 ? 'walk' : 'down' });
     // status banner
-    const label = looking ? '👀 PAT IS LOOKING — FREEZE!' : turning ? '⚠ HE\'S TURNING...' : '🟢 GO GO GO (hold)';
+    const label = looking ? '👀 PAT IS LOOKING — FREEZE!' : turning ? '⚠ HE\'S TURNING...' : (this.api.engine.touch ? '🟢 GO GO GO (hold)' : '🟢 GO GO GO (hold)');
     fillR(ctx, 340, HUD_H + 8, 600, 44, 12, looking ? '#dc2626' : turning ? '#f59e0b' : '#16a34a', '#111', 3);
     txt(ctx, label, 640, HUD_H + 30, { size: 24, color: '#fff', stroke: '#111', strokeW: 4 });
-    txt(ctx, 'HOLD click / SPACE to creep · let go BEFORE he turns', 640, HUD_H + 70, { size: 16, color: '#ffe600', stroke: '#111', strokeW: 3 });
+    txt(ctx, hint(this.api.engine, 'HOLD click / SPACE to creep · let go BEFORE he turns', 'HOLD your finger down to creep · lift it BEFORE he turns'), 640, HUD_H + 70, { size: 16, color: '#ffe600', stroke: '#111', strokeW: 3 });
     fillR(ctx, 340, HUD_H + 86, 600, 10, 5, '#0b1220'); fillR(ctx, 343, HUD_H + 88, 594 * ((this.x - START_X) / (TRAY_X - START_X)), 6, 3, '#fde68a');
     drawTimer(ctx, this.dur - this.t, this.dur, txt, fillR);
   }

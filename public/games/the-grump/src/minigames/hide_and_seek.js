@@ -3,9 +3,9 @@
 import { MiniGame, registerMinigame, drawTimer } from './registry.js';
 import { W, H, rand, pick, clamp } from '../engine.js';
 import { txt, fillR, bubble } from '../draw.js';
-import { drawOffice, HUD_H } from '../office.js';
+import { drawOffice, HUD_H, drawPads, padDir, hint } from '../office.js';
 import { drawSoung, drawPat, drawCoworker } from '../characters.js';
-import { SCORE, GRUMPY, PAT_QUOTES } from '../state.js';
+import { SCORE, GRUMPY, PAT_QUOTES, coworkerName } from '../state.js';
 
 const COVERS = [{ x: 230, kind: 'plant' }, { x: 520, kind: 'cabinet' }, { x: 800, kind: 'cooler' }, { x: 1080, kind: 'plant' }];
 class HideAndSeek extends MiniGame {
@@ -20,6 +20,7 @@ class HideAndSeek extends MiniGame {
     // movement
     const k = this.api.engine.keys; let dir = 0;
     if (k.has('ArrowLeft') || k.has('KeyA')) dir -= 1; if (k.has('ArrowRight') || k.has('KeyD')) dir += 1;
+    if (this.padDir) dir = this.padDir;
     if (dir) { this.x += dir * 600 * dt; this.targetX = null; } else if (this.targetX != null) { const d = this.targetX - this.x; this.x += clamp(d, -600 * dt, 600 * dt); }
     this.x = clamp(this.x, 110, 1170);
     // flashlight sweep: speeds up over time
@@ -28,7 +29,7 @@ class HideAndSeek extends MiniGame {
     // covers get blown, one at a time, never all
     for (const c of this.covers) { c.blown = Math.max(0, c.blown - dt); if (c.warn > 0) { c.warn -= dt; if (c.warn <= 0) c.blown = rand(2.2, 3.2); } }
     this.blowT -= dt;
-    if (this.blowT <= 0) { const active = this.covers.filter(c => c.blown <= 0 && c.warn <= 0); if (active.length > 1) { pick(active).warn = 0.7; } this.blowT = rand(1.2, 1.9) / this.diff; }
+    if (this.blowT <= 0) { const active = this.covers.filter(c => c.blown <= 0 && c.warn <= 0); if (active.length > 1) { const c = pick(active); c.warn = 0.7; c.who = coworkerName(); } this.blowT = rand(1.2, 1.9) / this.diff; }
     // detection
     const inCover = this.covers.some(c => c.blown <= 0 && Math.abs(this.x - c.x) < 58);
     const inBeam = Math.abs(this.x - this.patX) < 95;
@@ -44,8 +45,9 @@ class HideAndSeek extends MiniGame {
       else this.finish(false, `SPOTTED ${this.caught}×`, { sub: '"Oh THERE you are. Quick question."' });
     }
   }
-  pointerDown(p) { this.targetX = p.x; }
-  pointerMove(p) { if (this.api.engine.pointer.down) this.targetX = p.x; }
+  pointerDown(p) { const d = this.api.engine.touch ? padDir(p) : 0; if (d) { this.padDir = d; return; } this.targetX = p.x; }
+  pointerMove(p) { if (this.padDir) return; if (this.api.engine.pointer.down) this.targetX = p.x; }
+  pointerUp() { this.padDir = 0; }
   draw(ctx) {
     drawOffice(ctx, this.t, 'desk');
     // dim office, Pat's flashlight cone lights a band of floor
@@ -63,13 +65,14 @@ class HideAndSeek extends MiniGame {
       if (c.kind === 'plant') { fillR(ctx, c.x - 45, 640, 90, 70, 8, '#a8a29e', '#333', 3); ctx.strokeStyle = '#3f9142'; ctx.lineWidth = 12; ctx.lineCap = 'round'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(c.x, 650); ctx.lineTo(c.x + i * 28, 480 + Math.abs(i) * 30); ctx.stroke(); } }
       else if (c.kind === 'cabinet') { fillR(ctx, c.x - 60, 470, 120, 240, 6, '#9ca3af', '#333', 3); for (let i = 0; i < 4; i++) { fillR(ctx, c.x - 50, 480 + i * 58, 100, 48, 4, '#6b7280', '#333', 2); ctx.fillStyle = '#e5e7eb'; ctx.fillRect(c.x - 12, 500 + i * 58, 24, 6); } }
       else { fillR(ctx, c.x - 40, 560, 80, 150, 8, '#e5e7eb', '#333', 3); fillR(ctx, c.x - 32, 480, 64, 90, 30, '#bae6fd', '#333', 3); }
-      if (c.blown > 0) { drawCoworker(ctx, c.x + 10, 712, 0.9, { t: this.t, color: c.guy }); bubble(ctx, c.x - 60, 430, 140, 44, ['taken', 'my spot', 'excuse me'][Math.floor(c.x / 100) % 3], { size: 16 }); }
+      if (c.blown > 0) { drawCoworker(ctx, c.x + 10, 712, 0.9, { t: this.t, color: c.guy }); bubble(ctx, c.x - 70, 430, 160, 44, c.who ? c.who + "'s spot" : ['taken', 'my spot', 'excuse me'][Math.floor(c.x / 100) % 3], { size: c.who ? 14 : 16 }); }
       else if (c.warn > 0) { txt(ctx, '⚠', c.x, 430 + Math.sin(this.t * 20) * 4, { size: 34 }); drawCoworker(ctx, c.x + 10 + (Math.random() < 0.5 ? -1 : 1) * 0, 712 + 260 * (c.warn / 0.7), 0.9, { t: this.t, color: c.guy }); }
       else if (Math.abs(this.x - c.x) < 58) { txt(ctx, '🫣', c.x, 440, { size: 30 }); }
     }
     txt(ctx, 'STAY OUT OF THE FLASHLIGHT', 640, HUD_H + 24, { size: 24, color: '#fff', stroke: '#111', strokeW: 5 });
-    txt(ctx, '← → keys, or drag · cover gets taken, keep moving', 640, HUD_H + 54, { size: 17, color: '#ffe600', stroke: '#111', strokeW: 3 });
+    txt(ctx, hint(this.api.engine, '← → keys, or drag · cover gets taken, keep moving', '◀ ▶ pads or drag · cover gets taken, keep moving'), 640, HUD_H + 54, { size: 17, color: '#ffe600', stroke: '#111', strokeW: 3 });
     if (this.t < 2.2) bubble(ctx, this.patX - 120, 270, 240, 56, PAT_QUOTES.wherego.text, { size: 18 });
+    if (this.api.engine.touch) drawPads(ctx);
     drawTimer(ctx, this.dur - this.t, this.dur, txt, fillR);
   }
 }

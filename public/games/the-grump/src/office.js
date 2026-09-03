@@ -96,6 +96,12 @@ export function drawHUD(ctx, S, t, muted) {
   drawMute(ctx, muted);
   ctx.restore();
 }
+// Touch thumb pads for the left/right games. padDir(p) → -1 | 1 | 0.
+export const PADS = [{ x: 100, y: 630, dir: -1, ch: '◀' }, { x: 1180, y: 630, dir: 1, ch: '▶' }];
+export function drawPads(ctx) { for (const p of PADS) { ctx.save(); ctx.globalAlpha = 0.45; fillR(ctx, p.x - 62, p.y - 62, 124, 124, 62, '#0b1220', '#ffe600', 3); ctx.globalAlpha = 0.9; txt(ctx, p.ch, p.x, p.y + 2, { size: 44, color: '#ffe600' }); ctx.restore(); } }
+export function padDir(p) { for (const q of PADS) if (Math.hypot(p.x - q.x, p.y - q.y) < 70) return q.dir; return 0; }
+// pick the hint wording for the input device
+export const hint = (engine, mouse, touch) => (engine && engine.touch ? touch : mouse);
 export function drawPause(ctx) { fillR(ctx, 1150, 22, 50, 48, 10, '#0b1220', '#374151', 2); txt(ctx, '⏸', 1175, 47, { size: 26, color: '#fff' }); }
 export function hitPause(p) { return p.x >= 1150 && p.x <= 1200 && p.y >= 22 && p.y <= 70; }
 export function drawMute(ctx, muted) { fillR(ctx, 1208, 22, 56, 48, 10, '#0b1220', '#374151', 2); txt(ctx, muted ? '🔇' : '🔊', 1236, 47, { size: 26 }); }

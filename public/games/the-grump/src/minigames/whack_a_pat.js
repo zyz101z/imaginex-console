@@ -4,7 +4,7 @@ import { W, H, rand, pick } from '../engine.js';
 import { txt, fillR, bubble, impact } from '../draw.js';
 import { HUD_H, drawOffice } from '../office.js';
 import { drawSoung, drawHeadIcon, drawCoworker } from '../characters.js';
-import { GRUMPY, PAT_QUOTES } from '../state.js';
+import { GRUMPY, PAT_QUOTES, coworkerName } from '../state.js';
 
 export const CUBES = [[640, 330], [880, 330], [1120, 330], [460, 520], [700, 520], [940, 520], [1180, 520]];
 class WhackAPat extends MiniGame {
@@ -12,7 +12,7 @@ class WhackAPat extends MiniGame {
   spawn() {
     const free = CUBES.map((c, i) => i).filter(i => !this.pops.some(p => p.cube === i)); if (!free.length) return;
     const r = Math.random(), kind = r < 0.22 ? 'coworker' : r < 0.32 ? 'bitcoin' : 'pat';
-    this.pops.push({ cube: pick(free), kind, t: 0, up: rand(1.1, 1.5) / Math.sqrt(this.diff), state: 'rise', color: pick(['#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899']), line: pick(['quick', 'gotasec', 'notbusy', 'hearmeout', 'peekaboo']) });
+    this.pops.push({ cube: pick(free), kind, t: 0, up: rand(1.1, 1.5) / Math.sqrt(this.diff), state: 'rise', color: pick(['#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899']), line: pick(['quick', 'gotasec', 'notbusy', 'hearmeout', 'peekaboo']), who: kind === 'coworker' ? coworkerName() : '' });
     if (kind === 'bitcoin') this.api.say('bitcoin'); else if (kind === 'pat' && Math.random() < 0.25) this.api.say(this.pops[this.pops.length - 1].line);
     this.api.sfx('pop');
   }
@@ -59,7 +59,7 @@ class WhackAPat extends MiniGame {
         const p = this.pops.find(q => q.cube === i); const [cx, cy] = c;
         if (p) {
           const k = this.height(p), hy = cy - 95 * k; ctx.save(); ctx.beginPath(); ctx.rect(cx - 105, 0, 210, cy + 10); ctx.clip();
-          if (p.kind === 'coworker') drawCoworker(ctx, cx, hy + 190, 0.85, { t: this.t, color: p.color });
+          if (p.kind === 'coworker') { drawCoworker(ctx, cx, hy + 190, 0.85, { t: this.t, color: p.color }); if (p.who) { fillR(ctx, cx - 50, hy - 92, 100, 24, 6, '#fff', '#111', 2); txt(ctx, p.who, cx, hy - 80, { size: 13, color: '#111' }); } }
           else { drawHeadIcon(ctx, 'pat', cx, hy, 150, p.state === 'bonked' ? 'excited' : 'happy'); }
           if (p.state === 'bonked') { txt(ctx, '💫', cx, hy - 60, { size: 40 }); }
           ctx.restore();

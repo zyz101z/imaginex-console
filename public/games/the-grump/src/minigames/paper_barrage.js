@@ -4,7 +4,7 @@
 import { MiniGame, registerMinigame, drawTimer } from './registry.js';
 import { W, H, rand, pick } from '../engine.js';
 import { txt, fillR, bubble, impact } from '../draw.js';
-import { drawOffice, HUD_H } from '../office.js';
+import { drawOffice, HUD_H, hint } from '../office.js';
 import { drawSoung, drawPat } from '../characters.js';
 import { GRUMPY, PAT_QUOTES } from '../state.js';
 
@@ -75,7 +75,7 @@ class PaperBarrage extends MiniGame {
     else if (this.t < 2.2) bubble(ctx, 740, 250, 280, 64, PAT_QUOTES.headsup.text, { tail: 'right', size: 21 });
     for (const b of this.balls) { const p = this.pos(b); ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath(); ctx.ellipse(p.x, 500, 16, 5, 0, 0, 7); ctx.fill(); this.drawBall(ctx, p.x, p.y, this.t * b.spin); }
     for (const r of this.returns) { const t = Math.min(1, r.k), x = HEAD.x + (HAND.x - HEAD.x) * t, y = HEAD.y + (HAND.y - 120 - HEAD.y) * t - Math.sin(Math.PI * t) * 120; if (!r.landed) this.drawBall(ctx, x, y, this.t * 12); }
-    txt(ctx, 'CATCH — click / SPACE when the ring is GREEN', 640, HUD_H + 24, { size: 22, color: '#fff', stroke: '#111', strokeW: 5 });
+    txt(ctx, hint(this.api.engine, 'CATCH — click / SPACE when the ring is GREEN', 'CATCH — TAP when the ring is GREEN'), 640, HUD_H + 24, { size: 22, color: '#fff', stroke: '#111', strokeW: 5 });
     txt(ctx, `${this.catches} caught · ${this.hits} hit`, 640, HUD_H + 54, { size: 16, color: '#ffe600', stroke: '#111', strokeW: 3 });
     drawTimer(ctx, this.dur - this.t, this.dur, txt, fillR);
   }

@@ -4,7 +4,8 @@ import { txt, fillR, Button, impact, IMPACT, bubble, wrapText } from '../draw.js
 import { drawOffice, drawMute, hitMute } from '../office.js';
 import { drawSoung, drawPat, drawHeadIcon } from '../characters.js';
 import { audio } from '../audio.js';
-import { fmtClock, loadBest, saveBest, PAT_QUOTES, grade } from '../state.js';
+import { fmtClock, loadBest, saveBest, PAT_QUOTES, grade, loadName, saveName } from '../state.js';
+import { TextEntry } from '../ui/textentry.js';
 
 function statRows(S) {
   return [['Minutes Survived', S.minutesSurvived], ['Meetings Declined', S.stats.meetingsDeclined], ['Slack Messages Ignored', S.stats.slackIgnored], ['Times Pat Was Avoided', S.stats.patAvoided], ['Best Win Streak', S.stats.bestStreak || 0], ['Maximum Grumpy Level', Math.round(S.stats.maxGrumpy) + '%'], ['Things Smashed', S.stats.smashed], ['SOUNG SCORE', S.score.toLocaleString()]];
@@ -15,17 +16,33 @@ function drawStats(ctx, S, x, y) {
   // report card stamp
   const [g, note] = grade(S.score); const gc = g === 'S' || g === 'A' ? '#22c55e' : g === 'D' ? '#ef4444' : '#f97316'; txt(ctx, 'REPORT CARD', x + 527, y + 34, { size: 13, color: '#9ca3af' }); ctx.save(); ctx.translate(x + 527, y + 110); ctx.rotate(-0.12); fillR(ctx, -44, -44, 88, 88, 12, 'rgba(0,0,0,0.35)', gc, 5); txt(ctx, g, 0, 2, { size: 62, color: gc, font: "'Bangers', Impact, sans-serif", weight: 400 }); ctx.restore(); wrapText(ctx, note, x + 527, y + 215, 110, 14, '#e5e7eb');
 }
-function submitScore(S, survived) {
-  const best = loadBest(); const nb = { score: Math.max(best.score, S.score), survived: best.survived + (survived ? 1 : 0), days: best.days + 1 }; saveBest(nb);
-  try { if (typeof window !== 'undefined' && window.parent && window.parent !== window) window.parent.postMessage({ type: 'imaginex-score', gameId: 'the-grump', score: S.score, nickname: 'Soung' }, '*'); else if (typeof fetch === 'function') fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname: 'Soung', gameId: 'the-grump', score: S.score }) }).catch(() => {}); } catch {}
+function recordBest(S, survived) { const best = loadBest(); const nb = { score: Math.max(best.score, S.score), survived: best.survived + (survived ? 1 : 0), days: best.days + 1 }; saveBest(nb); }
+// Posts the score under the player's nickname (asked once, saved; CHANGE re-posts under the new name).
+export function submitScore(S, name) {
+  if (!name) return;
+  try { if (typeof window !== 'undefined' && window.parent && window.parent !== window) window.parent.postMessage({ type: 'imaginex-score', gameId: 'the-grump', score: S.score, nickname: name }, '*'); else if (typeof fetch === 'function') fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nickname: name, gameId: 'the-grump', score: S.score }) }).catch(() => {}); } catch {}
+}
+// Shared nickname box for both end screens: pops the entry the first time, otherwise a small "as NAME · change" line.
+class NameBox {
+  constructor(S) { this.S = S; this.name = loadName(); this.entry = null; this.posted = false; this.btn = new Button(60, 640, 460, 34, '', { color: '#1f2937', size: 16, shadow: 2 }); if (this.name) this.post(); else this.open(false); }
+  post() { if (this.name) { submitScore(this.S, this.name); this.posted = true; } }
+  open(cancel = true) { this.entry = new TextEntry({ label: 'WHO SURVIVED? (leaderboard name)', value: this.name, y: 250, max: 14, cancel }); }
+  get active() { return !!this.entry; }
+  pointerDown(p) { if (this.entry) { const r = this.entry.pointerDown(p); this.resolve(r); return true; } if (this.btn.hit(p)) { this.open(); return true; } return false; }
+  keyDown(code) { if (!this.entry) return false; this.resolve(this.entry.keyDown(code)); return true; }
+  resolve(r) { if (r === 'ok') { this.name = this.entry.value.trim().slice(0, 14); saveName(this.name); this.entry = null; this.post(); audio.play('good'); } else if (r === 'cancel') { this.entry = null; } }
+  draw(ctx, dt) {
+    if (this.entry) { ctx.fillStyle = 'rgba(5,8,20,0.85)'; ctx.fillRect(0, 0, W, H); this.entry.draw(ctx, dt); txt(ctx, 'Your name goes on the TOP 10 board (keep it work-appropriate).', 640, 160, { size: 18, color: '#d1d5db', weight: 500 }); return; }
+    this.btn.label = this.posted ? `posted as ${this.name} · change` : 'enter a name for the leaderboard'; this.btn.draw(ctx, false);
+  }
 }
 
 export class GameOverScene {
-  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); submitScore(S, false); }
+  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); recordBest(S, false); this.nameBox = new NameBox(S); }
   enter() { audio.stopMusic(); audio.play('lose'); setTimeout(() => audio.say('grumpy'), 1200); }
   update(dt) { this.t += dt; }
-  pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) { audio.play('click'); this.game.showTitle(); } }
-  keyDown(code) { if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
+  pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.nameBox.pointerDown(p)) return; if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) { audio.play('click'); this.game.showTitle(); } }
+  keyDown(code) { if (this.nameBox.keyDown(code)) return; if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
   draw(ctx) {
     drawOffice(ctx, this.t, 'desk'); ctx.fillStyle = 'rgba(10,12,30,0.55)'; ctx.fillRect(0, 0, W, H);
     const x = Math.min(1180, 330 + this.t * 140);
@@ -35,12 +52,12 @@ export class GameOverScene {
     txt(ctx, `Clocked out at ${fmtClock(this.S.clock)}. ${this.line}`, 640, 185, { size: 22, color: '#fff', stroke: '#111', strokeW: 4 });
     drawStats(ctx, this.S, 60, 240);
     if (this.t > 1) { const q = PAT_QUOTES[this.t < 4 ? 'grumpy' : 'mentioned'].text; fillR(ctx, 700, 215, 460, 64, 12, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', 736, 247, 40); txt(ctx, 'PAT', 766, 235, { size: 14, color: '#4a154b', align: 'left' }); txt(ctx, q, 766, 259, { size: 20, color: '#111', align: 'left', weight: 500 }); }
-    this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer)); drawMute(ctx, audio.muted);
+    this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer)); this.nameBox.draw(ctx); drawMute(ctx, audio.muted);
   }
 }
 
 export class WinScene {
-  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'ANOTHER WORKDAY?', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'TITLE', { color: '#3b82f6', size: 18, shadow: 3 }); this.played = {}; submitScore(S, true); }
+  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'ANOTHER WORKDAY?', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'TITLE', { color: '#3b82f6', size: 18, shadow: 3 }); this.played = {}; recordBest(S, true); this.nameBox = null; }
   enter() { audio.stopMusic(); }
   cue(name, at, fn) { if (this.t >= at && !this.played[name]) { this.played[name] = true; fn(); } }
   update(dt) {
@@ -51,8 +68,8 @@ export class WinScene {
     this.cue('pat', 8.4, () => { audio.play('patAlarm'); setTimeout(() => audio.say('beforeyougo'), 500); });
     this.cue('freeze', 9.3, () => audio.play('horn'));
   }
-  pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.t < 9.6) { this.t = 9.6; return; } if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) this.game.showTitle(); }
-  keyDown(code) { if (this.t < 9.6) this.t = 9.6; else if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
+  pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.t < 9.6) { this.t = 9.6; return; } if (this.nameBox && this.nameBox.pointerDown(p)) return; if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) this.game.showTitle(); }
+  keyDown(code) { if (this.t < 9.6) { this.t = 9.6; return; } if (this.nameBox && this.nameBox.keyDown(code)) return; if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
   draw(ctx) {
     const t = this.t;
     drawOffice(ctx, t, 'desk');
@@ -78,6 +95,8 @@ export class WinScene {
       drawStats(ctx, this.S, 60, 160);
       txt(ctx, `+5,000 SURVIVED · Soung Score ${this.S.score.toLocaleString()}`, 860, 540, { size: 22, color: '#ffe600', stroke: '#111', strokeW: 4 });
       this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer));
+      if (!this.nameBox) { this.nameBox = new NameBox(this.S); this.nameBox.btn.y = 560; }   // the name box appears with the stats (after the cinematic)
+      this.nameBox.draw(ctx);
     }
     if (t < 9.3) txt(ctx, 'click to skip', 1180, 700, { size: 14, color: '#d1d5db', weight: 500 });
     drawMute(ctx, audio.muted);

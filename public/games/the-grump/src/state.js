@@ -107,11 +107,23 @@ export const SOUNG_VOICE = { notnow: 'soung_not_now', nobitcoin: 'soung_no_bitco
 // Lines Pat uses when he barges in before a mini-game (weighted toward the user's favorites).
 export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec', 'five', 'idea', 'meeting', 'look', 'busy', 'notbusy', 'quickcall', 'hearmeout', 'toldthem', 'mentioned'];
 
-export const BUILD = '2026-09-02v';
+export const BUILD = '2026-09-02w';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';
 export function introSeen() { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; } }
 export function markIntroSeen() { try { localStorage.setItem(INTRO_KEY, '1'); } catch {} }
+// Leaderboard nickname (asked once on the first end screen; CHANGE on the end screens).
+export const NAME_KEY = 'grump_name';
+export function loadName() { try { return (localStorage.getItem(NAME_KEY) || '').trim(); } catch { return ''; } }
+export function saveName(n) { try { localStorage.setItem(NAME_KEY, String(n).trim().slice(0, 20)); } catch {} }
+// The player's real coworkers (title → COWORKERS). They show up as hallway walkers, cover-stealers, lunch thieves, cubicle pop-ups.
+export const COWORKERS_KEY = 'grump_coworkers';
+export function loadCoworkers() { try { const a = JSON.parse(localStorage.getItem(COWORKERS_KEY) || '[]'); return Array.isArray(a) ? a.filter(s => typeof s === 'string' && s.trim()).slice(0, 8) : []; } catch { return []; } }
+export function saveCoworkers(list) { try { localStorage.setItem(COWORKERS_KEY, JSON.stringify(list.slice(0, 8))); } catch {} }
+export const GENERIC_COWORKERS = ['someone from Finance', 'the intern', 'Marketing', 'a guy from IT', 'Legal'];
+let _cw = null;
+export function coworkerName(generic = false) { if (!_cw) _cw = loadCoworkers(); const list = _cw.length ? _cw : (generic ? GENERIC_COWORKERS : []); return list.length ? list[Math.floor(Math.random() * list.length)] : ''; }
+export function refreshCoworkers() { _cw = null; }
 export function loadBest() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || { score: 0, survived: 0, days: 0 }; } catch { return { score: 0, survived: 0, days: 0 }; } }
 export function saveBest(b) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(b)); } catch {} }
