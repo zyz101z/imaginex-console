@@ -99,7 +99,7 @@ function bot(g) {
   if (s.phase === 'rage') { const it = s.rage.items.find(i => !i.bad); if (it) click(g, it.x, it.y); return; }
   if (s.phase !== 'play') return;
   const m = s.mg, id = s.def.id;
-  if (id === 'hide_and_seek') { const safe = m.covers.filter(c => c.blown <= 0 && c.warn <= 0); const side = safe.filter(c => (c.x - m.x) * (m.patX - m.x) <= 0 || Math.abs(c.x - m.x) < 60); const cands = side.length ? side : safe; cands.sort((a, b) => Math.abs(a.x - m.x) - Math.abs(b.x - m.x)); m.targetX = cands[0]?.x ?? m.x; }
+  if (id === 'hide_and_seek') { const safe = m.covers.filter(c => c.blown <= 0 && c.warn <= 0); const beamFar = x => Math.abs(x - m.patX) > 330 && ((m.patX - x) * m.beamDir > 0 || Math.abs(x - m.patX) > 520); if (m.item && beamFar(m.item.x) && beamFar(m.x)) m.targetX = m.item.x; else { const cands = safe.filter(c => beamFar(c.x) || Math.abs(c.x - m.x) < 60); (cands.length ? cands : safe).sort((a, b) => Math.abs(a.x - m.x) - Math.abs(b.x - m.x)); m.targetX = (cands.length ? cands : safe)[0]?.x ?? m.x; } }
   else if (id === 'elevator_sprint') { const ahead = m.obs.find(o => !o.hit && o.x - m.dist > 40 && o.x - m.dist < 160); if (ahead && (m.y === 0 || (m.jumps < 1 && -m.y < ahead.h + 20 && m.vy > 0))) m.jump(); }
   else if (id === 'slack_attack') { for (const b of [...m.bubbles]) click(g, b.x, b.y); }
   else if (id === 'meeting_declined') { for (const c of [...m.cards]) if (!c.important) click(g, c.x, c.y); }

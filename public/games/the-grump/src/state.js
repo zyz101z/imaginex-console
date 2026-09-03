@@ -115,7 +115,7 @@ export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec'
 export const TAUNTS = ['nexttime', 'leadership', 'goodeffort', 'retro'];
 let _lastTaunt = null;
 export function nextTaunt() { const opts = TAUNTS.filter(k => k !== _lastTaunt); _lastTaunt = opts[Math.floor(Math.random() * opts.length)]; return _lastTaunt; }
-export const BUILD = '2026-09-02z';
+export const BUILD = '2026-09-03a';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';

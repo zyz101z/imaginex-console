@@ -23,7 +23,7 @@ Slack pings are PAT's messages (`PAT_PINGS` in state.js, avatar bubbles) — 202
 Design rule from that pass: every game is continuous ACTION — move, dodge, swat, jump. No menus, no waiting.
 | id | Title | Win | Fail |
 |---|---|---|---|
-| hide_and_seek | HIDE AND SEEK | Pat sweeps a flashlight from the back counter; move (←→/drag) between 4 cover spots. Cover gets "taken" by coworkers (⚠ 0.7 s warning) so you keep relocating. Beam must linger 0.32 s to spot you ("?" meter over Pat). 0 spots = +500 | each spot +10 ("Found you!") |
+| hide_and_seek | HIDE AND SEEK (rebuilt 2026-09-02) | Pat's flashlight sweeps the floor at a CONSTANT speed (300·diff^0.6 px/s, 0.45 s pause at each end — predictable); items (🎧☕🍚📓🔌) appear on the desks BETWEEN the 4 covers: dash out, grab (+150), get back. Beam band = hit box exactly; 0.5 s to be spotted with a meter over SOUNG (HIDDEN/EXPOSED pip). A coworker parks in front of a cover only every ~3 s, never yours, 1 s ⚠ warning. 11 s. 0 spots = +500; 1 spot + ≥2 items = MOSTLY HIDDEN +200 | each spot +10 ("Found you!") |
 | slack_attack | SLACK ATTACK | swat flying notifications 10 s (+100 each); Pat is the sender on his phone | each hit +5 |
 | meeting_declined | INVITE STORM | invites rain onto the calendar strip; click RED junk to decline (+250) before it lands; let GREEN ones (Team Lunch / RKTs / Early Release) land (+150) | junk lands +15; clicking a green one +10 ("YOU DECLINED RKTs?!?!") |
 | elevator_sprint | ELEVATOR SPRINT | auto-run to the elevator; click/SPACE to jump (double-jump) wet-floor signs, chairs, boxes, carts; each trip slows you and lets Pat close the gap. Reach it = +400 | Pat catches up → +15 |
