@@ -90,6 +90,10 @@ Still Fuming, HR Complaint, Employee of the Month, Had Enough). `award(id)` is f
 `grump_medals`, and queues a gold toast (drawn under the HUD in the workday and on the end screens). Checks live in
 `WorkdayScene.checkMedals` (per mini-game stats), the rage end, and the end scenes. Title → 🎖 MEDALS n/16 wall.
 
+## Music (2026-09-02)
+User's Suno loops in `audio/music_{title,work,boss,rage}.mp3`, mapped in `CUSTOM_FILES` (audio.js) with per-track
+volumes `MUSIC_VOL` (work bed lowest so Pat's lines sit on top). Intro cues stay procedural.
+
 ## Scoring
 Pat avoided 500 · useless meeting declined 250 · Slack ignored 100 · lunch protected 1000 ·
 Full Soung Mode 2000 · smash 50 · boss 1500 · survive 5000. Best score/days in localStorage

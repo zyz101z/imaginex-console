@@ -5,7 +5,8 @@ export const CUSTOM_FILES = {
   // slack: 'audio/slack.wav', meeting: 'audio/meeting.wav', patAlarm: 'audio/pat_alarm.wav',
   // grumble: 'audio/grumble.wav', click: 'audio/click.wav', bam: 'audio/bam.wav',
   // fullSoung: 'audio/full_soung.wav', victory: 'audio/victory.wav',
-  // musicTitle: 'audio/music_title.wav', musicBoss: 'audio/music_boss.wav', musicRage: 'audio/music_rage.wav',
+  // Music: the user's Suno loops (2026-09-02). The intro's cinematic/epic/horror cues stay procedural.
+  musicTitle: 'audio/music_title.mp3', musicWork: 'audio/music_work.mp3', musicBoss: 'audio/music_boss.mp3', musicRage: 'audio/music_rage.mp3',
 };
 
 // Pat voice lines. Record MP3s and drop them in audio/ with these names — they play automatically
@@ -23,6 +24,9 @@ export const VOICE_FILES = {
   // Soung (optional)
   soung_no: 'audio/soung_no.wav', soung_ugh: 'audio/soung_ugh.wav', soung_deal_with_it: 'audio/soung_deal_with_it.wav', soung_eating: 'audio/soung_eating.wav', soung_not_today: 'audio/soung_not_today.wav', soung_leave_me_alone: 'audio/soung_leave_me_alone.wav', soung_seriously: 'audio/soung_seriously.wav', soung_not_now: 'audio/soung_not_now.wav', soung_no_bitcoin: 'audio/soung_no_bitcoin.wav', soung_go_away: 'audio/soung_go_away.wav',
 };
+
+// Per-track music volume (voice lines sit at 0.85–1.0, so keep the beds under them).
+const MUSIC_VOL = { musicTitle: 0.5, musicWork: 0.38, musicBoss: 0.5, musicRage: 0.55 };
 
 class AudioSys {
   constructor() { this.ctx = null; this.master = null; this.muted = false; this.music = null; this.musicName = null; this.htmlMusic = null; this._cache = {}; }
@@ -103,7 +107,7 @@ class AudioSys {
     this.stopMusic();
     this.musicName = name;
     if (CUSTOM_FILES[name] && typeof Audio !== 'undefined') {
-      try { this.htmlMusic = new Audio(CUSTOM_FILES[name]); this.htmlMusic.loop = true; this.htmlMusic.volume = 0.5; this.htmlMusic.muted = this.muted; this.htmlMusic.play().catch(() => {}); } catch {}
+      try { this.htmlMusic = new Audio(CUSTOM_FILES[name]); this.htmlMusic.loop = true; this.htmlMusic.volume = MUSIC_VOL[name] ?? 0.45; this.htmlMusic.muted = this.muted; this.htmlMusic.play().catch(() => {}); } catch {}
       return;
     }
     const song = SONGS[name]; if (!song || !this.ensure()) return;
