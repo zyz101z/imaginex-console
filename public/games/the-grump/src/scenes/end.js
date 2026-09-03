@@ -4,7 +4,7 @@ import { txt, fillR, Button, impact, IMPACT, bubble, wrapText } from '../draw.js
 import { drawOffice, drawMute, hitMute } from '../office.js';
 import { drawSoung, drawPat, drawHeadIcon } from '../characters.js';
 import { audio } from '../audio.js';
-import { fmtClock, loadBest, saveBest, PAT_QUOTES, grade, loadName, saveName } from '../state.js';
+import { fmtClock, loadBest, saveBest, PAT_QUOTES, grade, loadName, saveName, nextTaunt } from '../state.js';
 import { TextEntry } from '../ui/textentry.js';
 import { award, updateToasts, drawToasts } from '../medals.js';
 
@@ -39,8 +39,8 @@ class NameBox {
 }
 
 export class GameOverScene {
-  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); recordBest(S, false); this.nameBox = new NameBox(S); award('had_enough'); if (grade(S.score)[0] === 'S') award('employee_of_the_month'); }
-  enter() { audio.stopMusic(); audio.play('lose'); setTimeout(() => audio.say('grumpy'), 1200); }
+  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); recordBest(S, false); this.nameBox = new NameBox(S); this.taunt = nextTaunt(); award('had_enough'); if (grade(S.score)[0] === 'S') award('employee_of_the_month'); }
+  enter() { audio.stopMusic(); audio.play('lose'); setTimeout(() => audio.say('grumpy'), 1200); setTimeout(() => audio.say(this.taunt), 4300); }   // "Why are you so grumpy?" then the taunt
   update(dt) { this.t += dt; updateToasts(dt); }
   pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.nameBox.pointerDown(p)) return; if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) { audio.play('click'); this.game.showTitle(); } }
   keyDown(code) { if (this.nameBox.keyDown(code)) return; if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
@@ -52,7 +52,7 @@ export class GameOverScene {
     impact(ctx, 'SOUNG HAS HAD ENOUGH', 640, 120, 76, '#ff6b6b', -0.03);
     txt(ctx, `Clocked out at ${fmtClock(this.S.clock)}. ${this.line}`, 640, 185, { size: 22, color: '#fff', stroke: '#111', strokeW: 4 });
     drawStats(ctx, this.S, 60, 240);
-    if (this.t > 1) { const q = PAT_QUOTES[this.t < 4 ? 'grumpy' : 'mentioned'].text; fillR(ctx, 700, 215, 460, 64, 12, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', 736, 247, 40); txt(ctx, 'PAT', 766, 235, { size: 14, color: '#4a154b', align: 'left' }); txt(ctx, q, 766, 259, { size: 20, color: '#111', align: 'left', weight: 500 }); }
+    if (this.t > 1) { const q = PAT_QUOTES[this.t < 4 ? 'grumpy' : this.taunt].text; fillR(ctx, 700, 215, 460, 64, 12, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', 736, 247, 40); txt(ctx, 'PAT', 766, 235, { size: 14, color: '#4a154b', align: 'left' }); txt(ctx, q, 766, 259, { size: 20, color: '#111', align: 'left', weight: 500 }); }
     this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer)); this.nameBox.draw(ctx); drawToasts(ctx, txt, fillR, 660); drawMute(ctx, audio.muted);
   }
 }

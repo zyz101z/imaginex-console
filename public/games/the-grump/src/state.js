@@ -99,6 +99,11 @@ export const PAT_QUOTES = {
   thinkfast:{ text: 'Think fast!', voice: 'thinkfast' },
   catch:    { text: 'Catch!', voice: 'catch' },
   hr:       { text: 'Okay, THAT is going to HR.', voice: 'hr' },
+  // game-over taunts (user's lines, 2026-09-02) — one per loss, never the same one twice running
+  nexttime: { text: 'Maybe next time, champ.', voice: 'nexttime' },
+  leadership: { text: "I'll tell leadership you tried.", voice: 'leadership' },
+  goodeffort: { text: 'Good effort. Not great, but good.', voice: 'goodeffort' },
+  retro:    { text: 'Should we do a quick retro?', voice: 'retro' },
 };
 // What Pat's Slack pings say (Slack Attack + title screen + Full Soung Mode targets).
 export const PAT_PINGS = ['quick question', 'got a sec?', "you're not busy, right?", 'hear me out', 'jump on a quick call?', 'I added you to the meeting', "I told them you'd handle it", 'I may have mentioned your name', 'are you ignoring me?', 'ping', 'bump', '👀', 'you there?', 'lunch?', 'I have an idea', 'this should only take 5 min', 'have you heard of Bitcoin?', 'following up on my follow-up', 'circling back', '???'];
@@ -107,7 +112,10 @@ export const SOUNG_VOICE = { notnow: 'soung_not_now', nobitcoin: 'soung_no_bitco
 // Lines Pat uses when he barges in before a mini-game (weighted toward the user's favorites).
 export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec', 'five', 'idea', 'meeting', 'look', 'busy', 'notbusy', 'quickcall', 'hearmeout', 'toldthem', 'mentioned'];
 
-export const BUILD = '2026-09-02y';
+export const TAUNTS = ['nexttime', 'leadership', 'goodeffort', 'retro'];
+let _lastTaunt = null;
+export function nextTaunt() { const opts = TAUNTS.filter(k => k !== _lastTaunt); _lastTaunt = opts[Math.floor(Math.random() * opts.length)]; return _lastTaunt; }
+export const BUILD = '2026-09-02z';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';
