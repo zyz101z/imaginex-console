@@ -104,6 +104,8 @@ export const PAT_QUOTES = {
   leadership: { text: "I'll tell leadership you tried.", voice: 'leadership' },
   goodeffort: { text: 'Good effort. Not great, but good.', voice: 'goodeffort' },
   retro:    { text: 'Should we do a quick retro?', voice: 'retro' },
+  jokeq:    { text: 'How does a polar bear catch fish?', voice: 'jokeq' },   // title-screen idle joke (user's)
+  jokea:    { text: "With its bear hands.", voice: 'jokea' },
 };
 // What Pat's Slack pings say (Slack Attack + title screen + Full Soung Mode targets).
 export const PAT_PINGS = ['quick question', 'got a sec?', "you're not busy, right?", 'hear me out', 'jump on a quick call?', 'I added you to the meeting', "I told them you'd handle it", 'I may have mentioned your name', 'are you ignoring me?', 'ping', 'bump', '👀', 'you there?', 'lunch?', 'I have an idea', 'this should only take 5 min', 'have you heard of Bitcoin?', 'following up on my follow-up', 'circling back', '???'];
@@ -115,7 +117,7 @@ export const PAT_LINES = ['soung', 'soung', 'there', 'there', 'quick', 'gotasec'
 export const TAUNTS = ['nexttime', 'leadership', 'goodeffort', 'retro'];
 let _lastTaunt = null;
 export function nextTaunt() { const opts = TAUNTS.filter(k => k !== _lastTaunt); _lastTaunt = opts[Math.floor(Math.random() * opts.length)]; return _lastTaunt; }
-export const BUILD = '2026-09-03a';
+export const BUILD = '2026-09-03b';
 export const SAVE_KEY = 'grump_best';
 // Intro: the first-ever play must watch it (persisted); afterwards it's skipped and replayable from the title.
 export const INTRO_KEY = 'grump_intro_seen';

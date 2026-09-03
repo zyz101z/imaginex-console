@@ -10,15 +10,20 @@ import { MEDALS, loadMedals } from '../medals.js';
 
 export class TitleScene {
   constructor(game) { this.game = game; this.t = 0; this.notes = []; this.noteT = 1; this.start = new Button(W / 2 - 170, 520, 340, 74, 'START WORKDAY', { color: '#22c55e', size: 30 }); this.how = new Button(W / 2 - 170, 610, 200, 60, 'HOW TO PLAY', { color: '#3b82f6', size: 22 }); this.intro = new Button(W / 2 + 40, 610, 130, 60, '▶ INTRO', { color: '#7c3aed', size: 22 }); this.top = new Button(W / 2 - 170, 678, 160, 36, '🏆 TOP 10', { color: '#b45309', size: 17, shadow: 3 }); this.team = new Button(W / 2 + 10, 678, 160, 36, '👥 COWORKERS', { color: '#0e7490', size: 16, shadow: 3 }); this.team.hidden = !COWORKERS_ENABLED; this.medals = new Button(W / 2 + 10, 678, 160, 36, '🎖 MEDALS', { color: '#0e7490', size: 17, shadow: 3 }); if (COWORKERS_ENABLED) { this.medals.x = W / 2 + 190; } this.fs = new Button(20, 22, 56, 48, '⛶', { color: '#0b1220', size: 24, shadow: 0 }); this.best = loadBest(); }
-  enter() { this.t = 0; this.notes = []; }
+  enter() { this.t = 0; this.notes = []; this.idle = 0; this.joke = null; this.jokeCool = 0; }
+  // Pat tells a joke if you sit on the title long enough (18 s idle; again every ~45 s). Two beats: question, pause, punchline.
+  startJoke() { this.joke = { t: 0 }; audio.say('jokeq'); }
   update(dt) {
-    this.t += dt; this.noteT -= dt;
+    this.t += dt; this.noteT -= dt; this.idle += dt; this.jokeCool = Math.max(0, this.jokeCool - dt);
+    if (this.joke) { const j = this.joke; j.t += dt; if (!j.a && j.t >= 3.2) { j.a = true; audio.say('jokea'); } if (!j.ugh && j.t >= 5.4) { j.ugh = true; audio.say('soung_ugh'); } if (j.t > 7.5) { this.joke = null; this.jokeCool = 45; } }
+    else if (this.idle >= 18 && this.jokeCool <= 0 && this.notes.length > 1) this.startJoke();
     if (this.noteT <= 0 && this.notes.length < 14) { this.notes.push({ x: rand(120, 560), y: rand(330, 470), msg: pick(SLACK_MSGS), t: 0, rot: rand(-0.2, 0.2) }); this.noteT = rand(0.9, 1.6); if (this.notes.length > 2) audio.play('slack'); }
     for (const n of this.notes) n.t += dt;
     // Pat peeks in every ~7s
-    const cyc = this.t % 11; if (cyc < dt && this.t > 2) { this.peekLine = pick(['soung', 'there', 'lunch']); if (this.notes.length > 1) audio.say(this.peekLine); }
+    const cyc = this.t % 11; if (cyc < dt && this.t > 2 && !this.joke) { this.peekLine = pick(['soung', 'there', 'lunch']); if (this.notes.length > 1) audio.say(this.peekLine); }
   }
   pointerDown(p) {
+    this.idle = 0;
     if (hitMute(p)) { audio.toggleMute(); return; }
     audio.ensure(); audio.startMusic('musicTitle');
     if (this.start.hit(p)) { audio.play('click'); this.game.play(); }
@@ -29,14 +34,15 @@ export class TitleScene {
     else if (this.fs.hit(p)) { try { const el = document.getElementById('wrap') || document.body; if (document.fullscreenElement) document.exitFullscreen(); else (el.requestFullscreen || el.webkitRequestFullscreen).call(el); } catch {} }
     else if (this.how.hit(p)) { audio.play('click'); this.game.showHowTo(); }
   }
-  keyDown(code) { if (code === 'Enter' || code === 'Space') { audio.ensure(); this.game.play(); } }
+  keyDown(code) { this.idle = 0; if (code === 'Enter' || code === 'Space') { audio.ensure(); this.game.play(); } }
   draw(ctx) {
     drawOffice(ctx, this.t, 'desk');
     ctx.fillStyle = 'rgba(10,12,30,0.35)'; ctx.fillRect(0, 0, W, H);
     const mood = this.notes.length > 10 ? 'angry' : this.notes.length > 5 ? 'eyeroll' : 'annoyed';
     drawSoung(ctx, 330, 640, 1.05, { seated: true, mood, arms: 'typing', t: this.t, bob: true });
     for (const n of this.notes) { const k = Math.min(1, n.t / 0.2); ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(n.rot); ctx.scale(k, k); const w = n.msg.length * 10 + 70; fillR(ctx, -w / 2, -22, w, 44, 10, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', -w / 2 + 22, 0, 30); txt(ctx, n.msg, -w / 2 + 44, 1, { size: 16, color: '#111', align: 'left' }); ctx.restore(); }
-    { const cyc = this.t % 11; const k = cyc < 0.4 ? cyc / 0.4 : cyc < 3 ? 1 : cyc < 3.4 ? 1 - (cyc - 3) / 0.4 : 0; if (k > 0 && this.t > 2) { drawPat(ctx, W + 40 - 170 * k, 720, 0.85, { t: this.t, arms: 'wave', tilt: -0.3 }); if (k >= 1) bubble(ctx, W - 420, 440, 250, 70, PAT_QUOTES[this.peekLine || 'soung'].text, { tail: 'right', size: 20 }); } }
+    if (this.joke) { const j = this.joke, k = j.t < 0.4 ? j.t / 0.4 : j.t > 7.0 ? Math.max(0, 1 - (j.t - 7.0) / 0.5) : 1; drawPat(ctx, W + 40 - 190 * k, 720, 0.9, { t: this.t, arms: j.a ? 'both' : 'wave', tilt: -0.25 }); if (k >= 1) bubble(ctx, W - 470, 420, 300, 84, j.a ? PAT_QUOTES.jokea.text : PAT_QUOTES.jokeq.text, { tail: 'right', size: 21 }); if (j.ugh && j.t < 7.2) txt(ctx, 'ugh.', 330, 200, { size: 26, color: '#fff', stroke: '#111', strokeW: 4 }); }
+    else { const cyc = this.t % 11; const k = cyc < 0.4 ? cyc / 0.4 : cyc < 3 ? 1 : cyc < 3.4 ? 1 - (cyc - 3) / 0.4 : 0; if (k > 0 && this.t > 2) { drawPat(ctx, W + 40 - 170 * k, 720, 0.85, { t: this.t, arms: 'wave', tilt: -0.3 }); if (k >= 1) bubble(ctx, W - 420, 440, 250, 70, PAT_QUOTES[this.peekLine || 'soung'].text, { tail: 'right', size: 20 }); } }
     const wob = Math.sin(this.t * 2) * 0.02;
     ctx.save(); ctx.translate(840, 200); ctx.rotate(wob);
     impact(ctx, 'THE', 0, -80, 64, '#fff', -0.03);
