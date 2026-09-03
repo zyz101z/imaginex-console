@@ -15,7 +15,7 @@ export class TitleScene {
   startJoke() { this.joke = { t: 0 }; audio.say('jokeq'); }
   update(dt) {
     this.t += dt; this.noteT -= dt; this.idle += dt; this.jokeCool = Math.max(0, this.jokeCool - dt);
-    if (this.joke) { const j = this.joke; j.t += dt; if (!j.a && j.t >= 3.2) { j.a = true; audio.say('jokea'); } if (!j.ugh && j.t >= 5.4) { j.ugh = true; audio.say('soung_ugh'); } if (j.t > 7.5) { this.joke = null; this.jokeCool = 45; } }
+    if (this.joke) { const j = this.joke; j.t += dt; if (!j.a && j.t >= 3.2) { j.a = true; audio.say('jokea'); } if (!j.ha && j.t >= 6.0) { j.ha = true; audio.say('haha'); } if (!j.ugh && j.t >= 7.4) { j.ugh = true; audio.say('soung_ugh'); } if (j.t > 9.4) { this.joke = null; this.jokeCool = 45; } }
     else if (this.idle >= 18 && this.jokeCool <= 0 && this.notes.length > 1) this.startJoke();
     if (this.noteT <= 0 && this.notes.length < 14) { this.notes.push({ x: rand(120, 560), y: rand(330, 470), msg: pick(SLACK_MSGS), t: 0, rot: rand(-0.2, 0.2) }); this.noteT = rand(0.9, 1.6); if (this.notes.length > 2) audio.play('slack'); }
     for (const n of this.notes) n.t += dt;
@@ -41,7 +41,7 @@ export class TitleScene {
     const mood = this.notes.length > 10 ? 'angry' : this.notes.length > 5 ? 'eyeroll' : 'annoyed';
     drawSoung(ctx, 330, 640, 1.05, { seated: true, mood, arms: 'typing', t: this.t, bob: true });
     for (const n of this.notes) { const k = Math.min(1, n.t / 0.2); ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(n.rot); ctx.scale(k, k); const w = n.msg.length * 10 + 70; fillR(ctx, -w / 2, -22, w, 44, 10, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', -w / 2 + 22, 0, 30); txt(ctx, n.msg, -w / 2 + 44, 1, { size: 16, color: '#111', align: 'left' }); ctx.restore(); }
-    if (this.joke) { const j = this.joke, k = j.t < 0.4 ? j.t / 0.4 : j.t > 7.0 ? Math.max(0, 1 - (j.t - 7.0) / 0.5) : 1; drawPat(ctx, W + 40 - 190 * k, 720, 0.9, { t: this.t, arms: j.a ? 'both' : 'wave', tilt: -0.25 }); if (k >= 1) bubble(ctx, W - 470, 420, 300, 84, j.a ? PAT_QUOTES.jokea.text : PAT_QUOTES.jokeq.text, { tail: 'right', size: 21 }); if (j.ugh && j.t < 7.2) txt(ctx, 'ugh.', 330, 200, { size: 26, color: '#fff', stroke: '#111', strokeW: 4 }); }
+    if (this.joke) { const j = this.joke, k = j.t < 0.4 ? j.t / 0.4 : j.t > 8.9 ? Math.max(0, 1 - (j.t - 8.9) / 0.5) : 1; drawPat(ctx, W + 40 - 190 * k, 720, 0.9, { t: this.t, arms: j.a ? 'both' : 'wave', tilt: -0.25 }); if (k >= 1) bubble(ctx, W - 470, 420, 300, 84, j.ha ? PAT_QUOTES.haha.text : j.a ? PAT_QUOTES.jokea.text : PAT_QUOTES.jokeq.text, { tail: 'right', size: 21 }); if (j.ugh && j.t < 9.0) txt(ctx, 'ugh.', 330, 200, { size: 26, color: '#fff', stroke: '#111', strokeW: 4 }); }
     else { const cyc = this.t % 11; const k = cyc < 0.4 ? cyc / 0.4 : cyc < 3 ? 1 : cyc < 3.4 ? 1 - (cyc - 3) / 0.4 : 0; if (k > 0 && this.t > 2) { drawPat(ctx, W + 40 - 170 * k, 720, 0.85, { t: this.t, arms: 'wave', tilt: -0.3 }); if (k >= 1) bubble(ctx, W - 420, 440, 250, 70, PAT_QUOTES[this.peekLine || 'soung'].text, { tail: 'right', size: 20 }); } }
     const wob = Math.sin(this.t * 2) * 0.02;
     ctx.save(); ctx.translate(840, 200); ctx.rotate(wob);

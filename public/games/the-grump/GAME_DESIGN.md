@@ -195,7 +195,7 @@ one at a time, silent if the file is missing. Drop files in `audio/`:
 Soung lines installed (Voicebox "Soung" profile, 2026-09-02): ugh (replaces synth grumble), no, eating, deal_with_it, not_today, leave_me_alone, seriously (declining free food).
 
 | `pat_bitcoin.wav` / `pat_ow.wav` / `pat_peekaboo.wav` | Whack-a-Pat | 
-| `pat_joke_q.wav` / `pat_joke_a.wav` | "How does a polar bear catch fish?" … "With its bear hands." | title screen after 18 s idle (repeats every ~45 s); Soung: "ugh." |
+| `pat_joke_q.wav` / `pat_joke_a.wav` | "How does a polar bear catch fish?" … "With its bear, hands." → `pat_haha.wav` "Ha ha ha!" | title screen after 18 s idle (repeats every ~45 s); Soung: "ugh." |
 | `pat_next_time.wav` / `pat_leadership.wav` / `pat_good_effort.wav` / `pat_retro.wav` | game-over taunts (user's 4 lines; rotate, no repeats back-to-back; play ~4 s in after "Why are you so grumpy?") |
 | `pat_nice_shot.wav` / `pat_missed.wav` / `pat_show_you.wav` / `pat_so_close.wav` / `pat_fan_up.wav` | Paper Toss (first miss = "Missed! Want a hand?", repeats rotate the other three, never twice running) |
 Soung extras: not_now, go_away (bonks), no_bitcoin.

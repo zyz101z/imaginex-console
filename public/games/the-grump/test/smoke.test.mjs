@@ -80,7 +80,7 @@ const click = (g, x, y) => g.engine.scene.pointerDown({ x, y });
   g.showTitle(); click(g, W / 2 + 105, 640); check('▶ INTRO button replays it', g.state === 'intro'); run(g, 20); click(g, 100, 100); check('click skips the intro', g.state === 'workday'); }
 
 // ---- title idle joke: fires after 18 s with no input, two beats ----
-{ const g = new Game(); g.showTitle(); const sc = g.engine.scene; run(g, 17); check('no joke before 18 s idle', !sc.joke); run(g, 2); check('joke starts after 18 s idle', !!sc.joke && !sc.joke.a); run(g, 3.5); check('punchline beat', sc.joke && sc.joke.a); run(g, 5); check('joke ends + cooldown', !sc.joke && sc.jokeCool > 40); click(g, 100, 100); check('input resets idle', sc.idle === 0); }
+{ const g = new Game(); g.showTitle(); const sc = g.engine.scene; run(g, 17); check('no joke before 18 s idle', !sc.joke); run(g, 2); check('joke starts after 18 s idle', !!sc.joke && !sc.joke.a); run(g, 3.5); check('punchline beat', sc.joke && sc.joke.a); run(g, 2.5); check('laugh beat', sc.joke && sc.joke.ha); run(g, 4); check('joke ends + cooldown', !sc.joke && sc.jokeCool > 40); click(g, 100, 100); check('input resets idle', sc.idle === 0); }
 // ---- idle run: nobody touches anything → grumpy climbs → 3 rages → game over ----
 {
   const g = new Game(); g.startWorkday(); const sc = g.engine.scene; let sawRage = false, resetOk = false, phases = new Set(), seen = new Set(), maxT = 0;
