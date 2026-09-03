@@ -48,7 +48,7 @@ class PaperBarrage extends MiniGame {
     this.catches++; this.streak++; this.smirkT = 0.5; this.api.sfx('pop');
     const pts = 150 + Math.min(150, 50 * (this.streak - 1)); this.api.score(pts, this.streak > 1 ? `×${this.streak} +${pts}` : '+150', p.x, p.y - 30);
     this.api.particles.emit(p.x, p.y, { n: 8, colors: ['#fff', '#ffe600'], shape: 'circle' });
-    if (this.streak % 3 === 0) { this.returns.push({ k: 0, landed: false }); this.api.sfx('whoosh'); this.api.say(pick(['soung_not_now', 'soung_go_away'])); this.api.particles.text('RETURN FIRE!', 640, 260, { impact: true, size: 56, color: '#ffe600' }); }
+    if (this.streak % 3 === 0) { this.returnsFired = (this.returnsFired || 0) + 1; this.returns.push({ k: 0, landed: false }); this.api.sfx('whoosh'); this.api.say(pick(['soung_not_now', 'soung_go_away'])); this.api.particles.text('RETURN FIRE!', 640, 260, { impact: true, size: 56, color: '#ffe600' }); }
   }
   pointerDown() { this.catchNow(); }
   keyDown(code) { if (['Space', 'Enter', 'ArrowUp', 'KeyW'].includes(code)) this.catchNow(); }

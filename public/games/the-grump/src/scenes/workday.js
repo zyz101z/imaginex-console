@@ -9,6 +9,7 @@ import { audio } from '../audio.js';
 import { RunState, CORPORATE, PAT_LINES, PAT_QUOTES, MINUTES_PER_GAME, GRUMPY } from '../state.js';
 import { regularMinigames, specialMinigame } from '../minigames/index.js';
 import { FullSoungMode } from '../fullsoung.js';
+import { award, updateToasts, drawToasts } from '../medals.js';
 
 export class WorkdayScene {
   constructor(game) {
@@ -62,11 +63,25 @@ export class WorkdayScene {
     this.phase = 'result'; this.phaseT = r.boss ? 2.2 : 1.4; this.result = r; this.S.gamesPlayed++;
     if (r.success) audio.play('good'); else audio.play('grumble');
     // win streak: every consecutive win from the 2nd pays a growing bonus (capped) and shows a STREAK stamp
-    if (r.success && !r.boss) { this.S.streak++; this.S.stats.bestStreak = Math.max(this.S.stats.bestStreak, this.S.streak); if (this.S.streak >= 2) { r.streakBonus = Math.min(500, 100 * this.S.streak); this.S.addScore(r.streakBonus, 'STREAK'); this.phaseT += 0.3; setTimeout(() => audio.play('basket'), 500); } } else if (!r.boss) this.S.streak = 0;
+    this.checkMedals(r);
+    if (r.success && !r.boss) { this.S.streak++; this.S.stats.bestStreak = Math.max(this.S.stats.bestStreak, this.S.streak); if (this.S.streak >= 5) award('five_whole_minutes'); if (this.S.streak >= 2) { r.streakBonus = Math.min(500, 100 * this.S.streak); this.S.addScore(r.streakBonus, 'STREAK'); this.phaseT += 0.3; setTimeout(() => audio.play('basket'), 500); } } else if (!r.boss) this.S.streak = 0;
     // Pat always has a comment. Success = he feels ignored; failure = he's thrilled to have "helped".
     // Pat comments on ~2 of 3 results (he was commenting on every single one — user: "a bit much")
     if (!r.pat && !r.boss && Math.random() < 0.35) r.pat = null; else { r.pat = r.pat || (r.success ? pick(['ignoring', 'ignoring', 'busy', 'there', 'hearmeout']) : pick(['idea', 'five', 'look', 'gotasec', 'toldthem', 'saidyes', 'addedyou'])); setTimeout(() => audio.say(r.pat), 250); }
     if (r.boss && r.success) { this.phaseT = 2.4; }
+  }
+  // Achievement checks after a mini-game (see medals.js for the list)
+  checkMedals(r) {
+    const m = this.mg, id = this.def.id; if (!m) return;
+    if (id === 'slack_attack' && m.hits === 0) award('inbox_zero');
+    if (id === 'hide_and_seek' && m.caught === 0) award('never_found');
+    if (id === 'meeting_declined' && m.mistakes === 0) award('calendar_cleared');
+    if (id === 'elevator_sprint' && r.success && m.hits === 0) award('flawless_sprint');
+    if (id === 'lunch_defense' && m.steals === 0) award('sandwich_intact');
+    if (id === 'whack_a_pat') { if (m.bitcoins) award('bitcoin_denier'); if (m.hr) award('hr_complaint'); }
+    if (id === 'paper_toss' && (m.maxHot || 0) >= 3) award('nothing_but_bin');
+    if (id === 'rkt_run' && r.success && m.caught === 0) award('rkt_ninja');
+    if (id === 'paper_barrage' && m.returnsFired) award('return_to_sender');
   }
   startRage() {
     if (!this.S.rage()) { this.game.gameOver(this.S); return; }
@@ -76,6 +91,7 @@ export class WorkdayScene {
 
   update(dt) {
     if (this.paused) return;
+    updateToasts(dt);
     this.t += dt; this.particles.update(dt); this.grumpyFlash = Math.max(0, this.grumpyFlash - dt);
     if (this.heckle) { this.heckle.t += dt; if (this.heckle.t > 2.6) this.heckle = null; }
     if (this.S.pendingRage && this.phase !== 'rage') { this.startRage(); return; }
@@ -90,7 +106,7 @@ export class WorkdayScene {
         break;
       }
       case 'result': this.phaseT -= dt; if (this.phaseT <= 0) { if (this.result.boss && this.result.success) { this.S.finishDay(); this.game.win(this.S); return; } this.startTransition(); } break;
-      case 'rage': this.rage.update(dt); if (this.rage.done) { this.S.endRage(); this.rage = null; audio.startMusic('musicWork'); this.startTransition(); } break;
+      case 'rage': this.rage.update(dt); if (this.rage.done) { award(this.S.grumpy < 20 ? 'cooled_off' : 'still_fuming'); if (this.rage.patHit) award('hr_complaint'); this.S.endRage(); this.rage = null; audio.startMusic('musicWork'); this.startTransition(); } break;
     }
   }
   pointerDown(p) {
@@ -118,6 +134,7 @@ export class WorkdayScene {
     if (this.heckle && this.phase === 'play') { const h = this.heckle, k = h.t < 0.3 ? h.t / 0.3 : h.t > 2.2 ? Math.max(0, 1 - (h.t - 2.2) / 0.4) : 1; const y = HUD_H + 8 - (1 - k) * 80; ctx.save(); ctx.globalAlpha = Math.max(0, k); fillR(ctx, 800, y, 440, 64, 12, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', 836, y + 32, 40); txt(ctx, 'PAT', 866, y + 20, { size: 14, color: '#4a154b', align: 'left' }); txt(ctx, h.text, 866, y + 44, { size: 20, color: '#111', align: 'left', weight: 500 }); ctx.restore(); }
     this.particles.draw(ctx);
     drawHUD(ctx, this.S, this.t, audio.muted);
+    drawToasts(ctx, txt, fillR, HUD_H + 40);
     if (this.grumpyFlash > 0) { ctx.fillStyle = `rgba(255,0,0,${this.grumpyFlash * 0.25})`; ctx.fillRect(0, 0, W, H); }
     if (this.paused) {
       ctx.fillStyle = 'rgba(5,8,20,0.78)'; ctx.fillRect(0, 0, W, H);

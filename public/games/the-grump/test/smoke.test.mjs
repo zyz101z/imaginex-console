@@ -8,7 +8,8 @@ import { TitleScene, HowToScene } from '../src/scenes/title.js';
 import { WorkdayScene } from '../src/scenes/workday.js';
 import { IntroScene, T as INTRO_T } from '../src/scenes/intro.js';
 import { GameOverScene, WinScene } from '../src/scenes/end.js';
-import { CoworkersScene, LeaderboardScene } from '../src/scenes/extras.js';
+import { CoworkersScene, LeaderboardScene, MedalsScene } from '../src/scenes/extras.js';
+import { MEDALS, loadMedals, award } from '../src/medals.js';
 import { loadName, loadCoworkers, coworkerName, refreshCoworkers } from '../src/state.js';
 import { drawSoung, drawPat, _injectSpriteForTest } from '../src/characters.js';
 
@@ -30,6 +31,7 @@ class Game {
   showHowTo() { this.state = 'howto'; this.engine.go(new HowToScene(this)); }
   showCoworkers() { this.state = 'coworkers'; this.engine.go(new CoworkersScene(this)); }
   showLeaderboard() { this.state = 'top'; this.engine.go(new LeaderboardScene(this)); }
+  showMedals() { this.state = 'medals'; this.engine.go(new MedalsScene(this)); }
   showIntro(replay = false) { this.state = 'intro'; this.engine.go(new IntroScene(this, { mandatory: !replay && !introSeen() })); }
   play() { if (introSeen()) this.startWorkday(); else this.showIntro(); }
   startWorkday() { this.state = 'workday'; this.engine.go(new WorkdayScene(this)); }
@@ -156,11 +158,17 @@ function bot(g) {
   const g2 = new Game(); const S2 = new RunState(); S2.score = 99; g2.gameOver(S2); run(g2, 0.5); check('second time posts automatically', posts.length === 2 && !g2.engine.scene.nameBox.active);
   click(g2, 100, 657); check('"change" reopens the entry', g2.engine.scene.nameBox.active); g2.engine.scene.keyDown('Escape'); check('cancel closes it', !g2.engine.scene.nameBox.active);
   const g3 = new Game(); g3.showTitle(); click(g3, W / 2 - 90, 696); check('TOP 10 opens from the title', g3.state === 'top'); run(g3, 1); }
-// ---- coworkers: add/remove names, and the games use them ----
-{ const g = new Game(); g.showTitle(); click(g, W / 2 + 90, 696); check('COWORKERS opens from the title', g.state === 'coworkers'); const sc = g.engine.scene;
-  for (const k of ['KeyB', 'KeyO', 'KeyB']) sc.keyDown(k); sc.keyDown('Enter'); run(g, 0.2); check('coworker added + saved', loadCoworkers().length === 1 && loadCoworkers()[0] === 'BOB');
-  refreshCoworkers(); check('coworkerName() serves it', coworkerName() === 'BOB');
-  click(g, sc.chip(0).x + 10, sc.chip(0).y + 10); check('click removes it', loadCoworkers().length === 0); refreshCoworkers(); }
+// ---- coworkers are DISABLED (flag): button hidden, names never used; the screen still works if re-enabled ----
+{ const g = new Game(); g.showTitle(); click(g, W / 2 + 90, 696); check('COWORKERS button is hidden → MEDALS opens instead', g.state === 'medals'); run(g, 0.5);
+  g.showCoworkers(); const sc = g.engine.scene; for (const k of ['KeyB', 'KeyO', 'KeyB']) sc.keyDown(k); sc.keyDown('Enter'); run(g, 0.2); refreshCoworkers();
+  check('saved name is NOT served while disabled', loadCoworkers().length === 1 && coworkerName() === ''); localStorage.removeItem('grump_coworkers'); refreshCoworkers(); }
+// ---- medals: award once, persist, and the run hooks fire ----
+{ localStorage.removeItem('grump_medals'); check('award() is first-time-only', award('inbox_zero') === true && award('inbox_zero') === false && loadMedals().has('inbox_zero'));
+  check(`${MEDALS.length} medals defined`, MEDALS.length === 16);
+  const g = new Game(); const S = new RunState(); S.score = 100; g.gameOver(S); run(g, 0.5); check('game over awards HAD ENOUGH', loadMedals().has('had_enough'));
+  const S2 = new RunState(); S2.score = 30000; g.win(S2); check('win awards SURVIVOR + S grade', loadMedals().has('survivor') && loadMedals().has('employee_of_the_month'));
+  const g2 = new Game(); g2.startWorkday(); const sc = g2.engine.scene; const def = MINIGAMES.find(m => m.id === 'slack_attack'); sc.phase = 'transition'; sc.phaseT = 0; sc.chooseNext = () => def; run(g2, 2.5);
+  sc.mg.hits = 0; sc.mg.t = 99; run(g2, 0.2); check('perfect Slack Attack → INBOX ZERO toast', sc.phase === 'result' && loadMedals().has('inbox_zero')); }
 // ---- every mini-game survives random clicking for its full duration ----
 for (const def of MINIGAMES) {
   const g = new Game(); g.startWorkday(); const sc = g.engine.scene; sc.S.clock = def.special === 'boss' ? BOSS_TIME : def.special === 'lunch' ? 12 * 60 + 1 : DAY_START;

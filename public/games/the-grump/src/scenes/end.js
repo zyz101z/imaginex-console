@@ -6,6 +6,7 @@ import { drawSoung, drawPat, drawHeadIcon } from '../characters.js';
 import { audio } from '../audio.js';
 import { fmtClock, loadBest, saveBest, PAT_QUOTES, grade, loadName, saveName } from '../state.js';
 import { TextEntry } from '../ui/textentry.js';
+import { award, updateToasts, drawToasts } from '../medals.js';
 
 function statRows(S) {
   return [['Minutes Survived', S.minutesSurvived], ['Meetings Declined', S.stats.meetingsDeclined], ['Slack Messages Ignored', S.stats.slackIgnored], ['Times Pat Was Avoided', S.stats.patAvoided], ['Best Win Streak', S.stats.bestStreak || 0], ['Maximum Grumpy Level', Math.round(S.stats.maxGrumpy) + '%'], ['Things Smashed', S.stats.smashed], ['SOUNG SCORE', S.score.toLocaleString()]];
@@ -38,9 +39,9 @@ class NameBox {
 }
 
 export class GameOverScene {
-  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); recordBest(S, false); this.nameBox = new NameBox(S); }
+  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'TRY ANOTHER WORKDAY', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'MAIN MENU', { color: '#3b82f6', size: 18, shadow: 3 }); this.line = pick(['Nobody saw him leave.', 'He took the stairs.', 'His status is now: Offline. Forever.']); recordBest(S, false); this.nameBox = new NameBox(S); award('had_enough'); if (grade(S.score)[0] === 'S') award('employee_of_the_month'); }
   enter() { audio.stopMusic(); audio.play('lose'); setTimeout(() => audio.say('grumpy'), 1200); }
-  update(dt) { this.t += dt; }
+  update(dt) { this.t += dt; updateToasts(dt); }
   pointerDown(p) { if (hitMute(p)) { audio.toggleMute(); return; } if (this.nameBox.pointerDown(p)) return; if (this.btn.hit(p)) { audio.play('click'); this.game.startWorkday(); } if (this.title.hit(p)) { audio.play('click'); this.game.showTitle(); } }
   keyDown(code) { if (this.nameBox.keyDown(code)) return; if (code === 'Enter' || code === 'Space') this.game.startWorkday(); }
   draw(ctx) {
@@ -52,16 +53,16 @@ export class GameOverScene {
     txt(ctx, `Clocked out at ${fmtClock(this.S.clock)}. ${this.line}`, 640, 185, { size: 22, color: '#fff', stroke: '#111', strokeW: 4 });
     drawStats(ctx, this.S, 60, 240);
     if (this.t > 1) { const q = PAT_QUOTES[this.t < 4 ? 'grumpy' : 'mentioned'].text; fillR(ctx, 700, 215, 460, 64, 12, '#fff', '#4a154b', 3); drawHeadIcon(ctx, 'pat', 736, 247, 40); txt(ctx, 'PAT', 766, 235, { size: 14, color: '#4a154b', align: 'left' }); txt(ctx, q, 766, 259, { size: 20, color: '#111', align: 'left', weight: 500 }); }
-    this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer)); this.nameBox.draw(ctx); drawMute(ctx, audio.muted);
+    this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer)); this.nameBox.draw(ctx); drawToasts(ctx, txt, fillR, 660); drawMute(ctx, audio.muted);
   }
 }
 
 export class WinScene {
-  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'ANOTHER WORKDAY?', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'TITLE', { color: '#3b82f6', size: 18, shadow: 3 }); this.played = {}; recordBest(S, true); this.nameBox = null; }
+  constructor(game, S) { this.game = game; this.S = S; this.t = 0; this.btn = new Button(W / 2 + 90, 600, 380, 70, 'ANOTHER WORKDAY?', { color: '#22c55e', size: 26 }); this.title = new Button(W / 2 + 90, 680, 380, 34, 'TITLE', { color: '#3b82f6', size: 18, shadow: 3 }); this.played = {}; recordBest(S, true); this.nameBox = null; award('survivor'); if (grade(S.score)[0] === 'S') award('employee_of_the_month'); }
   enter() { audio.stopMusic(); }
   cue(name, at, fn) { if (this.t >= at && !this.played[name]) { this.played[name] = true; fn(); } }
   update(dt) {
-    this.t += dt;
+    this.t += dt; if (this.t > 9.6) updateToasts(dt);
     this.cue('quiet', 0, () => audio.play('tick'));
     this.cue('victory', 1.6, () => audio.play('victory'));
     this.cue('glasses', 3.6, () => { audio.play('good'); setTimeout(() => audio.say('soung_deal_with_it'), 500); });
@@ -96,7 +97,7 @@ export class WinScene {
       txt(ctx, `+5,000 SURVIVED · Soung Score ${this.S.score.toLocaleString()}`, 860, 540, { size: 22, color: '#ffe600', stroke: '#111', strokeW: 4 });
       this.btn.draw(ctx, this.btn.hit(this.game.engine.pointer)); this.title.draw(ctx, this.title.hit(this.game.engine.pointer));
       if (!this.nameBox) { this.nameBox = new NameBox(this.S); this.nameBox.btn.y = 560; }   // the name box appears with the stats (after the cinematic)
-      this.nameBox.draw(ctx);
+      this.nameBox.draw(ctx); drawToasts(ctx, txt, fillR, 660);
     }
     if (t < 9.3) txt(ctx, 'click to skip', 1180, 700, { size: 14, color: '#d1d5db', weight: 500 });
     drawMute(ctx, audio.muted);

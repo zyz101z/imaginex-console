@@ -4,7 +4,7 @@ import { loadSprites } from './characters.js';
 import { TitleScene, HowToScene } from './scenes/title.js';
 import { WorkdayScene } from './scenes/workday.js';
 import { IntroScene } from './scenes/intro.js';
-import { CoworkersScene, LeaderboardScene } from './scenes/extras.js';
+import { CoworkersScene, LeaderboardScene, MedalsScene } from './scenes/extras.js';
 import { GameOverScene, WinScene } from './scenes/end.js';
 import { introSeen } from './state.js';
 
@@ -14,6 +14,7 @@ export class Game {
   showHowTo() { this.engine.go(new HowToScene(this)); }
   showCoworkers() { this.engine.go(new CoworkersScene(this)); }
   showLeaderboard() { this.engine.go(new LeaderboardScene(this)); }
+  showMedals() { this.engine.go(new MedalsScene(this)); }
   // replay = true from the ▶ INTRO button (skippable). A first-ever player must watch it through (no skip).
   showIntro(replay = false) { this.engine.go(new IntroScene(this, { mandatory: !replay && !introSeen() })); }
   play() { if (introSeen()) this.startWorkday(); else this.showIntro(); }

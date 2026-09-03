@@ -75,12 +75,20 @@ Result banners: Pat comments on ~65% (was 100%). Title peek every 11 s (was 7). 
 - LEADERBOARD NICKNAME: first end screen pops a canvas text box + on-screen QWERTY (`src/ui/textentry.js`); saved in
   localStorage `grump_name`; later games post automatically ("posted as NAME · change" re-opens it). Score POSTs to
   /api/leaderboard as that nickname (was hard-coded "Soung"). Title → 🏆 TOP 10 fetches `?gameId=the-grump`.
-- COWORKERS: title → 👥 COWORKERS, up to 8 first names (`grump_coworkers`). They become hallway walkers
+- COWORKERS (DISABLED same day — `COWORKERS_ENABLED = false` in state.js hides the button and makes `coworkerName()` return '';
+  flip it to bring everything back): title → 👥 COWORKERS, up to 8 first names (`grump_coworkers`). They become hallway walkers
   ("NAME: Got a sec?"), cover-stealers ("NAME's spot"), lunch thieves ("NAME TOOK A BITE"), named cubicle pop-ups in
   Whack-a-Pat. `coworkerName()` in state.js; empty list = the old generic lines. Slack pings stay Pat's (user's rule).
 - TOUCH: engine.touch (touch-capable or last pointer was a finger) → ◀ ▶ thumb pads in Hallway + Hide and Seek
   (`drawPads`/`padDir` in office.js; drag still works), TAP/HOLD wording via `hint(engine, mouse, touch)`, ⛶ fullscreen
   button on the title. Not device-tested here — needs a phone report.
+
+## Medals (2026-09-02, recommendation 6)
+`src/medals.js`: 16 achievements with Pat-flavored titles (Survivor, Inbox Zero, Never Found, Calendar Cleared, Flawless
+Sprint, Sandwich Intact, Bitcoin Denier, Nothing But Bin, RKT Ninja, Return to Sender, Five Whole Minutes, Cooled Off,
+Still Fuming, HR Complaint, Employee of the Month, Had Enough). `award(id)` is first-time-only, persists in
+`grump_medals`, and queues a gold toast (drawn under the HUD in the workday and on the end screens). Checks live in
+`WorkdayScene.checkMedals` (per mini-game stats), the rage end, and the end scenes. Title → 🎖 MEDALS n/16 wall.
 
 ## Scoring
 Pat avoided 500 · useless meeting declined 250 · Slack ignored 100 · lunch protected 1000 ·
