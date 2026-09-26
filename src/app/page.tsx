@@ -582,6 +582,7 @@ const GAME_SCORE_LABELS: Record<string, string> = {
   "creature-cove": "Lifetime Gold",
   wilson: "Best Tag",
   "pig-merge-tycoon": "Farm Score",
+  "crazy-golf-kingdom": "Daily Pts",
 };
 
 function LeaderboardView() {

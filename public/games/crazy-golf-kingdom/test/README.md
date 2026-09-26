@@ -1,0 +1,13 @@
+# Crazy Golf Kingdom — tests
+
+Pure logic (no browser):
+    node test/physics.test.mjs          # 35 checks: rolling, walls, cup, lip-out, sand/ice, ramps, bumpers, water, blocks, windmill, mover, boost, teleport, cannon
+    node test/coursegen.test.mjs [N]    # ~670 checks over seeded holes in all 5 kingdoms; ghost golfer proves every hole completable
+
+Browser (real three.js scene, headless Chrome via puppeteer-core):
+    cd public/games/crazy-golf-kingdom && python3 -m http.server 8093 --bind 127.0.0.1 &
+    # puppeteer-core + chrome from ~/.cache/puppeteer; WSL lacks libasound so point LD_LIBRARY_PATH at a dir holding
+    # libasound.so.2 (copied from /snap/gnome-42-2204/*/usr/lib/x86_64-linux-gnu/libasound.so.2.0.0)
+    LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.play.js meadow   # full 9-hole career + 2P + daily through the real game loop
+    LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.shot.js candy 6 out   # screenshots title/hole/after-shot for a kingdom + hole index
+Both scripts need `puppeteer-core` resolvable (npm i puppeteer-core in the cwd).

@@ -155,4 +155,17 @@ export const games: Game[] = [
     cartridgeLabelColor: "#ffe066",
     status: "available",
   },
+  {
+    id: "crazy-golf-kingdom",
+    title: "Crazy Golf Kingdom",
+    description:
+      "Procedural mini-golf through five wild kingdoms — windmills, bumpers, cannons, portals, moving walls and cartoon guardians on holes that are never the same twice. Real 3D, drag-to-shoot, hot-seat 2 player, career stars, ball skins and a daily course leaderboard.",
+    genre: "Sports / Mini-Golf",
+    cover: "/games/crazy-golf-kingdom/cover.png",
+    url: "/games/crazy-golf-kingdom/index.html",
+    color: "#43a047",
+    cartridgeColor: "#1b5e20",
+    cartridgeLabelColor: "#ffe082",
+    status: "available",
+  },
 ];
