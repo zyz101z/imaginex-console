@@ -33,6 +33,13 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   delivered 2026-09-26 (source `D:\ImagineX\audio\golf\`) → copied to `music/`; music director in main.js
   (title loop on menus, kingdom loop per hole, 0.9 s crossfade, ducks while paused, separate 🎵 mute on HUD +
   title, autoplay retry on first gesture, save.music).
+- 2026-09-26 CONTROLS pass (user: "a bit difficult"): drag-to-shoot from ANYWHERE (no more must-start-on-ball; a miss
+  used to orbit the camera); power = screen distance (dead zone 10 px, full at 42% of the smaller screen dimension) so
+  zoom/tilt no longer change the feel; direction still floor-projected; aim angle eases toward the finger (18/s);
+  PULL (slingshot, default) / PUSH toggle (`save.aimMode`, 🎯 Aim button on title + pause); after every rest the arrow
+  re-aims at the cup; keyboard ← → slower (1.1 rad/s, Shift 0.35) and Space charge ramps 1.3 s then HOLDS (was an
+  oscillating timing bar); orbit = right-drag / two fingers / Q-E only. `test/browser.drag.js` drives real puppeteer
+  mouse drags (13 checks).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

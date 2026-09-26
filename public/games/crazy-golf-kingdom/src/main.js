@@ -21,7 +21,7 @@ const RESULT = (s, par) => s === 1 ? ['HOLE IN ONE!', 500, '⛳'] : s - par <= -
 const STARS_NEEDED = 14;
 
 // ---------- save ----------
-function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
+function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, aimMode: 'pull', holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
 function persist(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {} }
 const save = loadSave();
 const careerStars = (kid) => Object.values(save.career[kid] || {}).reduce((a, b) => a + b, 0);
@@ -85,7 +85,7 @@ const S = {
   aim: { active: false, dx: 1, dz: 0, power: 0 }, drag: null, orbit: null, flyover: null, waitingShot: true, holeOver: false, paused: false,
   keys: {}, charge: 0, charging: false, aimAngle: 0, popTimer: 0, points: [0, 0], aces: 0,
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
-  shot: null, streak: 0, idleT: 0,
+  shot: null, streak: 0, idleT: 0, aimTarget: 0,
 };
 window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
@@ -211,24 +211,23 @@ function pointerDown(px, py, button, touches) {
   if (S.screen !== 'play') return;
   if (button === 2 || touches === 2) { S.orbit = { x: px, y: py, yaw: R.cam.yaw, pitch: R.cam.pitch }; return; }
   if (!canShoot()) { S.orbit = { x: px, y: py, yaw: R.cam.yaw, pitch: R.cam.pitch, weak: true }; return; }
-  const b = currentBall(); const scr = R.worldToScreen(b.x, b.y + 0.1, b.z);
-  const near = Math.hypot(px - scr.x, py - scr.y) < Math.max(60, canvas.clientHeight * 0.09);
-  if (near) { S.drag = { x0: px, y0: py }; S.aim.active = true; S.aim.power = 0; }
-  else S.orbit = { x: px, y: py, yaw: R.cam.yaw, pitch: R.cam.pitch, weak: true };
+  S.drag = { x0: px, y0: py }; S.aim.active = true; S.aim.power = 0; S.aimTarget = S.aimAngle;
 }
 function pointerMove(px, py) {
   if (S.orbit) { S.autoFace = false; R.cam.yaw = S.orbit.yaw + (px - S.orbit.x) * 0.006; R.cam.pitch = Math.max(0.25, Math.min(1.4, S.orbit.pitch + (py - S.orbit.y) * 0.004)); return; }
   if (!S.drag) return;
-  const b = currentBall(); const f0 = R.screenToFloor(S.drag.x0, S.drag.y0, ballPlaneY()), f1 = R.screenToFloor(px, py, ballPlaneY());
+  const sd = Math.hypot(px - S.drag.x0, py - S.drag.y0); const dead = 10, full = Math.max(120, Math.min(canvas.clientWidth, canvas.clientHeight) * 0.42);
+  if (sd < dead) { S.aim.power = 0; S.aim.active = true; $('power').style.setProperty('--p', 0); return; }
+  const f0 = R.screenToFloor(S.drag.x0, S.drag.y0, ballPlaneY()), f1 = R.screenToFloor(px, py, ballPlaneY());
   if (!f0 || !f1) return;
-  const dx = f0.x - f1.x, dz = f0.z - f1.z; const d = Math.hypot(dx, dz);
-  if (d < 0.08) { S.aim.power = 0; S.aim.active = true; return; }
-  S.aim.dx = dx / d; S.aim.dz = dz / d; S.aim.power = Math.min(1, (d - 0.08) / 3.2); S.aim.active = true; S.aimAngle = Math.atan2(S.aim.dz, S.aim.dx);
+  let dx = f0.x - f1.x, dz = f0.z - f1.z; if (save.aimMode === 'push') { dx = -dx; dz = -dz; }
+  const d = Math.hypot(dx, dz) || 1; S.aimTarget = Math.atan2(dz / d, dx / d);
+  S.aim.power = Math.min(1, (sd - dead) / full); S.aim.active = true;
   $('power').style.setProperty('--p', S.aim.power); $('power').classList.add('on');
 }
 function pointerUp() {
   if (S.orbit) { S.orbit = null; }
-  if (S.drag) { S.drag = null; if (S.aim.power > 0.02 && canShoot()) doShot(S.aim.dx, S.aim.dz, S.aim.power); S.aim.active = false; S.aim.power = 0; $('power').classList.remove('on'); }
+  if (S.drag) { S.drag = null; if (S.aim.power > 0.02 && canShoot()) doShot(Math.cos(S.aimTarget), Math.sin(S.aimTarget), S.aim.power); S.aim.active = false; S.aim.power = 0; $('power').classList.remove('on'); }
 }
 function doShot(dx, dz, power) {
   const b = currentBall(); shoot(b, dx, dz, power); S.strokes[S.player]++; SFX.putt(power); S.autoFace = false; R.setPreview(null);
@@ -257,12 +256,12 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('wheel', (e) => { R.cam.dist = Math.max(3.5, Math.min(22, R.cam.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault();
-  S.keys[e.key] = true; ac();
+  S.keys[e.key] = true; if (e.shiftKey) S.keys.Shift = true; ac();
   if (e.key === ' ' && canShoot() && !S.charging) { S.charging = true; S.charge = 0; S.aim.active = true; S.aim.power = 0; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
   if (e.key === 'Escape' && S.screen === 'play') togglePause();
   if (e.key.toLowerCase() === 'r' && S.screen === 'play' && !S.flyover) { S.autoFace = true; }
 });
-window.addEventListener('keyup', (e) => { S.keys[e.key] = false; if (e.key === ' ' && S.charging) { S.charging = false; if (canShoot()) doShot(Math.cos(S.aimAngle), Math.sin(S.aimAngle), S.aim.power); S.aim.active = false; S.aim.power = 0; $('power').classList.remove('on'); } });
+window.addEventListener('keyup', (e) => { S.keys[e.key] = false; if (!e.shiftKey) S.keys.Shift = false; if (e.key === ' ' && S.charging) { S.charging = false; if (canShoot()) doShot(Math.cos(S.aimAngle), Math.sin(S.aimAngle), S.aim.power); S.aim.active = false; S.aim.power = 0; $('power').classList.remove('on'); } });
 window.addEventListener('resize', () => R.resize());
 function togglePause() { S.paused = !S.paused; $('pause').classList.toggle('on', S.paused); if (MUSIC.cur) MUSIC.cur.volume = S.paused ? MUSIC.vol * 0.35 : MUSIC.vol; }
 
@@ -284,6 +283,9 @@ window.__cgk.MUSIC = MUSIC;
 $('btnSound').textContent = save.sound ? '🔊' : '🔇';
 $('btnCam').onclick = () => { S.autoFace = true; };
 $('easyChk').onchange = (e) => { save.easy = e.target.checked; persist(save); };
+function aimLabel() { return save.aimMode === 'push' ? '🎯 Aim: PUSH toward target' : '🎯 Aim: PULL back (slingshot)'; }
+function toggleAim() { save.aimMode = save.aimMode === 'push' ? 'pull' : 'push'; persist(save); for (const el of document.querySelectorAll('.aimBtn')) el.textContent = aimLabel(); toast(save.aimMode === 'push' ? 'Drag toward where you want the ball to go' : 'Drag back like a slingshot', 1800); }
+for (const el of document.querySelectorAll('.aimBtn')) { el.textContent = aimLabel(); el.onclick = () => toggleAim(); }
 
 // ---------- main loop ----------
 function handleEvents(b) {
@@ -299,7 +301,7 @@ function handleEvents(b) {
       case 'cannon': SFX.cannon(); if (S.shot) S.shot.cannon = true; R.addShake(0.28); R.burst(b.x, b.y + 0.2, b.z, 25, [0x90a4ae, 0xffffff, 0xff9800], 2.5, 0.8, 0.8); break;
       case 'land': R.burst(b.x, b.y + 0.05, b.z, 10, [0xffffff], 1.4, 1, 0.5); break;
       case 'lipout': SFX.lipout(); if (S.shot) S.shot.lip = true; toast('😮 SO CLOSE!', 900); break;
-      case 'rest': if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
+      case 'rest': if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
     }
   }
   b.events.length = 0; return false;
@@ -312,16 +314,18 @@ function frame(now) {
     const f = S.flyover; f.t += dt; const u = Math.min(1, f.t / f.dur); const e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u;
     R.cam.tx = R.cam.sx = f.from.x + (f.to.x - f.from.x) * e; R.cam.tz = R.cam.sz = f.from.z + (f.to.z - f.from.z) * e; R.cam.ty = R.cam.sy = floorHeight(S.world, R.cam.tx, R.cam.tz) || 0;
     R.cam.yaw = f.from.yaw + (f.to.yaw - f.from.yaw) * e; R.cam.dist = 7 + Math.sin(u * Math.PI) * 4;
-    if (u >= 1) { S.flyover = null; R.cam.dist = 7; R.cam.pitch = 0.72; S.aimAngle = Math.atan2(S.world.cupZ - f.to.z, S.world.cupX - f.to.x); }
+    if (u >= 1) { S.flyover = null; R.cam.dist = 7; R.cam.pitch = 0.72; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - f.to.z, S.world.cupX - f.to.x); }
   }
   if (!S.paused && !S.flyover) {
     // keyboard aim/charge
     if (canShoot()) {
-      if (S.keys.ArrowLeft) { S.aimAngle -= dt * 1.8; S.aim.active = true; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
-      if (S.keys.ArrowRight) { S.aimAngle += dt * 1.8; S.aim.active = true; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
-      if (S.charging) { S.charge += dt; S.aim.power = (1 - Math.cos(S.charge * 2.2)) / 2; $('power').style.setProperty('--p', S.aim.power); $('power').classList.add('on'); }
+      const rot = dt * (S.keys.Shift ? 0.35 : 1.1);
+      if (S.keys.ArrowLeft) { S.aimAngle -= rot; S.aimTarget = S.aimAngle; S.aim.active = true; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
+      if (S.keys.ArrowRight) { S.aimAngle += rot; S.aimTarget = S.aimAngle; S.aim.active = true; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
+      if (S.charging) { S.charge += dt; S.aim.power = Math.min(1, S.charge / 1.3); $('power').style.setProperty('--p', S.aim.power); $('power').classList.add('on'); }
       else if (!S.drag && (S.keys.ArrowLeft || S.keys.ArrowRight)) { S.aim.power = 0; }
       else if (!S.drag) S.aim.active = S.aim.active && (S.keys.ArrowLeft || S.keys.ArrowRight) ? true : S.drag ? true : false;
+      if (S.drag) { let dd = S.aimTarget - S.aimAngle; dd = Math.atan2(Math.sin(dd), Math.cos(dd)); S.aimAngle += dd * Math.min(1, dt * 18); S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
       if (!S.drag && !S.charging && !(S.keys.ArrowLeft || S.keys.ArrowRight)) { S.aim.active = true; S.aim.power = 0; S.aim.dx = Math.cos(S.aimAngle); S.aim.dz = Math.sin(S.aimAngle); }
     }
     // physics

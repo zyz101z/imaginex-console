@@ -66,7 +66,7 @@
   @keyframes coinfly { 0% { opacity:0; transform:translateY(40px) scale(.6);} 20% { opacity:1; transform:translateY(0) scale(1.2);} 80% { opacity:1; transform:translateY(-10px) scale(1);} 100% { opacity:0; transform:translateY(-40px);} } #hPlayer { top:52px; left:50%; transform:translateX(-50%); background:#1e88e5; border-color:#90caf9; }
   .hbtn { position:absolute; pointer-events:auto; background:rgba(11,16,36,0.72); border:2px solid rgba(255,255,255,0.25); color:#fff; border-radius:12px; width:42px; height:42px; font-size:20px; cursor:pointer; }
   #btnPause { bottom:12px; right:12px; } #btnSound { bottom:12px; right:62px; } #btnMusic { bottom:12px; right:112px; } #btnCam { bottom:12px; right:162px; }
-  #power { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); width:min(60vw, 320px); height:18px; border-radius:10px; background:rgba(0,0,0,0.45); border:2px solid rgba(255,255,255,0.4); overflow:hidden; opacity:0; transition:opacity .15s; }
+  #power { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); width:min(70vw, 420px); height:26px; border-radius:10px; background:rgba(0,0,0,0.45); border:2px solid rgba(255,255,255,0.4); overflow:hidden; opacity:0; transition:opacity .15s; }
   #power.on { opacity:1; } #power::after { content:''; position:absolute; inset:0; width:calc(var(--p, 0) * 100%); background:linear-gradient(90deg,#69f0ae,#ffeb3b 60%,#ff5252); }
   #popup { position:absolute; left:50%; top:26%; transform:translate(-50%,-50%) scale(0.6); opacity:0; transition:transform .25s cubic-bezier(.2,1.6,.4,1), opacity .2s; text-align:center; }
   #popup.on { opacity:1; transform:translate(-50%,-50%) scale(1); }
@@ -117,9 +117,10 @@
   <div class="row" style="align-items:center; gap:18px">
     <span class="pill" style="position:static" id="starsTitle">★ 0/135</span>
     <button class="btn small ghost" id="btnMusicTitle">🎵 Music: ON</button>
+    <button class="btn small ghost aimBtn">🎯 Aim</button>
     <label class="pill" style="position:static; pointer-events:auto; cursor:pointer"><input type="checkbox" id="easyChk" style="transform:scale(1.3); margin-right:8px"> Easy mode (no water penalty, 20 strokes)</label>
   </div>
-  <div class="hint">Drag back from the ball to shoot · right-drag or two fingers to look around</div>
+  <div class="hint">Drag anywhere to shoot · right-drag or two fingers to look around</div>
 </div>
 
 <div class="screen" id="modes">
@@ -155,8 +156,8 @@
 <div class="screen" id="how">
   <div class="panel how">
     <h2>How to play</h2>
-    <p>🖱️ <b>Shoot:</b> press on the ball, drag <i>away</i> from where you want it to go (slingshot), release. Longer drag = harder hit.</p>
-    <p>⌨️ <b>Keyboard:</b> ← → to aim, hold <b>SPACE</b> to charge, release to hit. <b>R</b> faces the cup. <b>Q/E</b> orbit.</p>
+    <p>🖱️ <b>Shoot:</b> press anywhere and drag. Default is slingshot: drag <i>away</i> from where you want the ball to go. Prefer pushing toward the target? Flip it with the 🎯 Aim button. Longer drag = harder hit; drag back to the start to cancel.</p>
+    <p>⌨️ <b>Keyboard:</b> ← → to aim (hold <b>Shift</b> for fine steps), hold <b>SPACE</b> to charge (fills up and holds), release to hit. <b>R</b> faces the cup. <b>Q/E</b> orbit.</p>
     <p>📷 <b>Camera:</b> right-drag (or two fingers) to look around, wheel to zoom. 🎯 button re-faces the cup.</p>
     <p>⛳ <b>Rules:</b> water and the void cost a stroke. 8 strokes max per hole. Under par = more points, more coins, more stars.</p>
     <p>🎡 <b>Obstacles:</b> bumpers add speed, windmills and moving walls need timing, green arrows boost, blue rings teleport to the pink ring, cannons fire you to the yellow target, sand and syrup are slow, ice is slick, and the guardians just get in the way.</p>
@@ -177,6 +178,7 @@
   <div class="panel">
     <h2>Paused</h2>
     <div class="row"><button class="btn green" id="btnResume">RESUME</button><button class="btn ghost small" id="btnQuit">QUIT TO MENU</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn small ghost aimBtn">🎯 Aim</button></div>
   </div>
 </div>
 

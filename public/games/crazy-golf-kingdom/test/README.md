@@ -10,4 +10,5 @@ Browser (real three.js scene, headless Chrome via puppeteer-core):
     # libasound.so.2 (copied from /snap/gnome-42-2204/*/usr/lib/x86_64-linux-gnu/libasound.so.2.0.0)
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.play.js meadow   # full 9-hole career + 2P + daily through the real game loop
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.shot.js candy 6 out   # screenshots title/hole/after-shot for a kingdom + hole index
-Both scripts need `puppeteer-core` resolvable (npm i puppeteer-core in the cwd).
+    LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.drag.js   # real mouse drags: aim from anywhere, power scaling, cancel, orbit, push mode, keyboard
+All scripts need `puppeteer-core` resolvable (npm i puppeteer-core in the cwd).
