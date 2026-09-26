@@ -2,14 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <title>Crazy Golf Kingdom</title>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
 </script>
 <style>
   :root { --ink:#1b2a1e; --cream:#fff8e6; --green:#43a047; --red:#e53935; --gold:#ffca28; --sky:#8fd3ff; }
-  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1024; font-family:'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-user-select:none; user-select:none; touch-action:none; -webkit-tap-highlight-color:transparent; color:#fff; }
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b1024; font-family:'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-user-select:none; user-select:none; touch-action:none; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; overscroll-behavior:none; position:fixed; width:100%; color:#fff; }
+  button, label, .mode, .kcard, .skin { touch-action:manipulation; }
   #c { position:fixed; inset:0; width:100%; height:100%; display:block; }
   .screen { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; padding:24px; box-sizing:border-box; z-index:5; text-align:center; }
   .screen.on { display:flex; }
@@ -35,12 +37,12 @@
   h2 { margin:0 0 10px; font-size:clamp(22px,4vw,34px); font-weight:1000; letter-spacing:1px; }
   .modes { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px; width:min(90vw, 860px); }
   .mode { background:rgba(255,255,255,0.06); border:2px solid rgba(255,255,255,0.18); border-radius:18px; padding:18px 14px; cursor:pointer; color:#fff; font-family:inherit; text-align:left; transition:transform .08s, background .1s; }
-  .mode:hover { background:rgba(255,255,255,0.13); transform:translateY(-2px); }
+  @media (hover:hover) { .mode:hover { background:rgba(255,255,255,0.13); transform:translateY(-2px); } }
   .mode b { display:block; font-size:22px; margin-bottom:6px; }
   .mode small { color:#cfd8dc; font-size:14px; line-height:1.3; display:block; }
   #kingdomList { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; width:min(92vw, 980px); }
   .kcard { position:relative; border:none; border-radius:18px; padding:16px 12px 14px; cursor:pointer; color:#fff; font-family:inherit; background:linear-gradient(160deg, var(--k), color-mix(in srgb, var(--k) 55%, #000)); border-bottom:6px solid var(--w); text-align:center; transition:transform .08s; min-height:150px; }
-  .kcard:hover { transform:translateY(-3px) scale(1.02); }
+  @media (hover:hover) { .kcard:hover { transform:translateY(-3px) scale(1.02); } }
   .kcard.locked { filter:grayscale(0.85) brightness(0.55); cursor:not-allowed; }
   .kcard.locked::after { content:'🔒'; position:absolute; top:10px; right:12px; font-size:22px; }
   .kemoji { font-size:40px; line-height:1; } .kname { font-weight:1000; font-size:19px; margin-top:6px; text-shadow:0 2px 4px rgba(0,0,0,.4); } .kdesc { font-size:12.5px; color:#ffffffcc; margin-top:4px; line-height:1.25; } .kstars { margin-top:8px; font-weight:800; color:var(--gold); font-size:13px; }
@@ -65,6 +67,11 @@
   #coinFly.on { animation:coinfly 1.4s ease-out forwards; }
   @keyframes coinfly { 0% { opacity:0; transform:translateY(40px) scale(.6);} 20% { opacity:1; transform:translateY(0) scale(1.2);} 80% { opacity:1; transform:translateY(-10px) scale(1);} 100% { opacity:0; transform:translateY(-40px);} } #hPlayer { top:52px; left:50%; transform:translateX(-50%); background:#1e88e5; border-color:#90caf9; }
   .hbtn { position:absolute; pointer-events:auto; background:rgba(11,16,36,0.72); border:2px solid rgba(255,255,255,0.25); color:#fff; border-radius:12px; width:42px; height:42px; font-size:20px; cursor:pointer; }
+  html.touch .hbtn { width:48px; height:48px; font-size:22px; }
+  html.touch #btnSound { right:70px; } html.touch #btnMusic { right:128px; } html.touch #btnCam { right:186px; }
+  html.touch .btn.small { padding:12px 22px; } html.touch .pill { padding:9px 16px; }
+  .panel { -webkit-overflow-scrolling:touch; padding-bottom:calc(22px + env(safe-area-inset-bottom)); }
+  #hud .pill, .hbtn { margin-bottom:env(safe-area-inset-bottom); }
   #btnPause { bottom:12px; right:12px; } #btnSound { bottom:12px; right:62px; } #btnMusic { bottom:12px; right:112px; } #btnCam { bottom:12px; right:162px; }
   #power { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); width:min(70vw, 420px); height:26px; border-radius:10px; background:rgba(0,0,0,0.45); border:2px solid rgba(255,255,255,0.4); overflow:hidden; opacity:0; transition:opacity .15s; }
   #power.on { opacity:1; } #power::after { content:''; position:absolute; inset:0; width:calc(var(--p, 0) * 100%); background:linear-gradient(90deg,#69f0ae,#ffeb3b 60%,#ff5252); }
@@ -120,7 +127,7 @@
     <button class="btn small ghost aimBtn">🎯 Aim</button>
     <label class="pill" style="position:static; pointer-events:auto; cursor:pointer"><input type="checkbox" id="easyChk" style="transform:scale(1.3); margin-right:8px"> Easy mode (no water penalty, 20 strokes)</label>
   </div>
-  <div class="hint">Drag anywhere to shoot · right-drag or two fingers to look around</div>
+  <div class="hint">Drag anywhere to shoot · right-drag or two fingers to look around · pinch to zoom</div>
 </div>
 
 <div class="screen" id="modes">

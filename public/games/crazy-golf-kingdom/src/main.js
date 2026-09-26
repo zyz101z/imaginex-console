@@ -6,6 +6,8 @@ const maxStrokes = () => save.easy ? EASY_MAX : MAX_STROKES;
 import { GolfRenderer } from './render.mjs';
 
 const $ = (id) => document.getElementById(id);
+const IS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+if (IS_TOUCH) document.documentElement.classList.add('touch');
 const SAVE_KEY = 'cgk_save_v1';
 const SKINS = [
   { id: 'classic', name: 'Classic', base: '#ffffff', accent: '#ff5252', pattern: 'dimple', cost: 0 },
@@ -236,7 +238,7 @@ function doShot(dx, dz, power) {
 }
 function pinchState() { const pts = [...S.pointers.values()]; const [a, b] = pts; return { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; }
 canvas.addEventListener('pointerdown', (e) => {
-  ac(); S.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); canvas.setPointerCapture(e.pointerId);
+  ac(); S.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   if (S.pointers.size === 2) { // second finger: cancel any aim, start orbit+pinch
     S.drag = null; S.aim.active = false; S.aim.power = 0; $('power').classList.remove('on'); S.orbit = null;
     const p = pinchState(); S.pinch = { d0: p.d, dist0: R.cam.dist, mx: p.mx, my: p.my, yaw: R.cam.yaw, pitch: R.cam.pitch }; S.autoFace = false; return;
@@ -253,6 +255,15 @@ const endPointer = (e) => { S.pointers.delete(e.pointerId); if (S.pointers.size 
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => { S.pointers.clear(); S.pinch = null; pointerUp(); });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+for (const ev of ['touchstart', 'touchmove']) canvas.addEventListener(ev, (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (e) => { if (e.target === canvas || (e.target.closest && e.target.closest('#hud'))) { if (e.cancelable) e.preventDefault(); } }, { passive: false });
+// iOS only unlocks audio on touchend/click: resume the context + retry music there too
+for (const ev of ['touchend', 'click']) window.addEventListener(ev, () => { ac(); if (save.music && MUSIC.want && (!MUSIC.cur || MUSIC.cur.paused)) { MUSIC.cur = null; playMusic(MUSIC.want); } }, { capture: true, passive: true });
+// orientation / viewport changes (iPad split view, rotate)
+if (window.visualViewport) window.visualViewport.addEventListener('resize', () => R.resize());
+window.addEventListener('orientationchange', () => setTimeout(() => R.resize(), 300));
 canvas.addEventListener('wheel', (e) => { R.cam.dist = Math.max(3.5, Math.min(22, R.cam.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault();

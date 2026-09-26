@@ -40,6 +40,13 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   re-aims at the cup; keyboard ← → slower (1.1 rad/s, Shift 0.35) and Space charge ramps 1.3 s then HOLDS (was an
   oscillating timing bar); orbit = right-drag / two fingers / Q-E only. `test/browser.drag.js` drives real puppeteer
   mouse drags (13 checks).
+- 2026-09-26 iPAD pass: viewport maximum-scale=1 + viewport-fit=cover, body position:fixed + overscroll-behavior:none,
+  -webkit-touch-callout none, canvas/HUD touchstart+touchmove preventDefault (no rubber-band), gesturestart/change
+  preventDefault (no page pinch), audio unlock also on touchend/click (iOS), setPointerCapture try/catch, resize on
+  visualViewport/orientationchange, hover styles gated by @media (hover:hover), touch-action:manipulation on buttons,
+  `html.touch` class → 48 px HUD buttons + bigger pills, safe-area padding; renderer on touch devices: DPR ≤1.5, PCF
+  (not soft) shadows, 1536 shadow map. `test/browser.ipad.js` = Safari-UA emulation 1024×768 + 820×1180 with real CDP
+  touch drags + two-finger pinch (20 checks).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

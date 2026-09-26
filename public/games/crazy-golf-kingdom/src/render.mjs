@@ -83,15 +83,16 @@ export class GolfRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2));
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = touch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.05;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.05, 400);
     this.cam = { yaw: -0.6, pitch: 0.95, dist: 9, tx: 0, ty: 0, tz: 0, sx: 0, sy: 0, sz: 0 };
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x88aa66, 0.9); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xfff4e0, 2.2); this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048); this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.02; this.scene.add(this.sun); this.scene.add(this.sun.target);
+    this.sun.shadow.mapSize.set(touch ? 1536 : 2048, touch ? 1536 : 2048); this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.02; this.scene.add(this.sun); this.scene.add(this.sun.target);
     this.holeGroup = null; this.dynamicNodes = []; this.animNodes = []; this.particles = [];
     this.ballSkin = { base: '#ffffff', accent: '#ff5252', pattern: 'dimple' };
     this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 28, 20), new THREE.MeshStandardMaterial({ map: ballTexture(this.ballSkin), roughness: 0.45 }));
