@@ -37,8 +37,9 @@ export function compileWorld(hole) {
   const pads = [];       // {x,z,r,type:'boost'|'teleport'|'cannon', dirx,dirz,strength,tx,tz}
   const waters = [];     // circles that reset the ball {x,z,r}
 
-  const has = (x, z) => tiles.has(x + ',' + z);
-  // outer walls: every tile edge without a neighbour gets a wall segment
+  const gaps = new Set((hole.gaps || []).map(g => g.x + ',' + g.z));
+  const has = (x, z) => tiles.has(x + ',' + z) || gaps.has(x + ',' + z);
+  // outer walls: every tile edge without a neighbour gets a wall segment (gap edges stay open)
   for (const t of hole.tiles) {
     const x0 = t.x * TILE, z0 = t.z * TILE, x1 = x0 + TILE, z1 = z0 + TILE;
     if (!has(t.x, t.z - 1)) walls.push({ ax: x0, az: z0, bx: x1, bz: z0, kind: 'wall' });
@@ -64,9 +65,11 @@ export function compileWorld(hole) {
       case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: 0.3, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id }); break;
       case 'cannon': pads.push({ type: 'cannon', x: cx, z: cz, r: 0.34, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE }); break;
       case 'water': waters.push({ x: cx, z: cz, r: (o.r || 0.42) * TILE }); break;
+      case 'turntable': pads.push({ type: 'turntable', x: cx, z: cz, r: TILE * 0.48, omega: o.omega || 1.6 }); break;
+      case 'jump': pads.push({ type: 'jump', x: cx, z: cz, r: 0.36, dirx: o.dirx, dirz: o.dirz, vy: o.vy || 4.2, minSpeed: o.minSpeed || 4.6 }); break;
     }
   }
-  return { hole, tiles, walls, circles, dynamics, pads, waters, gravity: hole.gravity || 9.8,
+  return { hole, tiles, gaps, walls, circles, dynamics, pads, waters, gravity: hole.gravity || 9.8,
            teeX: (hole.tee.x + 0.5) * TILE, teeZ: (hole.tee.z + 0.5) * TILE,
            cupX: (hole.cup.x + 0.5) * TILE, cupZ: (hole.cup.z + 0.5) * TILE };
 }
@@ -105,7 +108,7 @@ export function newBall(world) {
   return { x: world.teeX, z: world.teeZ, y: floorHeight(world, world.teeX, world.teeZ), vx: 0, vz: 0, vy: 0,
            airborne: false, resting: true, lastX: world.teeX, lastZ: world.teeZ, inCup: false,
            rotAxisX: 0, rotAxisZ: 0, spin: 0, cannonT: 0, cannonFrom: null, cannonTo: null, cannonY: 0,
-           teleportCooldown: 0, events: [] };
+           teleportCooldown: 0, air: false, vy0: 0, jumpCooldown: 0, events: [] };
 }
 
 export function shoot(ball, dirx, dirz, power) {
@@ -174,6 +177,15 @@ export function step(world, ball, t, dt = STEP) {
   }
   if (ball.resting) return;
   if (ball.teleportCooldown > 0) ball.teleportCooldown -= dt;
+  if (ball.jumpCooldown > 0) ball.jumpCooldown -= dt;
+  // --- airborne: ballistic flight, nothing on the ground can touch it ---
+  if (ball.air) {
+    ball.vy -= world.gravity * dt; ball.x += ball.vx * dt; ball.z += ball.vz * dt; ball.y += ball.vy * dt;
+    const fh = floorHeight(world, ball.x, ball.z);
+    if (isFinite(fh)) { if (ball.y <= fh && ball.vy <= 0) { ball.y = fh; ball.vy = 0; ball.air = false; ball.vx *= 0.85; ball.vz *= 0.85; ball.events.push({ type: 'land' }); } }
+    else if (ball.y < -1.2) { ball.air = false; ball.vy = 0; resetBall(world, ball, 'gap'); }
+    return;
+  }
 
   const g = world.gravity;
   // --- slope acceleration ---
@@ -186,6 +198,11 @@ export function step(world, ball, t, dt = STEP) {
       ball.vx += p.dirx * p.strength * dt * 3; ball.vz += p.dirz * p.strength * dt * 3;
       const sp = len(ball.vx, ball.vz); if (sp > MAX_SHOT) { ball.vx *= MAX_SHOT / sp; ball.vz *= MAX_SHOT / sp; }
       if (!ball._boosting) { ball.events.push({ type: 'boost' }); ball._boosting = true; }
+    }
+  }
+  for (const p of world.pads) {
+    if (p.type === 'turntable') {
+      const rx = ball.x - p.x, rz = ball.z - p.z; if (len(rx, rz) < p.r) { const svx = -rz * p.omega, svz = rx * p.omega; const k = Math.min(1, dt * 4); ball.vx += (svx - ball.vx) * k; ball.vz += (svz - ball.vz) * k; if (!ball._spinning) { ball.events.push({ type: 'turntable' }); ball._spinning = true; } }
     }
   }
   // --- friction ---
@@ -241,6 +258,11 @@ export function step(world, ball, t, dt = STEP) {
     if (len(ball.x - p.x, ball.z - p.z) > p.r) continue;
     if (p.type === 'teleport' && ball.teleportCooldown <= 0) {
       ball.x = p.tx; ball.z = p.tz; ball.teleportCooldown = 0.6; ball.events.push({ type: 'teleport' });
+    } else if (p.type === 'jump' && ball.jumpCooldown <= 0) {
+      const sp = len(ball.vx, ball.vz); const along = (ball.vx * p.dirx + ball.vz * p.dirz);
+      if (along > 0.3) { // launched in the pad's direction; slow balls get a helping push to the minimum
+        const s2 = Math.max(sp, p.minSpeed); ball.vx = p.dirx * s2; ball.vz = p.dirz * s2; ball.vy = p.vy * Math.sqrt(world.gravity / 9.8); ball.air = true; ball.jumpCooldown = 1.0; ball.events.push({ type: 'jump' }); return;
+      }
     } else if (p.type === 'cannon') {
       ball.cannonFrom = { x: p.x, z: p.z }; ball.cannonTo = { x: p.tx, z: p.tz }; ball.cannonT = 0; ball.cannonY = floorHeight(world, p.x, p.z);
       ball.events.push({ type: 'cannon' }); return;
@@ -263,14 +285,16 @@ export function step(world, ball, t, dt = STEP) {
   } else if (cd > CUP_R * 2) ball._lip = false;
   // --- rolling: rest detection ---
   const [gx2, gz2] = gradient(world, ball.x, ball.z);
-  const onSlope = len(gx2, gz2) > 0.05;
+  let onSlope = len(gx2, gz2) > 0.05;
+  for (const p of world.pads) if (p.type === 'turntable' && len(ball.x - p.x, ball.z - p.z) < p.r) onSlope = true;
+  if (!world.pads.some(p => p.type === 'turntable' && len(ball.x - p.x, ball.z - p.z) < p.r)) ball._spinning = false;
   if (spd < REST_SPEED && !onSlope) { ball.vx = ball.vz = 0; ball.resting = true; ball._boosting = false; ball.events.push({ type: 'rest' }); }
   else if (spd < REST_SPEED * 0.4 && onSlope) { /* let gravity take it */ }
 }
 
 export function resetBall(world, ball, reason) {
   ball.x = ball.lastX; ball.z = ball.lastZ; ball.y = floorHeight(world, ball.x, ball.z);
-  ball.vx = ball.vz = 0; ball.resting = true; ball.penalty = (ball.penalty || 0) + 1;
+  ball.vx = ball.vz = 0; ball.vy = 0; ball.air = false; ball.resting = true; ball.penalty = (ball.penalty || 0) + 1;
   ball.events.push({ type: 'reset', reason });
 }
 

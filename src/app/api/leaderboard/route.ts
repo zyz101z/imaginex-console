@@ -24,9 +24,10 @@ function key(gameId: string) {
   return `imaginex:leaderboard:${gameId}`;
 }
 
-// Rotating per-day boards (Tank Wars DAILY STORM): tank-wars-daily-YYYYMMDD.
+// Rotating per-day boards: tank-wars-daily-YYYYMMDD (Tank Wars DAILY STORM) and
+// crazy-golf-ace-daily-YYYYMMDD (Crazy Golf Kingdom SHOT OF THE DAY).
 // Excluded from the all-games aggregate; keys expire on the write side.
-const DAILY_ID = /^tank-wars-daily-\d{8}$/;
+const DAILY_ID = /^(tank-wars|crazy-golf-ace)-daily-\d{8}$/;
 // Lifetime co-op duo board (Tank Wars CO-OP STORM): excluded from the aggregate,
 // never expires. Nicknames are "HOST + GUEST" duo strings.
 const COOP_ID = "tank-wars-coop";

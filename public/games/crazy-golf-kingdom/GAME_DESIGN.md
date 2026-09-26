@@ -47,6 +47,16 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   `html.touch` class → 48 px HUD buttons + bigger pills, safe-area padding; renderer on touch devices: DPR ≤1.5, PCF
   (not soft) shadows, 1536 shadow map. `test/browser.ipad.js` = Safari-UA emulation 1024×768 + 820×1180 with real CDP
   touch drags + two-finger pinch (20 checks).
+- 2026-09-26 "1-3-5" pass: ⛳ SHOT OF THE DAY (`generateAceHole`, seeded per UTC day, difficulty 1-3; 3 balls, ball
+  resets to tee after each miss; ace = 300/200/100 pts by ball, miss = 50−10·closest m; coins = pts/5; per-day board
+  `crazy-golf-ace-daily-YYYYMMDD` (route.ts DAILY_ID regex extended, 3-day TTL; in-game top-10 + name entry
+  `save.name`); mode card on the modes screen w/ today's best) · NEW OBSTACLES: TURNTABLE (rotating floor disc,
+  physics pulls ball velocity toward the disc's surface velocity, never rests on it; Candy/Castle/Space) and
+  JUMP PAD + GAP (pad tile → missing tile → landing tile; ballistic flight ignores walls, lands on floor, void = reset;
+  slow balls get a minimum launch; gap edges have no walls; dark pit rendered; chevron plate + landing ring; Dino/
+  Space/Meadow; "AIR MAIL" +100 trick) · BALL SKIN PERSONALITY: per-skin trail colour, glow, particles (sparkle/
+  fire/bubbles/hearts) and a drop sound (chime/vroom/goal horn/twinkle/giggle/pop/roar), blurbs in the shop.
+  Tests: physics 42, coursegen ~670 (jumps bridge the connectivity check), `test/browser.ace.js` (14 checks).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

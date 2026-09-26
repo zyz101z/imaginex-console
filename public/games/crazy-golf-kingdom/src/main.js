@@ -1,5 +1,5 @@
 // CRAZY GOLF KINGDOM — game controller: modes, input, HUD, save, audio.
-import { KINGDOMS, kingdomById, generateCourse, generateDaily, dailySeed } from './coursegen.mjs';
+import { KINGDOMS, kingdomById, generateCourse, generateDaily, generateAceHole, dailySeed } from './coursegen.mjs';
 import { compileWorld, newBall, shoot, step, STEP, MAX_STROKES, floorHeight, TILE } from './physics.mjs';
 const EASY_MAX = 20;
 const maxStrokes = () => save.easy ? EASY_MAX : MAX_STROKES;
@@ -10,14 +10,14 @@ const IS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window
 if (IS_TOUCH) document.documentElement.classList.add('touch');
 const SAVE_KEY = 'cgk_save_v1';
 const SKINS = [
-  { id: 'classic', name: 'Classic', base: '#ffffff', accent: '#ff5252', pattern: 'dimple', cost: 0 },
-  { id: 'sunny', name: 'Sunny', base: '#ffeb3b', accent: '#ff9800', pattern: 'dimple', cost: 150 },
-  { id: 'stripe', name: 'Racer', base: '#ffffff', accent: '#e53935', pattern: 'stripe', cost: 250 },
-  { id: 'soccer', name: 'Striker', base: '#ffffff', accent: '#212121', pattern: 'soccer', cost: 350 },
-  { id: 'stars', name: 'Starry', base: '#3f51b5', accent: '#fff176', pattern: 'stars', cost: 500 },
-  { id: 'eyes', name: 'Buddy', base: '#ffffff', accent: '#000000', pattern: 'eyes', cost: 700 },
-  { id: 'mint', name: 'Mint', base: '#a5ffd6', accent: '#00bfa5', pattern: 'dimple', cost: 400 },
-  { id: 'flame', name: 'Inferno', base: '#ff6f00', accent: '#ffd54f', pattern: 'flame', cost: 1200 },
+  { id: 'classic', name: 'Classic', base: '#ffffff', accent: '#ff5252', pattern: 'dimple', cost: 0, blurb: 'The original.' },
+  { id: 'sunny', name: 'Sunny', base: '#ffeb3b', accent: '#ff9800', pattern: 'dimple', cost: 150, trail: '#ffeb3b', particle: 'sparkle', glow: 0x6d4c00, sfx: 'chime', blurb: 'Golden sparkle trail.' },
+  { id: 'stripe', name: 'Racer', base: '#ffffff', accent: '#e53935', pattern: 'stripe', cost: 250, trail: '#e53935', sfx: 'vroom', blurb: 'Red racing stripe, engine rev on the drop.' },
+  { id: 'soccer', name: 'Striker', base: '#ffffff', accent: '#212121', pattern: 'soccer', cost: 350, trail: '#ffffff', sfx: 'goal', blurb: 'GOAL horn when it drops.' },
+  { id: 'stars', name: 'Starry', base: '#3f51b5', accent: '#fff176', pattern: 'stars', cost: 500, trail: '#fff176', particle: 'sparkle', glow: 0x1a237e, sfx: 'twinkle', blurb: 'Leaves stardust behind.' },
+  { id: 'eyes', name: 'Buddy', base: '#ffffff', accent: '#000000', pattern: 'eyes', cost: 700, trail: '#ff4081', particle: 'hearts', sfx: 'giggle', blurb: 'Giggles when it drops. Hearts everywhere.' },
+  { id: 'mint', name: 'Mint', base: '#a5ffd6', accent: '#00bfa5', pattern: 'dimple', cost: 400, trail: '#64ffda', particle: 'bubbles', sfx: 'pop', blurb: 'Bubbly, minty, fresh.' },
+  { id: 'flame', name: 'Inferno', base: '#ff6f00', accent: '#ffd54f', pattern: 'flame', cost: 1200, trail: '#ff9100', particle: 'fire', glow: 0xbf360c, sfx: 'roar', blurb: 'On fire. Literally.' },
 ];
 const RESULT = (s, par) => s === 1 ? ['HOLE IN ONE!', 500, '⛳'] : s - par <= -2 ? ['EAGLE!', 350, '🦅'] : s - par === -1 ? ['BIRDIE!', 200, '🐦'] : s === par ? ['PAR', 100, '👍'] : s - par === 1 ? ['BOGEY', 50, '😅'] : ['+' + (s - par), 10, '😬'];
 const STARS_NEEDED = 14;
@@ -45,6 +45,15 @@ const SFX = {
   bumper: () => { tone(520, 0.12, 'square', 0.18, 300); tone(780, 0.1, 'sine', 0.12, 0, 0.05); },
   model: () => { tone(260, 0.1, 'triangle', 0.18, -120); },
   cup: () => { tone(880, 0.12, 'sine', 0.25); tone(1320, 0.25, 'sine', 0.2, 0, 0.1); },
+  skin: (kind) => { switch (kind) {
+    case 'chime': [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 0.3, 'sine', 0.14, 0, i * 0.07)); break;
+    case 'vroom': tone(90, 0.5, 'sawtooth', 0.22, 260); tone(180, 0.4, 'square', 0.08, 300, 0.1); break;
+    case 'goal': [440, 440, 440, 587].forEach((f, i) => tone(f, i === 3 ? 0.5 : 0.14, 'sawtooth', 0.16, 0, i * 0.16)); noise(0.5, 0.06, 0.5); break;
+    case 'twinkle': for (let i = 0; i < 7; i++) tone(1400 + Math.random() * 1600, 0.12, 'sine', 0.09, 0, i * 0.06); break;
+    case 'giggle': [700, 900, 760, 980, 820, 1050].forEach((f, i) => tone(f, 0.09, 'triangle', 0.16, 120, i * 0.09)); break;
+    case 'pop': for (let i = 0; i < 5; i++) tone(500 + i * 90, 0.06, 'sine', 0.15, 400, i * 0.08); break;
+    case 'roar': noise(0.6, 0.25); tone(70, 0.6, 'sawtooth', 0.25, -30); tone(140, 0.5, 'square', 0.08, -60, 0.05); break;
+  } },
   fanfare: (n) => { const notes = [523, 659, 784, 1047, 1319]; for (let i = 0; i < Math.min(n, 5); i++) tone(notes[i], 0.25, 'triangle', 0.18, 0, i * 0.11); },
   water: () => { tone(300, 0.3, 'sine', 0.2, -220); noise(0.25, 0.12); },
   boost: () => { tone(400, 0.25, 'sawtooth', 0.12, 700); },
@@ -89,7 +98,7 @@ const S = {
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
   shot: null, streak: 0, idleT: 0, aimTarget: 0,
 };
-window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
+window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title'); }
@@ -97,6 +106,7 @@ function renderTitle() { $('coinsTitle').textContent = save.coins; const tot = K
 function renderModes() {
   const d = new Date(); const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   $('dailyInfo').textContent = save.dailyBest[key] != null ? `Today's best: ${save.dailyBest[key]} pts` : 'One scored attempt per day';
+  const ab = (save.aceBest || {})[aceKey()]; $('aceInfo').textContent = ab != null ? `Today's best: ${ab} pts` : 'Ace it in 3 balls · daily board';
 }
 function renderKingdoms() {
   const box = $('kingdomList'); box.innerHTML = '';
@@ -112,13 +122,47 @@ function renderShop() {
   $('shopCoins').textContent = save.coins; const box = $('skinList'); box.innerHTML = '';
   for (const sk of SKINS) {
     const owned = save.skins.includes(sk.id); const el = document.createElement('button'); el.className = 'skin' + (save.skin === sk.id ? ' sel' : '');
-    el.innerHTML = `<span class="sw" style="background:${sk.base};border-color:${sk.accent}">${sk.pattern === 'eyes' ? '👀' : sk.pattern === 'stars' ? '✨' : sk.pattern === 'flame' ? '🔥' : sk.pattern === 'soccer' ? '⚽' : sk.pattern === 'stripe' ? '🏁' : ''}</span><b>${sk.name}</b><small>${owned ? (save.skin === sk.id ? 'equipped' : 'owned') : sk.cost + ' 🪙'}</small>`;
+    el.innerHTML = `<span class="sw" style="background:${sk.base};border-color:${sk.accent}">${sk.pattern === 'eyes' ? '👀' : sk.pattern === 'stars' ? '✨' : sk.pattern === 'flame' ? '🔥' : sk.pattern === 'soccer' ? '⚽' : sk.pattern === 'stripe' ? '🏁' : ''}</span><b>${sk.name}</b><em>${sk.blurb || ''}</em><small>${owned ? (save.skin === sk.id ? 'equipped' : 'owned') : sk.cost + ' 🪙'}</small>`;
     el.onclick = () => { if (!owned) { if (save.coins < sk.cost) { toast('Not enough coins'); return; } save.coins -= sk.cost; save.skins.push(sk.id); SFX.coin(); } save.skin = sk.id; R.setSkin(sk); persist(save); renderShop(); };
     box.appendChild(el);
   }
 }
 function toast(msg, ms = 1400) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), ms); }
 
+// ---------- Shot of the Day: one hole, three balls, ace it ----------
+const ACE_POINTS = [300, 200, 100];
+function aceKey() { const d = new Date(); return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); }
+function aceId() { return 'crazy-golf-ace-daily-' + aceKey(); }
+async function startAce() {
+  S.mode = 'ace'; S.players = 1; S.kingdom = 'meadow'; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.streak = 0; S.aces = 0;
+  S.course = [generateAceHole(new Date())]; S.ace = { attempt: 0, best: Infinity, done: false, aced: 0 };
+  show('play'); await loadHole(0); updateHud();
+}
+function aceAfterRest(b) {
+  const a = S.ace; if (!a || a.done) return;
+  if (b.inCup) { a.aced = a.attempt; a.done = true; const pts = ACE_POINTS[a.attempt - 1] || 100; S.points[0] = pts; save.coins += Math.round(pts / 5); persist(save); popup(`⛳ ACE!`, `Ball ${a.attempt} of 3 · +${pts} pts`, 2200); SFX.fanfare(5); setTimeout(() => finishAce(pts), 2300); return; }
+  const d = Math.hypot(b.x - S.world.cupX, b.z - S.world.cupZ); a.best = Math.min(a.best, d);
+  if (a.attempt >= 3) { a.done = true; const pts = Math.max(0, Math.round(50 - a.best * 10)); S.points[0] = pts; save.coins += Math.round(pts / 5); persist(save); popup('😬 NO ACE', `Closest: ${a.best.toFixed(2)} m · +${pts} pts`, 2000); setTimeout(() => finishAce(pts), 2100); return; }
+  toast(`Ball ${a.attempt} missed by ${d.toFixed(2)} m — ${3 - a.attempt} left`, 1600);
+  // reset to the tee for the next ball
+  b.x = S.world.teeX; b.z = S.world.teeZ; b.y = floorHeight(S.world, b.x, b.z); b.vx = b.vz = 0; b.resting = true; b.lastX = b.x; b.lastZ = b.z; S.autoFace = true; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); updateHud();
+}
+function finishAce(pts) {
+  const k = aceKey(); save.aceBest = save.aceBest || {}; const prev = save.aceBest[k]; const isBest = prev == null || pts > prev; if (isBest) save.aceBest[k] = pts; persist(save);
+  $('scoreHead').textContent = S.ace.aced ? `ACE ON BALL ${S.ace.aced}! · ${pts} pts` : `NO ACE · ${pts} pts`;
+  $('scoreTable').innerHTML = `<tr><th>Shot of the Day</th><th>${S.K.emoji} ${S.K.name}</th></tr><tr><td>Result</td><td>${S.ace.aced ? '⛳ ace on ball ' + S.ace.aced : 'closest ' + S.ace.best.toFixed(2) + ' m'}</td></tr><tr><td>Points</td><td><b>${pts}</b>${isBest && prev != null ? ' (new best)' : ''}</td></tr>`;
+  $('scoreExtra').innerHTML = '<div id="aceBoard" class="hint">Loading today\'s board…</div>';
+  show('scorecard'); $('btnAgain').textContent = 'TRY AGAIN';
+  postAce(isBest ? pts : null);
+}
+function nameFor() { return (save.name || '').trim().slice(0, 16); }
+function postAce(pts) {
+  const box = $('aceBoard'); const render = (rows) => { if (!rows) { box.textContent = 'Board unavailable offline.'; return; }
+    box.innerHTML = `<b style="color:#ffe082">Today's top 10</b><div style="display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;text-align:left;margin:6px auto 0;max-width:320px">` + (rows.slice(0, 10).map((r, i) => `<span>${i + 1}.</span><span style="${r.nickname === nameFor() ? 'color:#ffd166;font-weight:800' : ''}">${String(r.nickname).slice(0, 16)}</span><span>${r.score}</span>`).join('') || '<span></span><span>No aces yet — be first!</span><span></span>') + '</div>' + (nameFor() ? '' : `<div style="margin-top:8px">Post your score: <input id="aceName" maxlength="16" placeholder="your name" style="padding:6px 10px;border-radius:8px;border:1px solid #888;background:#0b1024;color:#fff"> <button class="btn small ghost" id="aceNameBtn">POST</button></div>`); 
+    const nb = $('aceNameBtn'); if (nb) nb.onclick = () => { const v = ($('aceName').value || '').trim().slice(0, 16); if (!v) return; save.name = v; persist(save); postAce(save.aceBest[aceKey()]); }; };
+  const fetchBoard = () => fetch('/api/leaderboard?gameId=' + aceId()).then(r => r.ok ? r.json() : []).then(rows => render(Array.isArray(rows) ? rows : [])).catch(() => render(null));
+  if (pts != null && nameFor() && pts > 0) fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: aceId(), nickname: nameFor(), score: pts }) }).catch(() => {}).finally(fetchBoard); else fetchBoard();
+}
 // ---------- round flow ----------
 async function startRound(mode, kingdom) {
   S.mode = mode; S.kingdom = kingdom; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.aces = 0; S.streak = 0;
@@ -135,7 +179,7 @@ async function loadHole(i) {
   // flyover: cup → tee
   const b = S.balls[0]; R.snapToBall({ x: S.world.cupX, y: floorHeight(S.world, S.world.cupX, S.world.cupZ), z: S.world.cupZ }); R.cam.dist = 7; R.cam.pitch = 0.9; R.faceCup(b, S.world); R.cam.yaw += 0.6;
   S.flyover = { t: 0, dur: 2.4, from: { x: S.world.cupX, z: S.world.cupZ, yaw: R.cam.yaw }, to: { x: b.x, z: b.z, yaw: Math.atan2(b.z - S.world.cupZ, b.x - S.world.cupX) } };
-  popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
+  if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
 }
 function currentBall() { return S.balls[S.player]; }
 function nextPlayer() {
@@ -152,7 +196,7 @@ function finishBall(p, holed) {
   if (holed && sh) {
     const dist = Math.hypot(S.world.cupX - sh.x0, S.world.cupZ - sh.z0);
     if (sh.walls >= 2) tricks.push(['🎱 BANK SHOT', 75]); if (sh.bumpers >= 3) tricks.push(['🔴 BUMPER BUSTER', 100]); if (dist > 9) tricks.push(['🚀 LONG BOMB', 100]);
-    if (sh.lip) tricks.push(['🍀 LUCKY LIP', 50]); if (sh.tele) tricks.push(['🌀 PORTAL PUTT', 75]); if (sh.cannon) tricks.push(['💥 CANNONBALL', 75]);
+    if (sh.lip) tricks.push(['🍀 LUCKY LIP', 50]); if (sh.tele) tricks.push(['🌀 PORTAL PUTT', 75]); if (sh.cannon) tricks.push(['💥 CANNONBALL', 75]); if (sh.jump) tricks.push(['🦘 AIR MAIL', 100]);
   }
   for (const [, v] of tricks) pts += v;
   // streak: consecutive holes at or under par (solo modes)
@@ -196,7 +240,7 @@ function dailyKey() { const d = new Date(); return d.getUTCFullYear() + '-' + (d
 
 // ---------- HUD ----------
 function updateHud() {
-  $('hHole').textContent = `Hole ${S.holeIdx + 1}/${S.course.length}`; $('hPar').textContent = `Par ${S.hole.par}`;
+  $('hHole').textContent = S.mode === 'ace' ? `Shot of the Day` : `Hole ${S.holeIdx + 1}/${S.course.length}`; $('hPar').textContent = S.mode === 'ace' ? `Ball ${Math.min(3, (S.ace ? S.ace.attempt : 0) + 1)}/3` : `Par ${S.hole.par}`;
   $('hStrokes').textContent = S.players === 2 ? `P1 ${S.strokes[0]} · P2 ${S.strokes[1]}` : `Strokes ${S.strokes[0]}`;
   $('hPlayer').textContent = S.players === 2 ? `Player ${S.player + 1}` : ''; $('hPlayer').style.display = S.players === 2 ? '' : 'none';
   $('hKing').textContent = `${S.K.emoji} ${S.K.name}${save.easy ? ' · EASY' : ''}`;
@@ -233,7 +277,7 @@ function pointerUp() {
 }
 function doShot(dx, dz, power) {
   const b = currentBall(); shoot(b, dx, dz, power); S.strokes[S.player]++; SFX.putt(power); S.autoFace = false; R.setPreview(null);
-  S.shot = { x0: b.x, z0: b.z, walls: 0, bumpers: 0, lip: false, tele: false, cannon: false }; S.idleT = 0; updateHud();
+  S.shot = { x0: b.x, z0: b.z, walls: 0, bumpers: 0, lip: false, tele: false, cannon: false, jump: false }; S.idleT = 0; if (S.mode === 'ace' && S.ace) S.ace.attempt++; updateHud();
   R.burst(b.x, b.y + 0.05, b.z, 8, [0xffffff, 0xdddddd], 1.2, 1, 0.5);
 }
 function pinchState() { const pts = [...S.pointers.values()]; const [a, b] = pts; return { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; }
@@ -282,7 +326,8 @@ $('btnShop').onclick = () => { SFX.click(); renderShop(); show('shop'); };
 $('btnHow').onclick = () => { SFX.click(); show('how'); };
 for (const el of document.querySelectorAll('[data-back]')) el.onclick = () => { SFX.click(); renderTitle(); show(el.dataset.back); };
 for (const el of document.querySelectorAll('[data-mode]')) el.onclick = () => { SFX.click(); S.mode = el.dataset.mode; S.players = el.dataset.players ? Number(el.dataset.players) : 1; if (S.mode === 'daily') startRound('daily', 'meadow'); else { renderKingdoms(); $('kingTitle').textContent = S.mode === 'career' ? 'Career — pick a kingdom' : S.players === 2 ? '2 Players — pick a kingdom' : 'Quick Round — pick a kingdom'; show('kingdoms'); } };
-$('btnAgain').onclick = () => { SFX.click(); if (S.mode === 'daily') { renderTitle(); show('title'); } else startRound(S.mode, S.kingdom); };
+$('btnAgain').onclick = () => { SFX.click(); $('btnAgain').textContent = 'PLAY AGAIN'; if (S.mode === 'ace') startAce(); else if (S.mode === 'daily') { renderTitle(); show('title'); } else startRound(S.mode, S.kingdom); };
+$('btnAce').onclick = () => { SFX.click(); startAce(); };
 $('btnMenu').onclick = () => { SFX.click(); renderTitle(); show('title'); };
 $('btnPause').onclick = () => togglePause();
 $('btnResume').onclick = () => togglePause();
@@ -305,14 +350,16 @@ function handleEvents(b) {
       case 'wall': SFX.wall(e.v); if (S.shot && e.v > 1.5) S.shot.walls++; if (e.v > 6) R.addShake(0.06); R.burst(e.x, b.y + 0.1, e.z, 5, [0xffffff, 0xffe082], 1.2, 1, 0.4); break;
       case 'bumper': SFX.bumper(); if (S.shot) S.shot.bumpers++; R.hit(e.x, e.z); R.addShake(0.12 + Math.min(0.15, e.v * 0.02)); R.burst(e.x, b.y + 0.15, e.z, 14, [0xff7043, 0xffffff, 0xffeb3b], 2.2, 1, 0.6); break;
       case 'model': SFX.model(); R.hit(e.x, e.z); R.burst(e.x, b.y + 0.15, e.z, 8, [0xffffff], 1.5, 1, 0.5); break;
-      case 'cup': SFX.cup(); R.burst(S.world.cupX, b.y + 0.2, S.world.cupZ, 60, [0xffeb3b, 0xff4081, 0x40c4ff, 0x69f0ae, 0xffffff], 3.5, 0.8, 1.6); b.events.length = 0; S.cupZoom = { t: 0 }; finishBall(S.player, true); return true;
-      case 'reset': SFX.water(); R.addShake(0.15); if (save.easy) toast(e.reason === 'water' ? '💦 Splash! (easy mode: no penalty)' : '🕳️ Off course! (no penalty)'); else { toast(e.reason === 'water' ? '💦 Splash! +1 stroke' : '🕳️ Off course! +1 stroke'); S.strokes[S.player]++; } updateHud(); break;
+      case 'cup': SFX.cup(); { const sk = SKINS.find(k => k.id === save.skin); if (sk && sk.sfx) setTimeout(() => SFX.skin(sk.sfx), 250); } R.burst(S.world.cupX, b.y + 0.2, S.world.cupZ, 60, [0xffeb3b, 0xff4081, 0x40c4ff, 0x69f0ae, 0xffffff], 3.5, 0.8, 1.6); b.events.length = 0; S.cupZoom = { t: 0 }; if (S.mode === 'ace') { aceAfterRest(b); return true; } finishBall(S.player, true); return true;
+      case 'reset': SFX.water(); R.addShake(0.15); { const msg = e.reason === 'water' ? '💦 Splash!' : e.reason === 'gap' ? '🕳️ Into the pit!' : '🕳️ Off course!'; if (S.mode === 'ace') toast(msg, 1200); else if (save.easy) toast(msg + ' (easy mode: no penalty)'); else { toast(msg + ' +1 stroke'); S.strokes[S.player]++; } } updateHud(); break;
       case 'boost': SFX.boost(); break;
       case 'teleport': SFX.teleport(); if (S.shot) S.shot.tele = true; R.burst(b.x, b.y + 0.1, b.z, 20, [0x40c4ff, 0xff4081], 2, 0.3, 0.8); break;
       case 'cannon': SFX.cannon(); if (S.shot) S.shot.cannon = true; R.addShake(0.28); R.burst(b.x, b.y + 0.2, b.z, 25, [0x90a4ae, 0xffffff, 0xff9800], 2.5, 0.8, 0.8); break;
-      case 'land': R.burst(b.x, b.y + 0.05, b.z, 10, [0xffffff], 1.4, 1, 0.5); break;
+      case 'land': R.burst(b.x, b.y + 0.05, b.z, 10, [0xffffff], 1.4, 1, 0.5); R.addShake(0.08); break;
+      case 'jump': SFX.boost(); R.addShake(0.1); R.burst(b.x, b.y + 0.1, b.z, 16, [0xffd600, 0xffffff], 2, 1, 0.6); if (S.shot) S.shot.jump = true; break;
+      case 'turntable': SFX.teleport(); break;
       case 'lipout': SFX.lipout(); if (S.shot) S.shot.lip = true; toast('😮 SO CLOSE!', 900); break;
-      case 'rest': if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
+      case 'rest': if (S.mode === 'ace') { b.events.length = 0; aceAfterRest(b); return true; } if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
     }
   }
   b.events.length = 0; return false;

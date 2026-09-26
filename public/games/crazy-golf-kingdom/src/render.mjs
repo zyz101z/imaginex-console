@@ -49,6 +49,19 @@ function flagTexture(n) {
   g.fillStyle = '#e53935'; g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), 64, 42);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+function chevronTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#ffd600'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#212121';
+  for (let i = -1; i < 4; i++) { g.beginPath(); g.moveTo(i * 36, 20); g.lineTo(i * 36 + 30, 64); g.lineTo(i * 36, 108); g.lineTo(i * 36 + 14, 108); g.lineTo(i * 36 + 44, 64); g.lineTo(i * 36 + 14, 20); g.closePath(); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function discTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  g.fillStyle = '#5c6bc0'; g.beginPath(); g.arc(128, 128, 128, 0, 6.283); g.fill();
+  g.strokeStyle = '#c5cae9'; g.lineWidth = 10; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(128, 128, 100, k * 2.094, k * 2.094 + 1.4); g.stroke(); const a = k * 2.094 + 1.4; g.fillStyle = '#c5cae9'; g.beginPath(); g.moveTo(128 + Math.cos(a) * 118, 128 + Math.sin(a) * 118); g.lineTo(128 + Math.cos(a) * 82, 128 + Math.sin(a) * 82); g.lineTo(128 + Math.cos(a + 0.25) * 100, 128 + Math.sin(a + 0.25) * 100); g.closePath(); g.fill(); }
+  g.fillStyle = '#9fa8da'; g.beginPath(); g.arc(128, 128, 22, 0, 6.283); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
 function checkerTexture() {
   const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d');
   for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) { g.fillStyle = (x + y) % 2 ? '#111' : '#fff'; g.fillRect(x * 8, y * 8, 8, 8); }
@@ -121,7 +134,7 @@ export class GolfRenderer {
     this.pGeo.setAttribute('position', new THREE.BufferAttribute(this.pPos, 3)); this.pGeo.setAttribute('color', new THREE.BufferAttribute(this.pCol, 3));
     this.pMesh = new THREE.Points(this.pGeo, new THREE.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
     this.scene.add(this.pMesh); this.pMesh.frustumCulled = false;
-    this.checker = checkerTexture(); this.arrowTex = arrowTexture();
+    this.checker = checkerTexture(); this.arrowTex = arrowTexture(); this.chevronTex = chevronTexture(); this.discTex = discTexture();
     // shot preview (instanced dots) + ball trail + shake
     this.previewMax = 40; this.preview = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff59d, transparent: true, opacity: 0.95, depthTest: false }), this.previewMax);
     this.preview.renderOrder = 11; this.preview.count = 0; this.preview.frustumCulled = false; this.scene.add(this.preview);
@@ -154,7 +167,7 @@ export class GolfRenderer {
   }
   setCupNear(d) { this.cupGlow.material.opacity = d < 1.6 ? Math.max(0, 0.8 - d * 0.4) : 0; this.cupGlow.userData.on = d < 1.6; }
   setOther(ball) { if (!ball || ball.inCup) { this.other.visible = false; return; } this.other.visible = true; this.other.position.set(ball.x, ball.y + BALL_R, ball.z); }
-  setSkin(skin) { this.ballSkin = skin; this.ball.material.map = ballTexture(skin); this.ball.material.needsUpdate = true; }
+  setSkin(skin) { this.ballSkin = skin; this.ball.material.map = ballTexture(skin); this.ball.material.needsUpdate = true; this.trail.material.color.set(skin.trail || '#ffffff'); this.trail.material.opacity = skin.trail ? 0.75 : 0.45; this.ball.material.emissive = new THREE.Color(skin.glow || 0x000000); this.ball.material.emissiveIntensity = skin.glow ? 0.5 : 0; this.emitT = 0; }
 
   // ---------- build a hole ----------
   async buildHole(hole, K, world) {
@@ -199,6 +212,8 @@ export class GolfRenderer {
         const under = top.clone(); under.material = baseMat; under.position.y = -0.03; G.add(under);
       }
     }
+    for (const g of hole.gaps || []) { const pit = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.7, TILE), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 1 })); pit.position.set((g.x + 0.5) * TILE, -0.55, (g.z + 0.5) * TILE); G.add(pit);
+      const edge = new THREE.Mesh(new THREE.RingGeometry(0.01, 0.02, 4), new THREE.MeshBasicMaterial({ visible: false })); G.add(edge); }
     // walls
     for (const w of world.walls) {
       const dx = w.bx - w.ax, dz = w.bz - w.az, L = Math.hypot(dx, dz); const ang = Math.atan2(dz, dx);
@@ -273,6 +288,16 @@ export class GolfRenderer {
           const lip = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.05, 32), new THREE.MeshBasicMaterial({ color: 0xe0f7fa })); lip.rotation.x = -Math.PI / 2; lip.position.set(cx, y + 0.007, cz); G.add(lip);
           this.animNodes.push({ n: w, f: (t, node) => { node.material.map.offset.set(Math.sin(t * 0.7) * 0.08, t * 0.05); node.material.opacity = 0.8 + Math.sin(t * 2 + cx) * 0.08; }, mat: true }); break; }
         case 'model': { this._placeModel(G, o.model, cx, y, cz, (o.r || 0.5) * 2.1, o.rot || 0, K); break; }
+        case 'turntable': {
+          const disc = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.48, 40), new THREE.MeshStandardMaterial({ map: this.discTex, roughness: 0.6 })); disc.rotation.x = -Math.PI / 2; disc.position.set(cx, y + 0.006, cz); G.add(disc);
+          const pad = world.pads.find(p => p.type === 'turntable' && Math.abs(p.x - cx) < 1e-6 && Math.abs(p.z - cz) < 1e-6);
+          this.animNodes.push({ n: disc, f: (t, node) => { node.rotation.z = -(pad ? pad.omega : 1.6) * t; } }); break; }
+        case 'jump': {
+          const plate = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.7, 0.05, TILE * 0.7), new THREE.MeshStandardMaterial({ map: this.chevronTex, roughness: 0.5 })); plate.position.set(cx, y + 0.03, cz); plate.rotation.y = -Math.atan2(o.dirz, o.dirx); G.add(plate);
+          const lip = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.7, 0.16, 0.12), new THREE.MeshStandardMaterial({ color: 0xffd600 })); lip.position.set(cx + o.dirx * TILE * 0.36, y + 0.08, cz + o.dirz * TILE * 0.36); lip.rotation.y = -Math.atan2(o.dirz, o.dirx) + Math.PI / 2; G.add(lip);
+          const tx = (o.tx + 0.5) * TILE, tz = (o.tz + 0.5) * TILE; const tgt = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.42, 28), new THREE.MeshBasicMaterial({ color: 0xffd600, transparent: true, opacity: 0.8, side: THREE.DoubleSide })); tgt.rotation.x = -Math.PI / 2; tgt.position.set(tx, floorHeight(world, tx, tz) + 0.006, tz); G.add(tgt);
+          this.animNodes.push({ n: tgt, f: (t, node) => { const s = 1 + Math.sin(t * 5) * 0.1; node.scale.set(s, s, 1); } });
+          this.animNodes.push({ n: plate, f: (t, node) => { node.position.y = y + 0.03 + Math.max(0, Math.sin(t * 3)) * 0.02; } }); break; }
       }
     }
     this._scatter(G, hole, K);
@@ -332,6 +357,13 @@ export class GolfRenderer {
     if (sp > 0.01) { const axis = new THREE.Vector3(ball.vz, 0, -ball.vx).normalize(); this.ball.rotateOnWorldAxis(axis, sp * dt / BALL_R); }
     const fh = floorHeight(this.world, ball.x, ball.z); this.ballShadow.position.set(ball.x, (isFinite(fh) ? fh : ball.y) + 0.006, ball.z); this.ballShadow.visible = ball.y - (isFinite(fh) ? fh : ball.y) > 0.05;
     this.ball.visible = !ball.inCup;
+    // skin particles while moving fast
+    const sk = this.ballSkin; this.emitT = (this.emitT || 0) + dt;
+    if (sk.particle && sp > 2.5 && !ball.inCup && !ball.air && this.emitT > 0.04) { this.emitT = 0;
+      if (sk.particle === 'fire') this.burst(ball.x, ball.y + BALL_R, ball.z, 3, [0xff6f00, 0xffca28, 0xd50000], 0.6, -0.35, 0.45);
+      else if (sk.particle === 'sparkle') this.burst(ball.x, ball.y + BALL_R, ball.z, 2, [0xffffff, 0xfff176, sk.glow || 0xffffff], 0.9, 0.2, 0.6);
+      else if (sk.particle === 'bubbles') this.burst(ball.x, ball.y + BALL_R, ball.z, 2, [0xb2ebf2, 0xffffff], 0.5, -0.6, 0.8);
+      else if (sk.particle === 'hearts') this.burst(ball.x, ball.y + BALL_R, ball.z, 1, [0xff4081, 0xf8bbd0], 0.7, -0.3, 0.7); }
     // trail
     if (sp > 4.5 && !ball.inCup) this.trailPts.push({ x: ball.x, y: ball.y + BALL_R, z: ball.z }); else if (this.trailPts.length) this.trailPts.shift();
     while (this.trailPts.length > this.trailMax) this.trailPts.shift();

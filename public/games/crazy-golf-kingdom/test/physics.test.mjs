@@ -77,5 +77,18 @@ const straight = (n, extra = {}) => ({ tiles: Array.from({ length: n }, (_, i) =
 { const w = compileWorld(straight(3)); const b = newBall(w); b.x = w.cupX - 0.1; b.z = w.cupZ; b.resting = false; b.vx = CUP_CAPTURE_SPEED - 0.1; step(w, b, 0); check('under threshold → in', b.inCup);
   const c = newBall(w); c.x = w.cupX - 0.1; c.z = w.cupZ; c.resting = false; c.vx = CUP_CAPTURE_SPEED + 3; step(w, c, 0); check('over threshold → not in', !c.inCup); }
 
+// 20. turntable spins the ball sideways and never lets it rest on the disc
+{ const h = straight(10); h.obstacles = [{ x: 4, z: 0, type: 'turntable', omega: 1.6 }]; const w = compileWorld(h); const b = newBall(w); shoot(b, 1, 0, 0.3); simulateUntilRest(w, b);
+  check('turntable deflects the ball', Math.abs(b.z - w.teeZ) > 0.2 || b.x < 4 * TILE || b.x > 5 * TILE, `x=${b.x.toFixed(2)} z=${b.z.toFixed(2)}`);
+  check('ball does not rest on the turntable', !(b.x > 4 * TILE && b.x < 5 * TILE) || !b.resting, b.x); }
+// 21. jump pad: fast ball flies the gap and lands; slow ball falls in the gap and resets
+{ const h = straight(10); h.tiles.splice(4, 1); h.gaps = [{ x: 4, z: 0 }]; h.obstacles = [{ x: 3, z: 0, type: 'jump', dirx: 1, dirz: 0, tx: 5, tz: 0, vy: 4.2, minSpeed: 4.6 }];
+  const w = compileWorld(h); check('gap edges have no wall', !w.walls.some(s => Math.abs(s.ax - 4 * TILE) < 1e-6 && Math.abs(s.bx - 4 * TILE) < 1e-6 && s.az !== s.bz), w.walls.length);
+  const b = newBall(w); shoot(b, 1, 0, 0.6); let maxY = 0, jumped = false, t = 0; while (!b.resting && t < 20) { step(w, b, t); t += STEP; maxY = Math.max(maxY, b.y); if (b.events.some(e => e.type === 'jump')) jumped = true; }
+  check('jump pad launches', jumped && maxY > 0.5, `jumped=${jumped} maxY=${maxY.toFixed(2)}`); check('fast ball clears the gap', b.x > 5 * TILE && !b.penalty, `x=${b.x.toFixed(2)} pen=${b.penalty}`);
+  const c = newBall(w); c.x = 3.9 * TILE; c.resting = false; c.vx = 1.5; c.jumpCooldown = 5; // creep off the edge without triggering the pad
+  simulateUntilRest(w, c); check('slow ball falls into the gap and resets', c.penalty === 1 && c.events.some(e => e.type === 'reset' && (e.reason === 'gap' || e.reason === 'out')), JSON.stringify(c.events.map(e => e.type)));
+  const d = newBall(w); shoot(d, 1, 0, 0.12); simulateUntilRest(w, d); check('a weak shot onto the pad still gets the minimum launch', d.events.some(e => e.type === 'jump') || d.x < 3 * TILE, d.x.toFixed(2)); }
+
 console.log(`physics: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
