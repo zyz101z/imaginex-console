@@ -8,6 +8,7 @@ const UA = 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (
   for (const [w, h, name] of [[1024, 768, 'ipad_land'], [820, 1180, 'ipad_port']]) {
     const page = await browser.newPage(); await page.setUserAgent(UA); await page.setViewport({ width: w, height: h, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
     const errs = []; page.on('pageerror', e => errs.push(e.message));
+    await page.evaluateOnNewDocument(() => { localStorage.setItem('cgk_save_v1', JSON.stringify({ tutorialDone: true })); });
     await page.goto('http://127.0.0.1:8093/index.html', { waitUntil: 'networkidle2', timeout: 60000 }); await new Promise(r => setTimeout(r, 700));
     await page.screenshot({ path: name + '_title.png' });
     const t = await page.evaluate(() => ({ touchClass: document.documentElement.classList.contains('touch'), dpr: window.__cgk.R.renderer.getPixelRatio(), scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth }));

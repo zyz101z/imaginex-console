@@ -22,15 +22,30 @@ function noiseTexture(base, amp = 30) {
   g.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 function ballTexture(skin) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
-  g.fillStyle = skin.base; g.fillRect(0, 0, 256, 128);
-  if (skin.pattern === 'dimple') { g.fillStyle = 'rgba(0,0,0,0.10)'; for (let y = 6; y < 128; y += 12) for (let x = (y / 12 % 2) * 6; x < 256; x += 12) { g.beginPath(); g.arc(x, y, 3, 0, 6.283); g.fill(); } }
-  if (skin.pattern === 'stripe') { g.fillStyle = skin.accent; g.fillRect(0, 52, 256, 24); }
-  if (skin.pattern === 'stars') { g.fillStyle = skin.accent; for (let i = 0; i < 18; i++) { const x = (i * 97) % 256, y = (i * 53) % 128; g.beginPath(); for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5, rr = k % 2 ? 3 : 7; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.fill(); } }
-  if (skin.pattern === 'soccer') { g.fillStyle = skin.accent; for (let i = 0; i < 8; i++) { const x = (i * 71 + 20) % 256, y = (i * 41 + 15) % 128; g.beginPath(); for (let k = 0; k < 5; k++) { const a = k * Math.PI * 2 / 5 - Math.PI / 2; g.lineTo(x + Math.cos(a) * 13, y + Math.sin(a) * 13); } g.fill(); } }
-  if (skin.pattern === 'eyes') { g.fillStyle = '#fff'; g.beginPath(); g.arc(96, 64, 22, 0, 6.283); g.arc(160, 64, 22, 0, 6.283); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(100, 66, 9, 0, 6.283); g.arc(164, 66, 9, 0, 6.283); g.fill(); g.strokeStyle = '#111'; g.lineWidth = 4; g.beginPath(); g.arc(128, 84, 18, 0.3, 2.84); g.stroke(); }
-  if (skin.pattern === 'flame') { const gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#ffd54f'); gr.addColorStop(0.6, '#ff6f00'); gr.addColorStop(1, '#b71c1c'); g.fillStyle = gr; g.fillRect(0, 0, 256, 128); g.fillStyle = 'rgba(255,255,255,0.35)'; for (let i = 0; i < 12; i++) { g.beginPath(); g.ellipse((i * 41) % 256, 20 + (i * 29) % 60, 6, 18, 0, 0, 6.283); g.fill(); } }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const W = 512, H = 256; const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const base = skin.base, accent = skin.accent;
+  // background
+  if (skin.pattern === 'galaxy') { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#1a0b3d'); gr.addColorStop(0.5, '#4a1a8a'); gr.addColorStop(1, '#0b1b4d'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 6; i++) { const rg = g.createRadialGradient((i * 97) % W, (i * 61) % H, 0, (i * 97) % W, (i * 61) % H, 90); rg.addColorStop(0, ['rgba(255,64,129,0.55)', 'rgba(64,196,255,0.5)', 'rgba(255,214,79,0.35)'][i % 3]); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H); } }
+  else if (skin.pattern === 'flame') { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#fff176'); gr.addColorStop(0.45, '#ff8f00'); gr.addColorStop(1, '#b71c1c'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
+  else if (skin.pattern === 'mint') { g.fillStyle = base; g.fillRect(0, 0, W, H); g.strokeStyle = accent; g.lineWidth = 14; for (let i = -2; i < 8; i++) { g.beginPath(); g.moveTo(i * 96, 0); g.bezierCurveTo(i * 96 + 60, 80, i * 96 + 20, 180, i * 96 + 96, H); g.stroke(); } }
+  else { g.fillStyle = base; g.fillRect(0, 0, W, H); }
+  // dimples: shaded pits in a hex lattice (skipped for metallic / galaxy)
+  if (!skin.metal && skin.pattern !== 'galaxy') { const r = 9; for (let y = 8; y < H; y += 15) for (let x = (y / 15 % 2) * 9; x < W; x += 18) { const rg = g.createRadialGradient(x - 2, y - 2, 1, x, y, r); rg.addColorStop(0, 'rgba(0,0,0,0.22)'); rg.addColorStop(0.7, 'rgba(0,0,0,0.06)'); rg.addColorStop(1, 'rgba(255,255,255,0.10)'); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); } }
+  const star = (x, y, R, col) => { g.fillStyle = col; g.beginPath(); for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5 - Math.PI / 2, rr = k % 2 ? R * 0.45 : R; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); };
+  if (skin.pattern === 'stripe') { g.fillStyle = accent; g.fillRect(0, 100, W, 56); g.fillStyle = '#fff'; g.fillRect(0, 112, W, 6); g.fillRect(0, 138, W, 6); g.fillStyle = '#212121'; g.font = 'bold 44px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; for (const x of [128, 384]) { g.beginPath(); g.arc(x, 128, 30, 0, 6.283); g.fillStyle = '#fff'; g.fill(); g.fillStyle = '#212121'; g.fillText('7', x, 130); } }
+  if (skin.pattern === 'soccer') { g.fillStyle = accent; const pent = (x, y, R, rot = 0) => { g.beginPath(); for (let k = 0; k < 5; k++) { const a = rot + k * Math.PI * 2 / 5 - Math.PI / 2; g.lineTo(x + Math.cos(a) * R, y + Math.sin(a) * R); } g.closePath(); g.fill(); };
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 5; col++) pent(col * 102 + (row % 2) * 51 + 26, row * 88 + 44, 30, row * 0.3); g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 3; for (let row = 0; row < 3; row++) for (let col = 0; col < 5; col++) { const x = col * 102 + (row % 2) * 51 + 26, y = row * 88 + 44; for (let k = 0; k < 5; k++) { const a = row * 0.3 + k * Math.PI * 2 / 5 - Math.PI / 2; g.beginPath(); g.moveTo(x + Math.cos(a) * 30, y + Math.sin(a) * 30); g.lineTo(x + Math.cos(a) * 58, y + Math.sin(a) * 58); g.stroke(); } } }
+  if (skin.pattern === 'stars') { for (let i = 0; i < 26; i++) star((i * 131 + 20) % W, (i * 71 + 15) % H, 6 + (i % 3) * 4, i % 4 === 0 ? '#fff' : accent); }
+  if (skin.pattern === 'galaxy') { for (let i = 0; i < 140; i++) { const x = (i * 197) % W, y = (i * 113) % H, r = 0.6 + (i % 3) * 0.5; g.fillStyle = i % 7 === 0 ? '#ffd54f' : '#ffffff'; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); } for (let i = 0; i < 5; i++) star((i * 101 + 40) % W, (i * 67 + 30) % H, 10, '#fff8e1'); }
+  if (skin.pattern === 'eyes') { g.fillStyle = '#fff'; for (const x of [184, 328]) { g.beginPath(); g.ellipse(x, 118, 46, 54, 0, 0, 6.283); g.fill(); } g.fillStyle = '#212121'; for (const x of [194, 338]) { g.beginPath(); g.arc(x, 124, 20, 0, 6.283); g.fill(); } g.fillStyle = '#fff'; for (const x of [201, 345]) { g.beginPath(); g.arc(x, 116, 7, 0, 6.283); g.fill(); }
+    g.strokeStyle = '#212121'; g.lineWidth = 8; g.lineCap = 'round'; g.beginPath(); g.arc(256, 168, 46, 0.25, Math.PI - 0.25); g.stroke(); g.fillStyle = 'rgba(255,64,129,0.55)'; for (const x of [120, 392]) { g.beginPath(); g.ellipse(x, 176, 22, 13, 0, 0, 6.283); g.fill(); } }
+  if (skin.pattern === 'flame') { g.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 14; i++) { const x = (i * 73 + 10) % W; g.beginPath(); g.moveTo(x, 200); g.quadraticCurveTo(x - 24, 120, x + 4, 60 + (i % 3) * 20); g.quadraticCurveTo(x + 30, 130, x, 200); g.fill(); } g.fillStyle = 'rgba(183,28,28,0.5)'; for (let i = 0; i < 10; i++) { const x = (i * 97 + 40) % W; g.beginPath(); g.moveTo(x, 256); g.quadraticCurveTo(x - 30, 190, x, 150); g.quadraticCurveTo(x + 30, 200, x, 256); g.fill(); } }
+  if (skin.pattern === 'checker') { for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) { g.fillStyle = (x + y) % 2 ? accent : base; g.fillRect(x * 32, y * 32, 32, 32); } }
+  if (skin.pattern === 'gold') { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#fff3b0'); gr.addColorStop(0.5, '#e6b422'); gr.addColorStop(1, '#8a5a00'); g.fillStyle = gr; g.fillRect(0, 0, W, H); const r = 9; for (let y = 8; y < H; y += 15) for (let x = (y / 15 % 2) * 9; x < W; x += 18) { const rg = g.createRadialGradient(x - 2, y - 2, 1, x, y, r); rg.addColorStop(0, 'rgba(0,0,0,0.3)'); rg.addColorStop(1, 'rgba(255,255,255,0.12)'); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill(); } }
+  // soft top-light so the sphere reads round even under flat light
+  const sh = g.createLinearGradient(0, 0, 0, H); sh.addColorStop(0, 'rgba(255,255,255,0.10)'); sh.addColorStop(1, 'rgba(0,0,0,0.12)'); g.fillStyle = sh; g.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 function arrowTexture(color = '#ffffff') {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
@@ -111,7 +126,7 @@ export class GolfRenderer {
     this.sun.shadow.mapSize.set(touch ? 1536 : 2048, touch ? 1536 : 2048); this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.02; this.scene.add(this.sun); this.scene.add(this.sun.target);
     this.holeGroup = null; this.dynamicNodes = []; this.animNodes = []; this.particles = [];
     this.ballSkin = { base: '#ffffff', accent: '#ff5252', pattern: 'dimple' };
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 28, 20), new THREE.MeshStandardMaterial({ map: ballTexture(this.ballSkin), roughness: 0.45 }));
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 36, 24), new THREE.MeshPhysicalMaterial({ map: ballTexture(this.ballSkin), roughness: 0.32, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.18 }));
     this.ball.castShadow = true; this.scene.add(this.ball);
     this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(BALL_R * 1.1, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }));
     this.ballShadow.rotation.x = -Math.PI / 2; this.scene.add(this.ballShadow);
@@ -150,12 +165,7 @@ export class GolfRenderer {
     this.hitNodes = new Map(); this.hitAnims = [];
     this.cupGlow = new THREE.Mesh(new THREE.RingGeometry(CUP_R + 0.05, CUP_R + 0.22, 32), new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })); this.cupGlow.rotation.x = -Math.PI / 2; this.scene.add(this.cupGlow);
     this.idlePulse = 0;
-    // putter: shaft + head, shown behind the ball while aiming, swings on the shot
-    this.putter = new THREE.Group(); const shaftMat = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, metalness: 0.7, roughness: 0.3 });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.9, 8), shaftMat); shaft.position.set(0, 0.45, 0); shaft.rotation.z = 0.35; shaft.position.x = -0.16;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.6, roughness: 0.35 })); head.position.set(0, 0.03, 0);
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.22, 8), new THREE.MeshStandardMaterial({ color: 0x212121 })); grip.position.set(-0.31, 0.86, 0); grip.rotation.z = 0.35;
-    this.putter.add(shaft, head, grip); this.putter.visible = false; this.putter.traverse(o => { o.castShadow = true; }); this.scene.add(this.putter); this.putterSwing = null;
+    this.putter = new THREE.Group(); this.putter.visible = false; this.scene.add(this.putter); this.putterSwing = null; this.setClub({ id: 'classic' });
     this.resize();
   }
   preloadModels(names) { return Promise.all(names.map(n => loadModel(n))); }
@@ -167,6 +177,26 @@ export class GolfRenderer {
     if (this.world) this.renderer.render(this.scene, this.camera);   // redraw immediately so a resize never leaves a cleared frame
   }
   putt(power) { this.putterSwing = { t: 0, power }; }
+  setClub(club) {
+    const P = this.putter; while (P.children.length) { const ch = P.children.pop(); ch.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    const spec = Object.assign({ shaft: 0xcfd8dc, shaftMetal: 0.7, head: 0x37474f, headMetal: 0.6, grip: 0x212121, shape: 'blade', glow: 0 }, club);
+    const lift = (m) => m > 0.6 ? 0.3 : 0;   // heavy metals have nothing to reflect here — lift them with emissive instead of going black
+    const shaftMat = new THREE.MeshStandardMaterial({ color: spec.shaft, metalness: Math.min(spec.shaftMetal, 0.6), roughness: 0.35, emissive: spec.glow || lift(spec.shaftMetal) ? spec.shaft : 0x000000, emissiveIntensity: spec.glow || lift(spec.shaftMetal) });
+    const headMat = new THREE.MeshStandardMaterial({ color: spec.head, metalness: Math.min(spec.headMetal, 0.6), roughness: 0.35, emissive: spec.glow || lift(spec.headMetal) ? spec.head : 0x000000, emissiveIntensity: spec.glow || lift(spec.headMetal) });
+    const gripMat = new THREE.MeshStandardMaterial({ color: spec.grip, roughness: 0.9 });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.9, 10), shaftMat); shaft.position.set(-0.16, 0.45, 0); shaft.rotation.z = 0.35; P.add(shaft);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.22, 10), gripMat); grip.position.set(-0.31, 0.86, 0); grip.rotation.z = 0.35; P.add(grip);
+    let head;
+    switch (spec.shape) {
+      case 'mallet': head = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.07, 18), headMat); head.rotation.x = 0; head.position.set(0.02, 0.035, 0); break;
+      case 'wood': head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), headMat); head.scale.set(1.3, 0.75, 1); head.position.set(0.02, 0.05, 0); break;
+      case 'candy': { head = new THREE.Group(); const cane = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.028, 10, 18, Math.PI), headMat); cane.rotation.y = Math.PI / 2; cane.rotation.z = Math.PI; cane.position.set(-0.02, 0.09, 0); head.add(cane); for (const d of [-0.3, -0.1, 0.1, 0.3]) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.009, 6, 14), new THREE.MeshStandardMaterial({ color: 0xe53935 })); ring.position.set(-0.16 - Math.sin(0.35) * d, 0.45 + Math.cos(0.35) * d, 0); ring.rotation.z = 0.35; ring.rotateX(Math.PI / 2); P.add(ring); } const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.14, 10), headMat); foot.rotation.z = Math.PI / 2; foot.position.set(0.02, 0.03, 0); head.add(foot); break; }
+      case 'bone': { head = new THREE.Group(); const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 10), headMat); bar.rotation.z = Math.PI / 2; bar.position.set(0.02, 0.035, 0); head.add(bar); for (const dx of [-0.1, 0.1]) for (const dz of [-0.02, 0.02]) { const kn = new THREE.Mesh(new THREE.SphereGeometry(0.03, 10, 8), headMat); kn.position.set(0.02 + dx, 0.035, dz); head.add(kn); } break; }
+      case 'staff': { head = new THREE.Group(); const orb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), new THREE.MeshPhysicalMaterial({ color: 0x7c4dff, emissive: 0x7c4dff, emissiveIntensity: 1.2, transmission: 0.4, roughness: 0.1 })); orb.position.set(-0.36, 1.02, 0); P.add(orb); const claw = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 14, Math.PI * 1.3), shaftMat); claw.position.set(-0.36, 1.02, 0); claw.rotation.y = Math.PI / 2; P.add(claw); const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.06), headMat); foot.position.set(0.02, 0.03, 0); head.add(foot); break; }
+      default: head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), headMat); head.position.set(0.02, 0.03, 0);
+    }
+    P.add(head); P.traverse(o => { o.castShadow = true; }); this.club = spec;
+  }
   setPreview(points) { // [{x,y,z}] or null
     if (!points || !points.length) { this.preview.count = 0; return; }
     const n = Math.min(points.length, this.previewMax);
@@ -181,7 +211,7 @@ export class GolfRenderer {
   }
   setCupNear(d) { this.cupGlow.material.opacity = d < 1.6 ? Math.max(0, 0.8 - d * 0.4) : 0; this.cupGlow.userData.on = d < 1.6; }
   setOther(ball) { if (!ball || ball.inCup) { this.other.visible = false; return; } this.other.visible = true; this.other.position.set(ball.x, ball.y + BALL_R, ball.z); }
-  setSkin(skin) { this.ballSkin = skin; this.ball.material.map = ballTexture(skin); this.ball.material.needsUpdate = true; this.trail.material.color.set(skin.trail || '#ffffff'); this.trail.material.opacity = skin.trail ? 0.75 : 0.45; this.ball.material.emissive = new THREE.Color(skin.glow || 0x000000); this.ball.material.emissiveIntensity = skin.glow ? 0.5 : 0; this.emitT = 0; }
+  setSkin(skin) { this.ballSkin = skin; const m = this.ball.material; m.map = ballTexture(skin); m.metalness = skin.metal ? 0.55 : 0; m.roughness = skin.metal ? 0.28 : 0.32; m.clearcoat = skin.metal ? 0.6 : 1; m.emissive = new THREE.Color(skin.metal ? 0x8a6200 : (skin.glow || 0x000000)); m.emissiveIntensity = skin.metal ? 0.45 : (skin.glow ? 0.5 : 0); m.needsUpdate = true; this.trail.material.color.set(skin.trail || '#ffffff'); this.trail.material.opacity = skin.trail ? 0.75 : 0.45; this.ball.material.emissive = new THREE.Color(skin.glow || 0x000000); this.ball.material.emissiveIntensity = skin.glow ? 0.5 : 0; this.emitT = 0; }
 
   // ---------- build a hole ----------
   async buildHole(hole, K, world) {

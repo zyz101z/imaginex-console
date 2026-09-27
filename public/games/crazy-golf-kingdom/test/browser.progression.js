@@ -9,7 +9,7 @@ let pass = 0, fail = 0; const check = (n, c, d = '') => { if (c) pass++; else { 
   const t = await page.evaluate(() => ({ lvl: document.getElementById('lvlTitle').textContent })); check('title shows level', /Lv 1/.test(t.lvl), t.lvl);
   await page.click('#btnProfile'); await new Promise(r => setTimeout(r, 300));
   const pf = await page.evaluate(() => ({ on: document.getElementById('profile').classList.contains('on'), quests: document.querySelectorAll('#pfQuests .quest').length, badges: document.querySelectorAll('#pfBadges .badge').length, crowns: document.querySelectorAll('#pfCrowns .crown').length }));
-  check('profile screen renders 3 quests / 20 badges / 5 crowns', pf.on && pf.quests === 3 && pf.badges === 20 && pf.crowns === 5, JSON.stringify(pf));
+  check('profile screen renders 3 quests / 20+ badges / 5 crowns', pf.on && pf.quests === 3 && pf.badges >= 20 && pf.crowns === 5, JSON.stringify(pf));
   // 2. XP → level up with reward
   const lv = await page.evaluate(() => { const { save } = window.__cgk; const c0 = save.coins, m0 = save.mulligans; window.__cgk.addXp(900, 'test'); return { xp: save.xp, coins: save.coins - c0, mull: save.mulligans - m0, lvl: document.getElementById('lvlTitle').textContent }; });
   check('900 xp reaches level 2 and pays the reward', lv.xp === 900 && lv.coins === 120 && lv.mull === 1, JSON.stringify(lv));

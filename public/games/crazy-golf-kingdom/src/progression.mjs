@@ -15,7 +15,7 @@ export function levelReward(level) {
   return { coins: 150, mulligans: 0, label: '150 coins' };
 }
 // skins unlock by level as well as coins
-export const SKIN_LEVEL = { classic: 1, sunny: 1, stripe: 2, mint: 3, soccer: 4, stars: 6, eyes: 8, flame: 12 };
+export const SKIN_LEVEL = { classic: 1, sunny: 1, stripe: 2, mint: 3, soccer: 4, stars: 6, checker: 7, eyes: 8, flame: 12, galaxy: 14, gold: 18 };
 
 // ---------- daily quests ----------
 export const QUEST_POOL = [
@@ -68,7 +68,8 @@ export const ACHIEVEMENTS = [
   { id: 'stars27', name: 'Perfect Kingdom', desc: '27 stars in one kingdom', icon: '⭐', xp: 500, test: s => Object.values(s.career || {}).some(k => Object.values(k).reduce((a, b) => a + b, 0) >= 27) },
   { id: 'dailyAce', name: 'Shot of the Day', desc: 'Ace the daily ace challenge', icon: '🌅', xp: 300, test: s => s.dailyAces >= 1 },
   { id: 'skins4', name: 'Collector', desc: 'Own 4 ball skins', icon: '🎨', xp: 150, test: s => (s.skins || []).length >= 4 },
-  { id: 'skinsAll', name: 'Fashionista', desc: 'Own every ball skin', icon: '👗', xp: 400, test: s => (s.skins || []).length >= 8 },
+  { id: 'skinsAll', name: 'Fashionista', desc: 'Own every ball skin', icon: '👗', xp: 400, test: s => (s.skins || []).length >= 11 },
+  { id: 'clubs3', name: 'Caddie', desc: 'Own 3 clubs', icon: '🏌️', xp: 150, test: s => (s.clubs || []).length >= 3 },
   { id: 'portals10', name: 'Portal Pilot', desc: 'Use 10 portals', icon: '🌀', xp: 120, test: s => (s.portals || 0) >= 10 },
   { id: 'wet', name: 'Splash Zone', desc: 'Find the water 10 times', icon: '💦', xp: 60, test: s => (s.splashes || 0) >= 10 },
   { id: 'level10', name: 'Double Digits', desc: 'Reach level 10', icon: '🔟', xp: 300, test: s => s.level >= 10 },

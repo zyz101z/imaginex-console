@@ -97,6 +97,16 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   in same-origin localStorage) → `save.name` fallback with an inline input. Daily Course now posts to BOTH the per-day
   board (fetch, name) and the console board (postMessage) and the scorecard shows "You're #N today".
   `test/browser.leaderboards.js` (9 checks, API stubbed). `browser.ace.js` pre-seeds tutorialDone (first PLAY = tutorial).
+- 2026-09-27 BALLS + CLUBS (user: "make the custom balls look better", "different club skins?"): `ballTexture` repainted
+  at 512×256 with shaded hex-lattice dimples, real patterns (soccer pentagons, racing stripe + number, big cute face,
+  flame tongues, mint swirl, checker, galaxy nebula + stars, gold gradient) and a top-light gradient; ball material is
+  MeshPhysicalMaterial with clearcoat; metallic skins use metalness 0.55 + warm emissive (no env map → pure metal
+  goes black). New skins: Finish Line (checker, L7), Galaxy (L14), 24 Karat (metal, L18). CLUBS: `CLUBS` roster
+  (Classic, Mallet, Old Hickory, Candy Cane, Dino Bone, Neon, Midas, Wizard Staff) with head shapes blade/mallet/wood/
+  candy/bone/staff, per-part colours, glow; `R.setClub(spec)` rebuilds the putter; shop "Clubs" section, level gates
+  + coins, `save.clubs/save.club`; achievement Caddie (own 3 clubs). Verified with close-up contact sheets
+  (`skins_sheet.js` in scratchpad — note: puppeteer `page.evaluate(string)` does NOT call an arrow function string; wrap
+  it as an IIFE).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

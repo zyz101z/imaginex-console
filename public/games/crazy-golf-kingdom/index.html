@@ -48,6 +48,7 @@
   .kcard.locked { filter:grayscale(0.85) brightness(0.55); cursor:not-allowed; }
   .kcard.locked::after { content:'🔒'; position:absolute; top:10px; right:12px; font-size:22px; }
   .kemoji { font-size:40px; line-height:1; } .kname { font-weight:1000; font-size:19px; margin-top:6px; text-shadow:0 2px 4px rgba(0,0,0,.4); } .kdesc { font-size:12.5px; color:#ffffffcc; margin-top:4px; line-height:1.25; } .kstars { margin-top:8px; font-weight:800; color:var(--gold); font-size:13px; }
+  #clubList { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; width:min(90vw, 700px); }
   #skinList { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; width:min(90vw, 700px); }
   .skin { background:rgba(255,255,255,0.07); border:2px solid rgba(255,255,255,0.15); border-radius:14px; padding:12px 8px; color:#fff; font-family:inherit; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; }
   .skin.sel { border-color:var(--gold); box-shadow:0 0 0 2px var(--gold) inset; }
@@ -192,6 +193,9 @@
     <h2>Ball Shop · <span id="shopCoins">0</span> 🪙</h2>
     <div class="hint" style="margin-bottom:10px">Coins come from every hole you finish: hole-in-one 50, eagle 35, birdie 20, par 10.</div>
     <div id="skinList"></div>
+    <h2 style="font-size:20px;margin-top:16px">Clubs</h2>
+    <div class="hint" style="margin-bottom:10px">Change the putter you swing. Unlock by level, buy with coins.</div>
+    <div id="clubList" class="skinGrid"></div>
     <div class="row" style="margin-top:14px"><button class="btn small ghost" data-back="title">← Back</button></div>
   </div>
 </div>

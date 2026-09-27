@@ -21,12 +21,25 @@ const SKINS = [
   { id: 'eyes', name: 'Buddy', base: '#ffffff', accent: '#000000', pattern: 'eyes', cost: 700, trail: '#ff4081', particle: 'hearts', sfx: 'giggle', blurb: 'Giggles when it drops. Hearts everywhere.' },
   { id: 'mint', name: 'Mint', base: '#a5ffd6', accent: '#00bfa5', pattern: 'dimple', cost: 400, trail: '#64ffda', particle: 'bubbles', sfx: 'pop', blurb: 'Bubbly, minty, fresh.' },
   { id: 'flame', name: 'Inferno', base: '#ff6f00', accent: '#ffd54f', pattern: 'flame', cost: 1200, trail: '#ff9100', particle: 'fire', glow: 0xbf360c, sfx: 'roar', blurb: 'On fire. Literally.' },
+  { id: 'checker', name: 'Finish Line', base: '#ffffff', accent: '#212121', pattern: 'checker', cost: 600, trail: '#ffffff', sfx: 'vroom', blurb: 'Chequered flag, all the way round.' },
+  { id: 'galaxy', name: 'Galaxy', base: '#2a0a5a', accent: '#ff4081', pattern: 'galaxy', cost: 1500, trail: '#b388ff', particle: 'sparkle', glow: 0x311b92, sfx: 'twinkle', blurb: 'A whole nebula in your hand.' },
+  { id: 'gold', name: '24 Karat', base: '#e6b422', accent: '#fff3b0', pattern: 'gold', cost: 2500, metal: true, trail: '#ffd54f', particle: 'sparkle', sfx: 'chime', blurb: 'Solid gold. Rolls like it too.' },
+];
+const CLUBS = [
+  { id: 'classic', name: 'Classic', cost: 0, level: 1, shape: 'blade', shaft: 0xcfd8dc, head: 0x37474f, grip: 0x212121, blurb: 'Trusty steel blade.', icon: '🏌️' },
+  { id: 'mallet', name: 'Mallet', cost: 200, level: 2, shape: 'mallet', shaft: 0xb0bec5, head: 0x1565c0, grip: 0x0d47a1, blurb: 'Big blue mallet head.', icon: '🔵' },
+  { id: 'wood', name: 'Old Hickory', cost: 350, level: 3, shape: 'wood', shaft: 0x8d6e63, shaftMetal: 0, head: 0x5d4037, headMetal: 0, grip: 0x3e2723, blurb: 'Persimmon and hickory, like grandpa\'s.', icon: '🪵' },
+  { id: 'candy', name: 'Candy Cane', cost: 500, level: 5, shape: 'candy', shaft: 0xffffff, shaftMetal: 0.1, head: 0xffffff, headMetal: 0.1, grip: 0xe53935, blurb: 'Peppermint striped. Smells great.', icon: '🍬' },
+  { id: 'bone', name: 'Dino Bone', cost: 700, level: 7, shape: 'bone', shaft: 0xefebe9, shaftMetal: 0, head: 0xefebe9, headMetal: 0, grip: 0x6d4c41, blurb: 'Genuine (cartoon) fossil.', icon: '🦴' },
+  { id: 'neon', name: 'Neon', cost: 900, level: 9, shape: 'blade', shaft: 0x00e5ff, shaftMetal: 0.3, head: 0xff4081, headMetal: 0.3, grip: 0x212121, glow: 0.9, blurb: 'Glows in the dark.', icon: '💡' },
+  { id: 'gold', name: 'Midas', cost: 1800, level: 12, shape: 'mallet', shaft: 0xffd54f, shaftMetal: 1, head: 0xffc107, headMetal: 1, grip: 0x5d4037, blurb: 'Pure gold. Wildly impractical.', icon: '🥇' },
+  { id: 'staff', name: 'Wizard Staff', cost: 2200, level: 15, shape: 'staff', shaft: 0x4e342e, shaftMetal: 0, head: 0x7c4dff, headMetal: 0.2, grip: 0x3e2723, glow: 0.5, blurb: 'Putts with a purple orb. Why not.', icon: '🔮' },
 ];
 const RESULT = (s, par) => s === 1 ? ['HOLE IN ONE!', 500, '⛳'] : s - par <= -2 ? ['EAGLE!', 350, '🦅'] : s - par === -1 ? ['BIRDIE!', 200, '🐦'] : s === par ? ['PAR', 100, '👍'] : s - par === 1 ? ['BOGEY', 50, '😅'] : ['+' + (s - par), 10, '😬'];
 const STARS_NEEDED = 14;
 
 // ---------- save ----------
-function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, aimMode: 'pull', xp: 0, mulligans: 1, rounds: 0, underParRounds: 0, bestStreak: 0, crowns: {}, tricks: {}, portals: 0, splashes: 0, dailyAces: 0, badges: {}, quests: {}, questDay: '', holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
+function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, aimMode: 'pull', xp: 0, mulligans: 1, clubs: ['classic'], club: 'classic', rounds: 0, underParRounds: 0, bestStreak: 0, crowns: {}, tricks: {}, portals: 0, splashes: 0, dailyAces: 0, badges: {}, quests: {}, questDay: '', holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
 function persist(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {} }
 const save = loadSave();
 const careerStars = (kid) => Object.values(save.career[kid] || {}).reduce((a, b) => a + b, 0);
@@ -93,6 +106,7 @@ window.addEventListener('keydown', () => { if (save.music && MUSIC.want && (!MUS
 const canvas = $('c');
 const R = new GolfRenderer(canvas);
 R.setSkin(SKINS.find(s => s.id === save.skin) || SKINS[0]);
+R.setClub(CLUBS.find(c => c.id === save.club) || CLUBS[0]);
 const S = {
   screen: 'title', mode: null, kingdom: 'meadow', players: 1, course: [], holeIdx: 0, hole: null, world: null, K: null,
   balls: [], strokes: [], scores: [[], []], player: 0, done: [false, false], worldT: 0, acc: 0, last: performance.now(),
@@ -101,7 +115,7 @@ const S = {
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
   shot: null, streak: 0, idleT: 0, aimTarget: 0, loadSeq: 0, attract: null, attractSeq: 0, attractStopped: 0,
 };
-window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, renderLeaderboards, nameFor, dailyId, aceId, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
+window.__cgk = { S, R, save, KINGDOMS, SKINS, CLUBS, generateCourse, startAce, renderLeaderboards, nameFor, dailyId, aceId, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; if (id !== 'play') coach(null); $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
@@ -129,6 +143,14 @@ function renderShop() {
     el.innerHTML = `<span class="sw" style="background:${sk.base};border-color:${sk.accent}">${sk.pattern === 'eyes' ? '👀' : sk.pattern === 'stars' ? '✨' : sk.pattern === 'flame' ? '🔥' : sk.pattern === 'soccer' ? '⚽' : sk.pattern === 'stripe' ? '🏁' : ''}</span><b>${sk.name}</b><em>${sk.blurb || ''}</em><small>${owned ? (save.skin === sk.id ? 'equipped' : 'owned') : locked ? '🔒 level ' + need : sk.cost + ' 🪙'}</small>`;
     el.onclick = () => { if (!owned) { if (locked) { toast(`Reach level ${need} to unlock ${sk.name}`); return; } if (save.coins < sk.cost) { toast('Not enough coins'); return; } save.coins -= sk.cost; save.skins.push(sk.id); SFX.coin(); } save.skin = sk.id; R.setSkin(sk); persist(save); renderShop(); };
     box.appendChild(el);
+  }
+  const cbox = $('clubList'); cbox.innerHTML = '';
+  for (const cl of CLUBS) {
+    const owned = (save.clubs || ['classic']).includes(cl.id); const lvl = levelFromXp(save.xp || 0).level; const locked = !owned && lvl < cl.level;
+    const el = document.createElement('button'); el.className = 'skin' + (save.club === cl.id ? ' sel' : '') + (locked ? ' locked' : '');
+    el.innerHTML = `<span class="sw" style="background:#${cl.head.toString(16).padStart(6, '0')};border-color:#${cl.shaft.toString(16).padStart(6, '0')}">${cl.icon}</span><b>${cl.name}</b><em>${cl.blurb}</em><small>${owned ? (save.club === cl.id ? 'equipped' : 'owned') : locked ? '🔒 level ' + cl.level : cl.cost + ' 🪙'}</small>`;
+    el.onclick = () => { if (!owned) { if (locked) { toast(`Reach level ${cl.level} to unlock ${cl.name}`); return; } if (save.coins < cl.cost) { toast('Not enough coins'); return; } save.coins -= cl.cost; save.clubs = [...(save.clubs || ['classic']), cl.id]; SFX.coin(); } save.club = cl.id; R.setClub(cl); persist(save); renderShop(); };
+    cbox.appendChild(el);
   }
 }
 function toast(msg, ms = 1400) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), ms); }
