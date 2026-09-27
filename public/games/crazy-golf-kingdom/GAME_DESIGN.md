@@ -178,7 +178,10 @@ Career only: holing the finale awards the crown. Daily Course stays procedural.
 
 ## Assets
 - `cover.png` Meshy nano-banana-pro key art (cropped from the case-mockup output).
-- `models/*.glb` Meshy text-to-3D (preview 20 + refine 10 credits each, target 6k tris).
+- `models/*.glb` Meshy text-to-3D (preview 20 + refine 10 credits each, target 6k tris). 2026-09-27: `tower` and `trex`
+  regenerated (new meshes) then RETEXTURED (`/openapi/v1/retexture`, 10 credits, `text_style_prompt`) because the shared
+  texture prompt "bright saturated cartoon colors" had overridden the colour words in the model prompts (yellow tower,
+  rainbow T-rex). Lesson: put colours in the retexture/texture prompt, not only the mesh prompt. Meshy balance ≈ 921.
 
 ## Open questions for playtest
 - Power curve feel (is max power too strong on short holes?).
