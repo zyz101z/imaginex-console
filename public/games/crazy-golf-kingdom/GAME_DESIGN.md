@@ -67,6 +67,14 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   TITLE ATTRACT MODE: `startAttract()` builds a random kingdom hole behind the menus, camera orbits the course
   centre, a ghost golfer (12 angles × 5 powers) plays it, confetti on cup-in, new hole every cup/75 s; menus are
   translucent panels; the cover's logo is cropped to `logo.png` and shown as a bobbing badge.
+- 2026-09-27 BLACK-FLICKER root cause (user: "screen turns black on every new level, sometimes twice"): NOT the
+  overlay. The flyover set the camera target height from `floorHeight()` under the camera with `|| 0` — but off-course
+  cells return -Infinity, which is truthy, so the camera went to y=-Infinity for every frame the flyover crossed empty
+  space → black renders (measured lum 1 for ~150-500 ms). Fixed with `isFinite(fh) ? fh : 0`. Also: the loading
+  overlay is now delayed 550 ms (only shows on slow loads; the last frame stays on screen) and is lighter/blurred.
+  `test/browser.flicker.js` burst-screenshots transitions and fails on any near-black frame (was 3 fails → 0).
+  Same pass: `canShoot()` now requires a loaded hole (a drag during the load gap could fire a phantom shot on the old
+  ball); drag direction falls back to camera-yaw screen mapping when the pointer ray misses the floor plane (above horizon).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

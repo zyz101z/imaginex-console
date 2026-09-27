@@ -13,4 +13,5 @@ Browser (real three.js scene, headless Chrome via puppeteer-core):
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.drag.js   # real mouse drags: aim from anywhere, power scaling, cancel, orbit, push mode, keyboard
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.ipad.js   # iPad emulation: touch drag, pinch, layout, HUD sizes
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.ace.js    # Shot of the Day flow (API stubbed), skin particles, jump/turntable render
+    LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.flicker.js   # burst-screenshots hole transitions; fails on any near-black frame (needs sharp)
 All scripts need `puppeteer-core` resolvable (npm i puppeteer-core in the cwd).

@@ -226,11 +226,13 @@ async function startRound(mode, kingdom) {
 }
 async function loadHole(i) {
   const gen = ++S.loadSeq;
-  S.world = null; S.hole = null; $('loading').classList.add('on'); $('loadText').textContent = S.mode === 'ace' ? 'BUILDING THE SHOT OF THE DAY…' : `BUILDING HOLE ${i + 1}…`; $('loadSpin').textContent = '⛳';
-  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));   // let the overlay paint before any work
+  S.world = null; S.hole = null; $('loadText').textContent = S.mode === 'ace' ? 'BUILDING THE SHOT OF THE DAY…' : `BUILDING HOLE ${i + 1}…`; $('loadSpin').textContent = '⛳';
+  // keep the last rendered frame on screen; only show the overlay if this load turns out to be slow (no dark flash on fast loads)
+  clearTimeout(S.loadTimer); S.loadTimer = setTimeout(() => { if (gen === S.loadSeq && !S.world) $('loading').classList.add('on'); }, 550);
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
   let hole;
   try { hole = S.course[i] && S.course[i]._ace ? await genAsync('ace', { date: S.course[i].date }) : await ensureHole(i); } catch (e) { hole = generateHole(S.course[i]); }
-  if (gen !== S.loadSeq) return;   // a newer load superseded this one
+  if (gen !== S.loadSeq) { clearTimeout(S.loadTimer); return; }   // a newer load superseded this one
   if (S.course[i] && S.course[i]._ace) S.course[i] = hole;
   S.holeIdx = i; S.K = kingdomById(hole.kingdom); const world = compileWorld(hole); playMusic(S.K.id);
   S.balls = [newBall(world), newBall(world)]; S.strokes = [0, 0]; S.done = [false, false]; S.player = 0; S.holeOver = false; S.worldT = 0; S.waitingShot = false; S.cupZoom = null; S.autoFace = true;
@@ -249,7 +251,7 @@ async function loadHole(i) {
   R.warm(S.balls[0], S.worldT);
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   if (gen !== S.loadSeq) return;
-  $('loading').classList.remove('on');
+  clearTimeout(S.loadTimer); $('loading').classList.remove('on');
   if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
 }
 function currentBall() { return S.balls[S.player]; }
@@ -324,7 +326,7 @@ function popup(big, small, ms = 1500) { const p = $('popup'); p.querySelector('.
 
 // ---------- input ----------
 const ballPlaneY = () => currentBall().y + 0.02;
-function canShoot() { return S.screen === 'play' && !S.flyover && !S.holeOver && currentBall().resting && !currentBall().inCup && !S.paused; }
+function canShoot() { return S.screen === 'play' && !!S.world && !!S.hole && !S.flyover && !S.holeOver && currentBall().resting && !currentBall().inCup && !S.paused; }
 function pointerDown(px, py, button, touches) {
   if (S.screen !== 'play') return;
   if (button === 2 || touches === 2) { S.orbit = { x: px, y: py, yaw: R.cam.yaw, pitch: R.cam.pitch }; return; }
@@ -337,8 +339,12 @@ function pointerMove(px, py) {
   const sd = Math.hypot(px - S.drag.x0, py - S.drag.y0); const dead = 10, full = Math.max(120, Math.min(canvas.clientWidth, canvas.clientHeight) * 0.42);
   if (sd < dead) { S.aim.power = 0; S.aim.active = true; $('power').style.setProperty('--p', 0); return; }
   const f0 = R.screenToFloor(S.drag.x0, S.drag.y0, ballPlaneY()), f1 = R.screenToFloor(px, py, ballPlaneY());
-  if (!f0 || !f1) return;
-  let dx = f0.x - f1.x, dz = f0.z - f1.z; if (save.aimMode === 'push') { dx = -dx; dz = -dz; }
+  let dx, dz;
+  if (f0 && f1) { dx = f0.x - f1.x; dz = f0.z - f1.z; }
+  else { // pointer above the horizon: map the screen drag through the camera's yaw instead of the floor plane
+    const yaw = R.cam.yaw, sx = S.drag.x0 - px, sy = S.drag.y0 - py; const fx = -Math.cos(yaw), fz = -Math.sin(yaw), rx = Math.sin(yaw), rz = -Math.cos(yaw);
+    dx = rx * sx + fx * (-sy); dz = rz * sx + fz * (-sy); }
+  if (save.aimMode === 'push') { dx = -dx; dz = -dz; }
   const d = Math.hypot(dx, dz) || 1; S.aimTarget = Math.atan2(dz / d, dx / d);
   S.aim.power = Math.min(1, (sd - dead) / full); S.aim.active = true;
   $('power').style.setProperty('--p', S.aim.power); $('power').classList.add('on');
@@ -443,7 +449,7 @@ function frame(now) {
   if (!S.world || !S.hole) return;
   if (S.flyover) {
     const f = S.flyover; f.t += dt; const u = Math.min(1, f.t / f.dur); const e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u;
-    R.cam.tx = R.cam.sx = f.from.x + (f.to.x - f.from.x) * e; R.cam.tz = R.cam.sz = f.from.z + (f.to.z - f.from.z) * e; R.cam.ty = R.cam.sy = floorHeight(S.world, R.cam.tx, R.cam.tz) || 0;
+    R.cam.tx = R.cam.sx = f.from.x + (f.to.x - f.from.x) * e; R.cam.tz = R.cam.sz = f.from.z + (f.to.z - f.from.z) * e; { const fh = floorHeight(S.world, R.cam.tx, R.cam.tz); R.cam.ty = R.cam.sy = isFinite(fh) ? fh : 0; }
     R.cam.yaw = f.from.yaw + (f.to.yaw - f.from.yaw) * e; R.cam.dist = 7 + Math.sin(u * Math.PI) * 4;
     if (u >= 1) { S.flyover = null; R.cam.dist = 7; R.cam.pitch = 0.72; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - f.to.z, S.world.cupX - f.to.x); }
   }
