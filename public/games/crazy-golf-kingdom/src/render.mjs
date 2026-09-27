@@ -71,6 +71,7 @@ function checkerTexture() {
 // ---------- model cache ----------
 const gltfLoader = new GLTFLoader();
 const modelCache = new Map();   // name -> Promise<THREE.Object3D|null>
+const modelReady = new Map();   // name -> THREE.Object3D|null once resolved (lets buildHole place models synchronously)
 export function loadModel(name) {
   if (!modelCache.has(name)) {
     modelCache.set(name, new Promise((res) => {
@@ -79,8 +80,8 @@ export function loadModel(name) {
         // normalise: sit on y=0, fit into a unit box (scaled by caller)
         const box = new THREE.Box3().setFromObject(obj); const size = new THREE.Vector3(); box.getSize(size); const ctr = new THREE.Vector3(); box.getCenter(ctr);
         const s = 1 / Math.max(size.x, size.y, size.z); obj.scale.setScalar(s); obj.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
-        const wrap = new THREE.Group(); wrap.add(obj); wrap.userData.size = size.clone().multiplyScalar(s); res(wrap);
-      }, undefined, () => res(null));
+        const wrap = new THREE.Group(); wrap.add(obj); wrap.userData.size = size.clone().multiplyScalar(s); modelReady.set(name, wrap); res(wrap);
+      }, undefined, () => { modelReady.set(name, null); res(null); });
     }));
   }
   return modelCache.get(name);
@@ -149,6 +150,8 @@ export class GolfRenderer {
     this.idlePulse = 0;
     this.resize();
   }
+  preloadModels(names) { return Promise.all(names.map(n => loadModel(n))); }
+  warm(ball, worldT) { this.update(ball, worldT, 0.016, null); this.renderer.compile(this.scene, this.camera); this.renderer.render(this.scene, this.camera); }
   resize() {
     const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
@@ -343,7 +346,9 @@ export class GolfRenderer {
     const holder = new THREE.Group(); holder.position.set(cx, y, cz); holder.rotation.y = rot; G.add(holder);
     if (!decor) this.hitNodes.set(cx.toFixed(2) + ',' + cz.toFixed(2), { node: holder, kind: 'model', y });
     const put = (m) => { if (!holder.parent) return; const sz = m.userData.size || new THREE.Vector3(1, 1, 1); const s = size / Math.max(sz.x, sz.z, 0.001); const maxH = decor ? 2.6 : 1.5; let sc = s; if (sz.y * sc > maxH) sc = maxH / sz.y; m.scale.setScalar(sc); holder.add(m); };
-    loadModel(name).then(m => { if (m) put(m.clone()); else put(fallbackModel(name, K.wall)); });
+    const cached = modelReady.get(name);
+    if (cached !== undefined) { if (cached) put(cached.clone()); else put(fallbackModel(name, K.wall)); }
+    else loadModel(name).then(m => { if (m) put(m.clone()); else put(fallbackModel(name, K.wall)); });
     if (!decor) { // subtle base ring so the collision proxy reads
       const ring = new THREE.Mesh(new THREE.RingGeometry(size / 2 - 0.06, size / 2, 28), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18 })); ring.rotation.x = -Math.PI / 2; ring.position.set(cx, y + 0.005, cz); G.add(ring);
     }

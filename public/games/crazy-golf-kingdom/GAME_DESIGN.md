@@ -57,6 +57,16 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   Space/Meadow; "AIR MAIL" +100 trick) · BALL SKIN PERSONALITY: per-skin trail colour, glow, particles (sparkle/
   fire/bubbles/hearts) and a drop sound (chime/vroom/goal horn/twinkle/giggle/pop/roar), blurbs in the shop.
   Tests: physics 42, coursegen ~670 (jumps bridge the connectivity check), `test/browser.ace.js` (14 checks).
+- 2026-09-26 LOADING + TITLE pass (user: long pause after picking a kingdom, flicker at hole start, empty title):
+  hole generation moved to a module Web Worker (`src/gen.worker.mjs`; main-thread fallback yields first); courses are
+  now lazy "specs" (`courseSpecs` → `ensureHole(i)`), hole 0 builds immediately, hole i+1 prefetches during play,
+  scorecard awaits all; loading overlay paints before any work (spinner + kingdom emoji + bar; overlay fades out)
+  — measured: overlay 6 ms, playable <1 s (was several seconds of frozen UI). Flicker fix: preload the kingdom's
+  models (sync placement via `modelReady`), `R.warm()` compiles shaders + renders one frame behind the overlay, and
+  `S.hole/S.world` are published to the frame loop only after `buildHole` (a hole-less frame used to throw).
+  TITLE ATTRACT MODE: `startAttract()` builds a random kingdom hole behind the menus, camera orbits the course
+  centre, a ghost golfer (12 angles × 5 powers) plays it, confetti on cup-in, new hole every cup/75 s; menus are
+  translucent panels; the cover's logo is cropped to `logo.png` and shown as a bobbing badge.
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

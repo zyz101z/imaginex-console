@@ -1,5 +1,5 @@
 // CRAZY GOLF KINGDOM — game controller: modes, input, HUD, save, audio.
-import { KINGDOMS, kingdomById, generateCourse, generateDaily, generateAceHole, dailySeed } from './coursegen.mjs';
+import { KINGDOMS, kingdomById, generateCourse, generateDaily, generateAceHole, generateHole, dailySeed, makeRng } from './coursegen.mjs';
 import { compileWorld, newBall, shoot, step, STEP, MAX_STROKES, floorHeight, TILE } from './physics.mjs';
 const EASY_MAX = 20;
 const maxStrokes = () => save.easy ? EASY_MAX : MAX_STROKES;
@@ -96,12 +96,13 @@ const S = {
   aim: { active: false, dx: 1, dz: 0, power: 0 }, drag: null, orbit: null, flyover: null, waitingShot: true, holeOver: false, paused: false,
   keys: {}, charge: 0, charging: false, aimAngle: 0, popTimer: 0, points: [0, 0], aces: 0,
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
-  shot: null, streak: 0, idleT: 0, aimTarget: 0,
+  shot: null, streak: 0, idleT: 0, aimTarget: 0, loadSeq: 0, attract: null, attractSeq: 0, attractStopped: 0,
 };
 window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title'); }
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
+  if (id === 'title' || id === 'modes' || id === 'kingdoms' || id === 'shop' || id === 'how') { if (!S.attract && S.attractSeq === S.attractStopped) startAttract(); } else if (id === 'play') { S.attractSeq++; S.attractStopped = S.attractSeq; S.attract = null; } }
 function renderTitle() { $('coinsTitle').textContent = save.coins; const tot = KINGDOMS.reduce((a, K) => a + careerStars(K.id), 0); $('starsTitle').textContent = `★ ${tot}/${KINGDOMS.length * 27}`; $('easyChk').checked = !!save.easy; }
 function renderModes() {
   const d = new Date(); const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
@@ -129,13 +130,35 @@ function renderShop() {
 }
 function toast(msg, ms = 1400) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('on'), ms); }
 
+// ---------- hole generation: Web Worker so the page never freezes ----------
+let genWorker = null; const genPending = new Map(); let genSeq = 0;
+try { genWorker = new Worker('src/gen.worker.mjs', { type: 'module' }); genWorker.onmessage = (e) => { const p = genPending.get(e.data.id); if (!p) return; genPending.delete(e.data.id); if (e.data.hole) p.res(e.data.hole); else p.rej(new Error(e.data.error)); }; genWorker.onerror = () => { genWorker = null; for (const [, p] of genPending) p.rej(new Error('worker')); genPending.clear(); }; } catch (e) { genWorker = null; }
+function genAsync(kind, args) {
+  if (genWorker) return new Promise((res, rej) => { const id = ++genSeq; genPending.set(id, { res, rej }); genWorker.postMessage({ id, kind, args }); })
+    .catch(() => new Promise(r => setTimeout(() => r(kind === 'ace' ? generateAceHole(new Date(args.date)) : generateHole(args)), 20)));
+  return new Promise(r => setTimeout(() => r(kind === 'ace' ? generateAceHole(new Date(args.date)) : generateHole(args)), 20));
+}
+// a course is a list of "specs" that become holes lazily; ensureHole(i) resolves the hole object
+function courseSpecs(mode, kingdom) {
+  if (mode === 'daily') { const seed = dailySeed(new Date()); const rng = makeRng(seed); const out = []; for (let i = 0; i < 9; i++) { const k = KINGDOMS[Math.floor(rng() * KINGDOMS.length)].id; out.push({ kingdom: k, index: i, seed: seed + i * 131, difficulty: Math.min(8, 1 + i) }); } return out; }
+  const seed = mode === 'career' ? 777 + KINGDOMS.findIndex(k => k.id === kingdom) * 1000 : (Math.random() * 1e9) | 0;
+  return Array.from({ length: 9 }, (_, i) => ({ kingdom, index: i, seed: seed + i * 17 }));
+}
+async function ensureHole(i) {
+  const c = S.course; if (!c[i]) return null;
+  if (c[i].tiles) return c[i];
+  if (!c[i]._promise) c[i]._promise = genAsync('hole', c[i]).then(h => { c[i] = h; return h; });
+  return c[i]._promise;
+}
+function prefetchHole(i) { if (S.course[i] && !S.course[i].tiles) ensureHole(i).catch(() => {}); }
+
 // ---------- Shot of the Day: one hole, three balls, ace it ----------
 const ACE_POINTS = [300, 200, 100];
 function aceKey() { const d = new Date(); return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); }
 function aceId() { return 'crazy-golf-ace-daily-' + aceKey(); }
 async function startAce() {
   S.mode = 'ace'; S.players = 1; S.kingdom = 'meadow'; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.streak = 0; S.aces = 0;
-  S.course = [generateAceHole(new Date())]; S.ace = { attempt: 0, best: Infinity, done: false, aced: 0 };
+  S.course = [{ _ace: true, date: Date.now() }]; S.ace = { attempt: 0, best: Infinity, done: false, aced: 0 };
   show('play'); await loadHole(0); updateHud();
 }
 function aceAfterRest(b) {
@@ -163,22 +186,70 @@ function postAce(pts) {
   const fetchBoard = () => fetch('/api/leaderboard?gameId=' + aceId()).then(r => r.ok ? r.json() : []).then(rows => render(Array.isArray(rows) ? rows : [])).catch(() => render(null));
   if (pts != null && nameFor() && pts > 0) fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: aceId(), nickname: nameFor(), score: pts }) }).catch(() => {}).finally(fetchBoard); else fetchBoard();
 }
+// ---------- attract mode: a live hole with a ghost golfer behind the menus ----------
+async function startAttract() {
+  const seq = ++S.attractSeq; S.attract = null;
+  const K = KINGDOMS[Math.floor(Math.random() * KINGDOMS.length)];
+  let hole; try { hole = await genAsync('hole', { kingdom: K.id, index: 2 + Math.floor(Math.random() * 4), seed: (Math.random() * 1e9) | 0 }); } catch (e) { return; }
+  if (seq !== S.attractSeq || S.screen === 'play') return;
+  const world = compileWorld(hole);
+  await R.preloadModels([...new Set([...hole.obstacles.filter(o => o.type === 'model').map(o => o.model), ...(hole.decor || []).map(d => d.model), ...(hole.obstacles.some(o => o.type === 'windmill') ? ['windmill'] : [])])]);
+  if (seq !== S.attractSeq || S.screen === 'play') return;
+  await R.buildHole(hole, K, world);
+  if (seq !== S.attractSeq || S.screen === 'play') return;
+  const ball = newBall(world); const cc = R.courseCenter;
+  R.cam.tx = R.cam.sx = cc.x; R.cam.tz = R.cam.sz = cc.z; R.cam.ty = R.cam.sy = 0; R.cam.dist = Math.max(9, cc.span * 0.55); R.cam.pitch = 0.62; R.cam.yaw = Math.random() * 6.28;
+  S.attract = { hole, world, ball, t: 0, wait: 1.2, doneAt: null, K };
+  R.warm(ball, 0);
+}
+function attractShot(a) {
+  const w = a.world, b = a.ball; const base = Math.atan2(w.cupZ - b.z, w.cupX - b.x); let best = null;
+  for (const ang of [0, .25, -.25, .55, -.55, .9, -.9, 1.4, -1.4, 2.2, -2.2, Math.PI]) for (const pw of [.15, .3, .5, .75, 1]) {
+    const t = { ...b, events: [] }; shoot(t, Math.cos(base + ang), Math.sin(base + ang), pw); let tt = a.t; while (!t.resting && tt - a.t < 10) { step(w, t, tt); tt += STEP; }
+    const d = t.inCup ? -1 : Math.hypot(w.cupX - t.x, w.cupZ - t.z) + (t.penalty || 0) * 50; if (!best || d < best.d) best = { d, ang, pw }; if (t.inCup) break; }
+  shoot(b, Math.cos(base + best.ang), Math.sin(base + best.ang), best.pw); b.penalty = 0;
+}
+function attractFrame(dt) {
+  const a = S.attract; if (!a) return;
+  a.t += dt; R.cam.yaw += dt * 0.12; R.lookAtBall({ x: R.courseCenter.x, y: 0, z: R.courseCenter.z });
+  if (a.ball.inCup) { if (a.doneAt == null) { a.doneAt = a.t; R.burst(a.world.cupX, 0.2, a.world.cupZ, 40, [0xffeb3b, 0xff4081, 0x40c4ff, 0x69f0ae], 3, 0.8, 1.4); } else if (a.t - a.doneAt > 2.2) { startAttract(); return; } }
+  else if (a.ball.resting) { a.wait -= dt; if (a.wait <= 0) { attractShot(a); a.wait = 1.4 + Math.random(); } }
+  else { let acc = dt; while (acc > 0) { step(a.world, a.ball, a.t); acc -= STEP; } for (const e of a.ball.events) { if (e.type === 'bumper' || e.type === 'model') R.hit(e.x, e.z); if (e.type === 'reset') a.ball.penalty = 0; } a.ball.events.length = 0; }
+  if (a.t > 75) { startAttract(); return; }   // never let one hole loop forever
+  R.update(a.ball, a.t, dt, null);
+}
 // ---------- round flow ----------
 async function startRound(mode, kingdom) {
   S.mode = mode; S.kingdom = kingdom; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.aces = 0; S.streak = 0;
-  if (mode === 'daily') S.course = generateDaily(new Date()); else S.course = generateCourse({ kingdom, seed: mode === 'career' ? 777 + KINGDOMS.findIndex(k => k.id === kingdom) * 1000 : (Math.random() * 1e9) | 0 });
+  S.course = courseSpecs(mode, kingdom);
   show('play'); await loadHole(0);
 }
 async function loadHole(i) {
-  S.holeIdx = i; S.hole = S.course[i]; S.K = kingdomById(S.hole.kingdom); S.world = compileWorld(S.hole); playMusic(S.K.id);
-  S.balls = [newBall(S.world), newBall(S.world)]; S.strokes = [0, 0]; S.done = [false, false]; S.player = 0; S.holeOver = false; S.worldT = 0; S.waitingShot = false; S.cupZoom = null; S.autoFace = true;
-  $('loading').classList.add('on');
-  await R.buildHole(S.hole, S.K, S.world);
-  $('loading').classList.remove('on');
+  const gen = ++S.loadSeq;
+  S.world = null; S.hole = null; $('loading').classList.add('on'); $('loadText').textContent = S.mode === 'ace' ? 'BUILDING THE SHOT OF THE DAY…' : `BUILDING HOLE ${i + 1}…`; $('loadSpin').textContent = '⛳';
+  await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));   // let the overlay paint before any work
+  let hole;
+  try { hole = S.course[i] && S.course[i]._ace ? await genAsync('ace', { date: S.course[i].date }) : await ensureHole(i); } catch (e) { hole = generateHole(S.course[i]); }
+  if (gen !== S.loadSeq) return;   // a newer load superseded this one
+  if (S.course[i] && S.course[i]._ace) S.course[i] = hole;
+  S.holeIdx = i; S.K = kingdomById(hole.kingdom); const world = compileWorld(hole); playMusic(S.K.id);
+  S.balls = [newBall(world), newBall(world)]; S.strokes = [0, 0]; S.done = [false, false]; S.player = 0; S.holeOver = false; S.worldT = 0; S.waitingShot = false; S.cupZoom = null; S.autoFace = true;
+  $('loadSpin').textContent = S.K.emoji;
+  await R.preloadModels([...new Set([...hole.obstacles.filter(o => o.type === 'model').map(o => o.model), ...(hole.decor || []).map(d => d.model), ...(hole.obstacles.some(o => o.type === 'windmill') ? ['windmill'] : [])])]);
+  if (gen !== S.loadSeq) return;
+  await R.buildHole(hole, S.K, world);
+  if (gen !== S.loadSeq) return;
+  S.hole = hole; S.world = world;   // only now does the frame loop see the new hole (renderer + state switch together)
   updateHud();
+  prefetchHole(i + 1);
   // flyover: cup → tee
   const b = S.balls[0]; R.snapToBall({ x: S.world.cupX, y: floorHeight(S.world, S.world.cupX, S.world.cupZ), z: S.world.cupZ }); R.cam.dist = 7; R.cam.pitch = 0.9; R.faceCup(b, S.world); R.cam.yaw += 0.6;
   S.flyover = { t: 0, dur: 2.4, from: { x: S.world.cupX, z: S.world.cupZ, yaw: R.cam.yaw }, to: { x: b.x, z: b.z, yaw: Math.atan2(b.z - S.world.cupZ, b.x - S.world.cupX) } };
+  // warm the GPU: compile shaders + draw one frame behind the overlay, so the first visible frame is complete
+  R.warm(S.balls[0], S.worldT);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  if (gen !== S.loadSeq) return;
+  $('loading').classList.remove('on');
   if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
 }
 function currentBall() { return S.balls[S.player]; }
@@ -221,7 +292,8 @@ function showHoleEnd() {
   if (S.holeIdx >= S.course.length - 1) return showScorecard();
   loadHole(S.holeIdx + 1);
 }
-function showScorecard() {
+async function showScorecard() {
+  await Promise.all(S.course.map((_, i) => ensureHole(i)));
   const total = (p) => S.scores[p].reduce((a, b) => a + (b || 0), 0); const parT = S.course.reduce((a, h) => a + h.par, 0);
   let rows = '<tr><th>Hole</th>' + S.course.map((_, i) => `<th>${i + 1}</th>`).join('') + '<th>Tot</th></tr>';
   rows += '<tr><td>Par</td>' + S.course.map(h => `<td>${h.par}</td>`).join('') + `<td>${parT}</td></tr>`;
@@ -244,7 +316,7 @@ function updateHud() {
   $('hStrokes').textContent = S.players === 2 ? `P1 ${S.strokes[0]} · P2 ${S.strokes[1]}` : `Strokes ${S.strokes[0]}`;
   $('hPlayer').textContent = S.players === 2 ? `Player ${S.player + 1}` : ''; $('hPlayer').style.display = S.players === 2 ? '' : 'none';
   $('hKing').textContent = `${S.K.emoji} ${S.K.name}${save.easy ? ' · EASY' : ''}`;
-  const done = S.scores[0].filter(x => x != null).length; const rel = S.scores[0].reduce((a, sc, i) => a + (sc == null ? 0 : sc - S.course[i].par), 0);
+  const done = S.scores[0].filter(x => x != null).length; const rel = S.scores[0].reduce((a, sc, i) => a + (sc == null || !S.course[i].par ? 0 : sc - S.course[i].par), 0);
   $('hScore').textContent = done ? `${rel === 0 ? 'E' : rel > 0 ? '+' + rel : rel} thru ${done} · ${S.points[0]} pts` : `${S.points[0]} pts`;
   $('hStreak').textContent = S.streak >= 2 ? `🔥 ${S.streak}` : ''; $('hStreak').style.display = S.streak >= 2 ? '' : 'none';
 }
@@ -367,7 +439,8 @@ function handleEvents(b) {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - S.last) / 1000); S.last = now;
-  if (S.screen !== 'play' || !S.world) return;
+  if (S.screen !== 'play') { if (S.attract && S.screen !== 'scorecard') attractFrame(dt); return; }
+  if (!S.world || !S.hole) return;
   if (S.flyover) {
     const f = S.flyover; f.t += dt; const u = Math.min(1, f.t / f.dur); const e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u;
     R.cam.tx = R.cam.sx = f.from.x + (f.to.x - f.from.x) * e; R.cam.tz = R.cam.sz = f.from.z + (f.to.z - f.from.z) * e; R.cam.ty = R.cam.sy = floorHeight(S.world, R.cam.tx, R.cam.tz) || 0;
