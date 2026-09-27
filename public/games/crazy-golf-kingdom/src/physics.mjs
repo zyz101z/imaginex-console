@@ -63,7 +63,7 @@ export function compileWorld(hole) {
       case 'mover': dynamics.push({ type: 'mover', x: cx, z: cz, axis: o.axis || 'x', amp: (o.amp || 0.6) * TILE, speed: o.speed || 1.0, phase: o.phase || 0, hw: o.hw != null ? o.hw * TILE : 0.14, hd: o.hd != null ? o.hd * TILE : TILE * 0.42 }); break;
       case 'attractor': pads.push({ type: 'attractor', x: cx, z: cz, r: o.r || TILE * 2, strength: o.strength || 5, core: o.core || 0.4 }); circles.push({ x: cx, z: cz, r: o.core || 0.4, kind: 'model', rest: 0.85 }); break;
       case 'boost': pads.push({ type: 'boost', x: cx, z: cz, r: TILE * 0.42, dirx: o.dirx, dirz: o.dirz, strength: o.strength || 7 }); break;
-      case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: 0.45, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id, exits: o.exits ? o.exits.map(e => ({ tx: (e.tx + 0.5) * TILE, tz: (e.tz + 0.5) * TILE })) : null }); break;
+      case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: o.r || 0.45, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id, exits: o.exits ? o.exits.map(e => ({ tx: (e.tx + 0.5) * TILE, tz: (e.tz + 0.5) * TILE })) : null }); break;
       case 'cannon': pads.push({ type: 'cannon', x: cx, z: cz, r: 0.34, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE }); break;
       case 'water': waters.push({ x: cx, z: cz, r: (o.r || 0.42) * TILE }); break;
       case 'turntable': pads.push({ type: 'turntable', x: cx, z: cz, r: TILE * 0.48, omega: o.omega || 1.6 }); break;

@@ -5,7 +5,7 @@
 
 const FINALES = {
   meadow: {
-    name: 'The Gauntlet', blurb: 'Three windmills. One ball. Good luck.', par: 5, waypoints: [[10, 0], [10, 3], [0, 3], [0, 6]],
+    name: 'The Gauntlet', blurb: 'Three windmills. One ball. Time it.', par: 5, waypoints: [[10, 0], [10, 3], [0, 3], [0, 6]],
     grid: [
       'T..........',
       '          .',
@@ -15,8 +15,9 @@ const FINALES = {
       '.          ',
       '.....C     ',
     ],
+    // full-width blades: no slipping past along the wall — you wait for the gap
     obstacles: [
-      { at: [3, 0], type: 'windmill', speed: 1.0, phase: 0, len: 2.2 * 0.7 }, { at: [6, 0], type: 'windmill', speed: 1.3, phase: 2.1, len: 2.2 * 0.7 }, { at: [9, 0], type: 'windmill', speed: 1.6, phase: 4.2, len: 2.2 * 0.7 },
+      { at: [3, 0], type: 'windmill', speed: 1.0, phase: 0, len: 2.2 * 0.92 }, { at: [6, 0], type: 'windmill', speed: 1.3, phase: 2.1, len: 2.2 * 0.92 }, { at: [9, 0], type: 'windmill', speed: 1.6, phase: 4.2, len: 2.2 * 0.92 },
       { at: [5, 3], type: 'bumper', dx: 0, dz: 0, r: 0.3 }, { at: [2, 3], type: 'bumper', dx: 0, dz: 0, r: 0.3 },
       { at: [0, 5], type: 'model', model: 'gnome', r: 0.45, rot: 1.2 },
       { at: [3, 6], type: 'sand' },
@@ -24,54 +25,54 @@ const FINALES = {
     decor: [{ at: [4, -2], model: 'mushroom' }, { at: [12, 2], model: 'windmill' }, { at: [-2, 5], model: 'mushroom' }],
   },
   candy: {
-    name: 'Rolling Lollipop', blurb: 'A giant lollipop patrols the green. Time it.', par: 4, waypoints: [[4, 0], [4, 2], [2, 7]],
+    name: 'Rolling Lollipop', blurb: 'Two sweets patrol a 3-wide lane. Time it or get squashed.', par: 3, waypoints: [[2, 0], [2, 8]],
     grid: [
-      'T....',
-      '    .',
-      '.....',
-      '.....',
-      '.....',
-      '.....',
-      '.   .',
-      '.....',
-      '  C  ',
+      ' T.  ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' .C. ',
     ],
+    // movers span the whole 3-wide lane (hd 1.45 tiles ≈ 3.2 m); amplitude sweeps them wall to wall
     obstacles: [
-      { at: [2, 3], type: 'mover', axis: 'x', amp: 0.9, speed: 0.9, phase: 0, model: 'lollipop', hw: 0.2, hd: 0.55 },
-      { at: [2, 5], type: 'mover', axis: 'x', amp: 0.9, speed: 1.3, phase: 2.5, model: 'cupcake', hw: 0.2, hd: 0.55 },
-      { at: [4, 1], type: 'boost', dirx: 0, dirz: 1, strength: 6 },
-      { at: [0, 6], type: 'syrup' }, { at: [4, 6], type: 'syrup' },
-      { at: [2, 7], type: 'bumper', dx: 0.3, dz: 0, r: 0.26 }, { at: [2, 7], type: 'bumper', dx: -0.3, dz: 0, r: 0.26 },
+      { at: [2, 3], type: 'mover', axis: 'x', amp: 0.75, speed: 1.1, phase: 0, model: 'lollipop', hw: 0.18, hd: 0.72 },
+      { at: [2, 6], type: 'mover', axis: 'x', amp: 0.75, speed: 1.5, phase: 2.6, model: 'cupcake', hw: 0.18, hd: 0.72 },
+      { at: [1, 1], type: 'syrup' }, { at: [3, 1], type: 'syrup' },
+      { at: [2, 4], type: 'boost', dirx: 0, dirz: 1, strength: 5 },
     ],
-    decor: [{ at: [-2, 3], model: 'gingerbread' }, { at: [7, 4], model: 'lollipop' }],
+    decor: [{ at: [-2, 3], model: 'gingerbread' }, { at: [6, 5], model: 'lollipop' }, { at: [-2, 7], model: 'cupcake' }],
   },
   dino: {
-    name: 'Tail Sweep', blurb: 'The T-rex is friendly. Its tail is not.', par: 4, waypoints: [[6, 0], [6, 2], [6, 6], [6, 8]],
+    name: 'Tail Sweep', blurb: 'The T-rex blocks the only lane. Its tail sweeps it clean.', par: 3, waypoints: [[3, 0], [3, 8]],
     grid: [
-      'T......',
-      '      .',
-      '.......',
-      '.......',
-      '.......',
-      '.......',
-      '.......',
-      '      .',
-      '......C',
+      ' T.  ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' .C. ',
     ],
+    // tail length = lane width, so there is no shoulder to hide on; the hub itself is a solid collider
     obstacles: [
-      { at: [3, 4], type: 'spinner', speed: 1.4, phase: 0, len: 2.2 * 2.6, model: 'trex', hubR: 0.5 },
-      { at: [1, 2], type: 'water', r: 0.3 }, { at: [5, 6], type: 'water', r: 0.3 },
-      { at: [0, 8], type: 'sand' }, { at: [3, 8], type: 'sand' },
-      { at: [6, 0], type: 'bumper', dx: 0, dz: 0, r: 0.3 },
+      { at: [2, 4], type: 'spinner', speed: 1.3, phase: 0, len: 2.2 * 2.85, model: 'trex', hubR: 0.42 },
+      { at: [1, 2], type: 'water', r: 0.3 }, { at: [3, 6], type: 'water', r: 0.3 },
+      { at: [2, 1], type: 'sand' },
     ],
-    decor: [{ at: [-2, 4], model: 'palm' }, { at: [9, 2], model: 'volcano' }, { at: [9, 7], model: 'palm' }],
+    decor: [{ at: [-2, 3], model: 'palm' }, { at: [6, 2], model: 'volcano' }, { at: [6, 7], model: 'palm' }],
   },
   castle: {
-    name: 'Spooky Portals', blurb: 'The ghost picks where you come out.', par: 4, waypoints: [[5, 0], [5, 1], [0, 7], [4, 8]],
+    name: 'Spooky Portals', blurb: 'The portal is the only way out. The ghost picks your exit.', par: 4, waypoints: [[5, 0], [5, 1], [0, 7], [4, 8]],
     grid: [
       'T.....',
       '     .',
-      '...  .',
+      '...   ',
       '.....',
       '.   ..',
       '.    .',
@@ -80,9 +81,10 @@ const FINALES = {
       '   ..',
       '   .C',
     ],
+    // (5,1) is a dead end: the portal there is the ONLY exit from the first corridor
     obstacles: [
-      { at: [5, 1], type: 'teleport', exits: [[0, 3], [4, 3], [0, 7]], id: 1 },
-      { at: [0, 3], type: 'portal_exit', id: 1 }, { at: [4, 3], type: 'portal_exit', id: 1 }, { at: [0, 7], type: 'portal_exit', id: 1 },
+      { at: [5, 1], type: 'teleport', exits: [[0, 2], [4, 3], [0, 7]], id: 1, r: 0.7 },
+      { at: [0, 2], type: 'portal_exit', id: 1 }, { at: [4, 3], type: 'portal_exit', id: 1 }, { at: [0, 7], type: 'portal_exit', id: 1 },
       { at: [2, 3], type: 'mover', axis: 'z', amp: 0.4, speed: 1.2, phase: 0 },
       { at: [2, 7], type: 'mover', axis: 'z', amp: 0.4, speed: 1.6, phase: 1.5 },
       { at: [3, 8], type: 'model', model: 'ghost', r: 0.4, rot: 0.6 },
@@ -91,25 +93,19 @@ const FINALES = {
     decor: [{ at: [-2, 5], model: 'tower' }, { at: [7, 8], model: 'pumpkin' }, { at: [7, 1], model: 'tower' }],
   },
   space: {
-    name: 'Tractor Beam', blurb: 'The UFO bends everything toward it. Use that.', par: 4, waypoints: [[8, 0], [8, 2], [8, 6], [0, 6], [0, 8]],
+    name: 'Tractor Beam', blurb: 'The well spans the whole lane. Cross it fast, or use it.', par: 3, waypoints: [[4, 1], [8, 1]],
     grid: [
-      'T........',
-      '        .',
       '.........',
+      'T.......C',
       '.........',
-      '.........',
-      '.........',
-      '.........',
-      '.        ',
-      '........C',
     ],
+    // the well radius (1.6 tiles) covers all three rows: every route to the cup passes through it
     obstacles: [
-      { at: [4, 4], type: 'attractor', r: 2.2 * 2.0, strength: 3.2, core: 0.45, model: 'ufo' },
-      { at: [1, 2], type: 'turntable', omega: 1.6 }, { at: [6, 3], type: 'turntable', omega: -1.6 },
-      { at: [8, 1], type: 'ice' }, { at: [0, 7], type: 'ice' },
-      { at: [4, 8], type: 'bumper', dx: 0, dz: 0, r: 0.3 },
+      { at: [4, 1], type: 'attractor', r: 2.2 * 1.6, strength: 4.0, core: 0.42, model: 'ufo' },
+      { at: [2, 0], type: 'turntable', omega: 1.5 }, { at: [6, 2], type: 'turntable', omega: -1.5 },
+      { at: [1, 2], type: 'ice' }, { at: [7, 0], type: 'ice' },
     ],
-    decor: [{ at: [-2, 4], model: 'rocket' }, { at: [11, 3], model: 'alien' }],
+    decor: [{ at: [4, -2], model: 'rocket' }, { at: [4, 4], model: 'alien' }, { at: [10, 1], model: 'alien' }],
   },
 };
 
@@ -130,7 +126,7 @@ export function buildFinale(kingdom, K) {
   for (const o of F.obstacles) {
     const [x, z] = o.at; const rest = { ...o }; delete rest.at;
     if (o.type === 'sand' || o.type === 'ice' || o.type === 'syrup') { const t = tiles.find(t => t.x === x && t.z === z); if (t) t.surface = o.type; obstacles.push({ x, z, type: 'patch', surface: o.type }); continue; }
-    if (o.type === 'teleport') { rest.exits = o.exits.map(([ex, ez]) => ({ tx: ex, tz: ez })); rest.tx = o.exits[0][0]; rest.tz = o.exits[0][1]; }
+    if (o.type === 'teleport') { rest.exits = o.exits.map(([ex, ez]) => ({ tx: ex, tz: ez })); rest.tx = o.exits[0][0]; rest.tz = o.exits[0][1]; if (o.r) rest.r = o.r; }
     obstacles.push({ x, z, ...rest });
   }
   const decor = F.decor.map(d => ({ x: d.at[0], z: d.at[1], model: d.model, rot: (d.at[0] * 7 + d.at[1] * 3) % 6, scale: 1.0 }));

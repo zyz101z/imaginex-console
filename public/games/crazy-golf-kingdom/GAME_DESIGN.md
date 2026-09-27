@@ -130,6 +130,10 @@ ball skins, a daily seeded course with a leaderboard.
 | Dino | Tail Sweep | spinner with the T-rex at the hub (hub collider) sweeping a 7-wide field, water |
 | Castle | Spooky Portals | portal with 3 exits (deterministic pseudo-random from entry position), moving walls |
 | Space | Tractor Beam | `attractor` pad: gravity well toward the hovering UFO (core collider), turntables |
+2026-09-27 REBUILD (user: "the T-rex is out of the way and easily avoided"): every finale re-laid so the gimmick is
+UNAVOIDABLE — Dino and Candy are 3-wide lanes with the tail / the sliding sweets spanning the full width; Space is a
+3-wide lane whose well radius (1.6 tiles) covers all rows; Castle's first corridor dead-ends at the portal (only exit,
+trigger r 0.7); Gauntlet blades are 0.92 tile (no wall-hug shoulder). Pars: Meadow 5, Candy 3, Dino 3, Castle 4, Space 3.
 Each carries `waypoints` so the ghost golfer can prove it (ghost now scores progress along the tee→waypoints→cup
 polyline, only credits corridors it is actually on, and tries 0/0.7/1.4 s waits when the hole has moving pieces).
 Career only: holing the finale awards the crown. Daily Course stays procedural.
