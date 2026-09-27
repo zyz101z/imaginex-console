@@ -187,7 +187,9 @@ Career only: holing the finale awards the crown. Daily Course stays procedural.
 - `models/*.glb` Meshy text-to-3D (preview 20 + refine 10 credits each, target 6k tris). 2026-09-27: `tower` and `trex`
   regenerated (new meshes) then RETEXTURED (`/openapi/v1/retexture`, 10 credits, `text_style_prompt`) because the shared
   texture prompt "bright saturated cartoon colors" had overridden the colour words in the model prompts (yellow tower,
-  rainbow T-rex). Lesson: put colours in the retexture/texture prompt, not only the mesh prompt. Meshy balance ≈ 921.
+  rainbow T-rex). Lesson: put colours in the retexture/texture prompt, not only the mesh prompt. 2026-09-27: `alien` regenerated too
+  (the original was a red ant — user: "the aliens look like ants"); new prompt forbids antennae/insect features, symmetry on,
+  retextured lime green. Meshy balance ≈ 881.
 
 ## Open questions for playtest
 - Power curve feel (is max power too strong on short holes?).
