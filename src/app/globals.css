@@ -240,124 +240,108 @@ body {
   border-radius: 1px;
 }
 
-/* === Cartridge insertion system === */
+/* === Cartridge insertion system (v2, 2026-09-27) ===
+   The console art is 1536x1024 rendered 420px wide (280px tall). The slot opening on the art is the quad
+   TL 38%/16.5%  TR 86%/17%  BR 85%/27%  BL 39.5%/27%. The cartridge lives in a 3D layer above the art and is
+   clipped at the slot's NEAR edge (y ≈ 160px padding + 27% of 280px ≈ 236px) so it slides INTO the console. */
+
+.cart-scene { perspective: 900px; }
+.cart-layer {
+  position: absolute; inset: 0; z-index: 20; pointer-events: none;
+  transform-style: preserve-3d;
+}
+.cart-layer > * { pointer-events: auto; }
+.cart-layer-clip { clip-path: polygon(0 0, 100% 0, 100% 234px, 0 238px); }
+.cart-body { transform-style: preserve-3d; backface-visibility: hidden; }
 
 /* Idle: gentle floating bob */
 @keyframes cartIdleBob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px); }
 }
+.cart-phase-idle { animation: cartIdleBob 2.5s ease-in-out infinite; }
+.cart-phase-idle .cart-body:hover { transform: translateY(-8px) scale(1.05); box-shadow: 0 12px 30px rgba(0,0,0,0.5), 0 0 24px var(--cart-glow, rgba(79,195,247,0.3)); }
 
-.cart-phase-idle {
-  animation: cartIdleBob 2.5s ease-in-out infinite;
-}
-
-/* Lifting: cartridge rises up before dropping */
+/* Lifting: rises, squares up, gloss sweeps the label */
 @keyframes cartLift {
-  0% { transform: translateY(0) scale(1); }
-  100% { transform: translateY(-30px) scale(1.05); }
+  0%   { transform: translateX(-50%) translateY(0) scale(1); }
+  100% { transform: translateX(-50%) translateY(-26px) scale(1.06); }
 }
+.cart-phase-lifting { animation: cartLift 0.35s cubic-bezier(0.2, 0.8, 0.3, 1) forwards; }
 
-.cart-phase-lifting {
-  animation: cartLift 0.4s ease-out forwards;
-}
-
-/* Dropping: cartridge plunges down into the slot */
+/* Dropping: tilts back to lie in the slot plane and slides in along it */
 @keyframes cartDrop {
-  0% { transform: translateY(-30px) scale(1.05); }
-  60% { transform: translateY(95px) scale(0.95); }
-  80% { transform: translateY(88px) scale(0.97); }
-  100% { transform: translateY(92px) scale(0.96); }
+  0%   { transform: translateX(-50%) translateY(-26px) rotateX(0deg) scale(1.06); }
+  35%  { transform: translateX(-50%) translateY(40px) rotateX(56deg) rotateZ(-2deg) scale(0.97); }
+  100% { transform: translateX(-50%) translateY(214px) rotateX(64deg) rotateZ(-2deg) scale(0.9); }
+}
+.cart-phase-dropping { animation: cartDrop 0.55s cubic-bezier(0.55, 0, 0.9, 0.6) forwards; }
+
+/* Seated / reading / launching: fully inside — keep it parked out of sight below the clip line */
+.cart-phase-seated, .cart-phase-reading, .cart-phase-launching {
+  transform: translateX(-50%) translateY(214px) rotateX(64deg) rotateZ(-2deg) scale(0.9);
 }
 
-.cart-phase-dropping {
-  animation: cartDrop 0.5s cubic-bezier(0.4, 0, 0.8, 1) forwards;
-}
+/* Gloss highlight sweeping the cover during the lift */
+.cart-gloss { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%); transform: translateX(-120%); }
+@keyframes glossSweep { 0% { opacity: 0; transform: translateX(-120%); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateX(120%); } }
+.cart-gloss-sweep { animation: glossSweep 0.5s ease-out forwards; }
 
-/* Seated: cartridge is in the slot, slight settle */
-@keyframes cartSettle {
-  0% { transform: translateY(92px) scale(0.96); }
-  40% { transform: translateY(95px) scale(0.95); }
-  100% { transform: translateY(93px) scale(0.96); }
-}
-
-.cart-phase-seated {
-  animation: cartSettle 0.2s ease-out forwards;
-}
-
-/* Glowing: cartridge stays seated, pulses with game color */
-.cart-phase-glowing {
-  transform: translateY(93px) scale(0.96);
-}
-
-/* Launching: cartridge fades as game boots */
-@keyframes cartLaunch {
-  0% { transform: translateY(93px) scale(0.96); opacity: 1; }
-  100% { transform: translateY(93px) scale(0.96); opacity: 0; }
-}
-
-.cart-phase-launching {
-  animation: cartLaunch 0.6s ease-out forwards;
-}
-
-/* Console bump when cartridge seats */
+/* Console bump when the cartridge seats (heavier than before) */
 @keyframes consoleBump {
   0% { transform: translateY(0); }
-  30% { transform: translateY(3px); }
-  60% { transform: translateY(-1px); }
+  25% { transform: translateY(5px) scale(0.995); }
+  55% { transform: translateY(-2px); }
   100% { transform: translateY(0); }
 }
+.console-bump { animation: consoleBump 0.28s ease-out; }
 
-.console-bump {
-  animation: consoleBump 0.25s ease-out;
+/* Slot glow: a quad matching the slot opening, lit in the game's colour */
+.slot-glow {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0;
+  clip-path: polygon(38% 16.5%, 86% 17%, 85% 27%, 39.5% 27%);
+  background: radial-gradient(ellipse at 50% 60%, var(--game-color) 0%, color-mix(in srgb, var(--game-color) 60%, transparent) 45%, transparent 80%);
+  transition: opacity 0.25s;
 }
+@keyframes slotIdle { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.35; } }
+.slot-glow-idle { animation: slotIdle 2.2s ease-in-out infinite; }
+@keyframes slotApproach { 0% { opacity: 0.2; } 100% { opacity: 0.75; } }
+.slot-glow-approach { animation: slotApproach 0.55s ease-in forwards; }
+@keyframes slotFlash { 0% { opacity: 1; filter: brightness(2); } 100% { opacity: 0.7; filter: brightness(1); } }
+.slot-glow-flash { animation: slotFlash 0.3s ease-out forwards; }
+@keyframes slotBreathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+.slot-glow-on { animation: slotBreathe 0.7s ease-in-out infinite; }
 
-/* Console glow after insert */
-@keyframes consoleGlow {
-  0% { filter: brightness(1) drop-shadow(0 0 0 transparent); }
-  30% { filter: brightness(1.2) drop-shadow(0 0 25px rgba(79,195,247,0.5)); }
-  100% { filter: brightness(1.1) drop-shadow(0 0 15px rgba(79,195,247,0.3)); }
+/* Dust puff from the slot's near edge on seat */
+.dust-puff { position: absolute; left: 62%; top: 27%; width: 0; height: 0; pointer-events: none; }
+.dust { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.75);
+  transform: rotate(var(--a)) translateX(0); animation: dustFly 0.45s ease-out forwards; }
+@keyframes dustFly { 0% { opacity: 0.9; transform: rotate(var(--a)) translateX(2px) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(0.3); } }
+
+/* Accent strip (the blue band on the art) takes the game colour */
+.accent-strip {
+  position: absolute; left: 17%; top: 33%; width: 65%; height: 11%; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: linear-gradient(90deg, transparent, var(--game-color) 20%, var(--game-color) 80%, transparent);
+  filter: blur(6px); transition: opacity 0.5s;
 }
+.accent-strip-on { opacity: 0.85; }
 
-.console-activated {
-  animation: consoleGlow 0.8s ease-out forwards;
-}
+/* Front indicator LEDs (the row of dots on the art at ~57-67% x, 57% y) */
+.led-row { position: absolute; left: 56.3%; top: 56.2%; display: flex; gap: 4.2px; pointer-events: none; }
+.led { width: 7px; height: 7px; border-radius: 50%; background: #2b2b2b; opacity: 0.9; }
+@keyframes ledChase { 0%, 100% { background: #2b2b2b; box-shadow: none; } 15%, 35% { background: var(--game-color); box-shadow: 0 0 8px var(--game-color); } }
+.led-chase { animation: ledChase 0.65s linear infinite; animation-delay: calc(var(--i) * 0.11s); }
+.led-on { background: var(--game-color); box-shadow: 0 0 8px var(--game-color); }
 
-/* LED flash bar */
-@keyframes ledFlash {
-  0% { opacity: 0; box-shadow: none; }
-  20% { opacity: 1; box-shadow: 0 0 15px var(--accent), 0 0 30px rgba(79,195,247,0.5); }
-  50% { opacity: 0.6; }
-  70% { opacity: 1; box-shadow: 0 0 20px var(--accent), 0 0 40px rgba(79,195,247,0.6); }
-  100% { opacity: 0.9; box-shadow: 0 0 12px var(--accent), 0 0 25px rgba(79,195,247,0.4); }
-}
-
-.led-flash-bar {
-  background: var(--accent);
-  border-radius: 2px;
-  animation: ledFlash 0.6s ease-out forwards;
-}
-
-/* Screen glow on launch */
-@keyframes screenGlow {
+/* Launch: the console pushes toward the viewer while the wash floods the screen */
+@keyframes scenePush { 0% { transform: scale(1) translateY(0); } 100% { transform: scale(1.28) translateY(-14px); } }
+.cart-scene-launch { animation: scenePush 0.6s cubic-bezier(0.3, 0, 0.2, 1) forwards; }
+.boot-wash { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0; animation: bootWash 0.6s ease-in forwards; }
+@keyframes bootWash {
   0% { opacity: 0; }
-  50% { opacity: 0.8; }
-  100% { opacity: 1; }
-}
-
-.screen-glow {
-  animation: screenGlow 0.8s ease-out forwards;
-  border-radius: 12px;
-}
-
-/* Pulsing slot indicator */
-@keyframes slotPulse {
-  0%, 100% { box-shadow: inset 0 0 10px rgba(79,195,247,0.1); }
-  50% { box-shadow: inset 0 0 20px rgba(79,195,247,0.3), 0 0 10px rgba(79,195,247,0.2); }
-}
-
-.slot-waiting {
-  animation: slotPulse 2s ease-in-out infinite;
+  70% { opacity: 0.9; filter: brightness(1); }
+  100% { opacity: 1; filter: brightness(3); }
 }
 
 /* Text pulse */
@@ -365,9 +349,10 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
+.cart-text-pulse { animation: textPulse 0.8s ease-in-out infinite; }
 
-.cart-text-pulse {
-  animation: textPulse 0.8s ease-in-out infinite;
+@media (prefers-reduced-motion: reduce) {
+  .cart-phase-idle, .slot-glow-idle, .led-chase, .slot-glow-on { animation: none; }
 }
 
 /* Console slot */

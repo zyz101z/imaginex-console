@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { games, Game } from "@/lib/games";
 import {
@@ -225,8 +226,11 @@ function GameDetail({
   onBack: () => void;
 }) {
   const [save, setSave] = useState<{ totalPlayTime: number } | null>(null);
-  // Phases: idle -> lifting -> dropping -> seated -> glowing -> launching
-  const [phase, setPhase] = useState<"idle" | "lifting" | "dropping" | "seated" | "glowing" | "launching">("idle");
+  // Phases: idle -> lifting -> dropping (tilts + slides INTO the slot) -> seated (thunk, dust) -> reading (LED chase) -> launching (push-in + colour wash)
+  type Phase = "idle" | "lifting" | "dropping" | "seated" | "reading" | "launching";
+  const [phase, setPhase] = useState<Phase>("idle");
+  const inserting = phase !== "idle";
+  const seatedOrLater = phase === "seated" || phase === "reading" || phase === "launching";
 
   useEffect(() => {
     try {
@@ -256,25 +260,49 @@ function GameDetail({
       noiseGain.gain.setValueAtTime(0.4, now);
       noiseGain.gain.linearRampToValueAtTime(0, now + noiseLen);
       noiseSrc.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
-      noiseSrc.start(now + 0.4);
+      noiseSrc.start(now + 0.45);
 
-      // Click/snap when cartridge seats
+      // Thunk + latch click when the cartridge seats (0.9 s)
+      const thunk = ctx.createOscillator();
+      thunk.type = "sine";
+      thunk.frequency.setValueAtTime(110, now + 0.9);
+      thunk.frequency.exponentialRampToValueAtTime(35, now + 1.0);
+      const thunkGain = ctx.createGain();
+      thunkGain.gain.setValueAtTime(0.7, now + 0.9);
+      thunkGain.gain.exponentialRampToValueAtTime(0.01, now + 1.05);
+      thunk.connect(thunkGain).connect(ctx.destination);
+      thunk.start(now + 0.9);
+      thunk.stop(now + 1.05);
       const clickOsc = ctx.createOscillator();
       clickOsc.type = "square";
-      clickOsc.frequency.setValueAtTime(150, now + 0.55);
-      clickOsc.frequency.exponentialRampToValueAtTime(40, now + 0.62);
+      clickOsc.frequency.setValueAtTime(900, now + 0.93);
+      clickOsc.frequency.exponentialRampToValueAtTime(200, now + 0.97);
       const clickGain = ctx.createGain();
-      clickGain.gain.setValueAtTime(0.5, now + 0.55);
-      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+      clickGain.gain.setValueAtTime(0.25, now + 0.93);
+      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.99);
       clickOsc.connect(clickGain).connect(ctx.destination);
-      clickOsc.start(now + 0.55);
-      clickOsc.stop(now + 0.65);
+      clickOsc.start(now + 0.93);
+      clickOsc.stop(now + 0.99);
 
-      // Power-on chime (ascending tones)
-      [440, 554, 659].forEach((freq, i) => {
+      // "Reading" ticks while the LEDs chase (1.05 → 1.6 s)
+      [0, 1, 2, 3, 4].forEach((i) => {
+        const t = now + 1.05 + i * 0.13;
+        const o = ctx.createOscillator();
+        o.type = "square";
+        o.frequency.setValueAtTime(1800 + i * 120, t);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.06, t);
+        g.gain.exponentialRampToValueAtTime(0.005, t + 0.05);
+        o.connect(g).connect(ctx.destination);
+        o.start(t);
+        o.stop(t + 0.06);
+      });
+
+      // Power-on chime (ascending tones) as the console pushes in
+      [440, 554, 659, 880].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         osc.type = "sine";
-        const t = now + 1.1 + i * 0.12;
+        const t = now + 1.7 + i * 0.11;
         osc.frequency.setValueAtTime(freq, t);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, t);
@@ -297,12 +325,19 @@ function GameDetail({
     playInsertSound();
     setPhase("lifting");
     insertTimersRef.current = [
-      window.setTimeout(() => setPhase("dropping"), 400),
+      window.setTimeout(() => setPhase("dropping"), 350),
       window.setTimeout(() => setPhase("seated"), 900),
-      window.setTimeout(() => setPhase("glowing"), 1100),
-      window.setTimeout(() => setPhase("launching"), 2200),
-      window.setTimeout(() => onPlay(), 2800),
+      window.setTimeout(() => setPhase("reading"), 1000),
+      window.setTimeout(() => setPhase("launching"), 1700),
+      window.setTimeout(() => onPlay(), 2300),
     ];
+  };
+
+  // click anywhere during the sequence to skip straight to the game
+  const handleSkip = () => {
+    if (!inserting) return;
+    insertTimersRef.current.forEach((t) => window.clearTimeout(t));
+    onPlay();
   };
 
   useEffect(() => {
@@ -326,30 +361,26 @@ function GameDetail({
 
       <div className="max-w-3xl mx-auto">
         {/* Console + Cartridge area */}
-        <div className="flex flex-col items-center mb-10">
-          {/* Wrapper: console with cartridge layered on top */}
-          <div className="relative inline-block" style={{ paddingTop: "160px" }}>
-
-            {/* Cartridge - positioned above the console slot */}
-            <div
-              className="absolute left-1/2 z-20"
-              style={{
-                transform: "translateX(-50%)",
-                top: "10px",
-                transition: phase === "idle" ? "none" : undefined,
-              }}
-            >
+        <div className="flex flex-col items-center mb-10" onClick={handleSkip}>
+          {/* Scene: console art with the cartridge in a 3D layer above it. Fixed 420px art width; the slot quad below is in % of that art. */}
+          <div
+            className={`cart-scene relative inline-block ${phase === "launching" ? "cart-scene-launch" : ""}`}
+            style={{ paddingTop: "160px", ["--game-color" as string]: game.color } as React.CSSProperties}
+          >
+            {/* Cartridge layer — clipped at the slot's near edge so it visibly goes INTO the console */}
+            <div className={`cart-layer ${phase === "dropping" || seatedOrLater ? "cart-layer-clip" : ""}`}>
               <div
                 className={`cart-phase-${phase}`}
-                style={{ filter: phase === "launching" ? `drop-shadow(0 0 20px ${game.color})` : undefined }}
+                style={{ position: "absolute", left: "61.5%", top: "10px", transformOrigin: "50% 100%" }}
               >
                 <div
-                  className={`cartridge w-[100px] h-[140px] mx-auto ${phase === "idle" ? "cursor-pointer hover:scale-105" : ""} transition-transform`}
+                  className={`cartridge cart-body w-[100px] h-[140px] ${phase === "idle" ? "cursor-pointer" : ""}`}
                   style={{
                     background: `linear-gradient(180deg, ${game.cartridgeColor}, ${game.cartridgeColor}dd)`,
                     ["--cart-glow" as string]: `${game.color}60`,
+                    marginLeft: "-50px",
                   } as React.CSSProperties}
-                  onClick={handleInsert}
+                  onClick={(e) => { e.stopPropagation(); handleInsert(); }}
                 >
                   <div className="cartridge-label overflow-hidden" style={{ background: game.cartridgeLabelColor }}>
                     <img
@@ -358,6 +389,7 @@ function GameDetail({
                       className="w-full h-full object-cover"
                       draggable={false}
                     />
+                    <div className={`cart-gloss ${phase === "lifting" ? "cart-gloss-sweep" : ""}`} />
                   </div>
                   <div className="cartridge-pins">
                     {Array.from({ length: 8 }).map((_, i) => (
@@ -368,9 +400,8 @@ function GameDetail({
               </div>
             </div>
 
-            {/* Console image - z-index layers the top of console over the cartridge bottom */}
-            <div className={`relative z-10 ${phase === "seated" ? "console-bump" : ""} ${phase === "glowing" || phase === "launching" ? "console-activated" : ""}`}>
-              {/* Top portion of console overlaps cartridge for "inserting behind" effect */}
+            {/* Console art + reactive overlays (all positioned in % of the art) */}
+            <div className={`relative z-10 cart-console ${phase === "seated" ? "console-bump" : ""}`}>
               <img
                 src="/Imaginex.png"
                 alt="ImagineX Console"
@@ -378,29 +409,37 @@ function GameDetail({
                 draggable={false}
               />
 
-              {/* LED flash on insert */}
-              {(phase === "glowing" || phase === "launching") && (
-                <div className="absolute pointer-events-none led-flash-bar"
-                  style={{ top: "42%", left: "8%", right: "8%", height: "3px" }}
-                />
+              {/* Slot glow: wakes as the cart approaches, flashes on seat, breathes while reading */}
+              <div className={`slot-glow ${phase === "dropping" ? "slot-glow-approach" : ""} ${phase === "seated" ? "slot-glow-flash" : ""} ${phase === "reading" || phase === "launching" ? "slot-glow-on" : ""} ${phase === "idle" ? "slot-glow-idle" : ""}`} />
+
+              {/* Dust puff on seat */}
+              {phase === "seated" && (
+                <div className="dust-puff">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <span key={i} className="dust" style={{ ["--a" as string]: `${(i / 10) * 360}deg`, ["--d" as string]: `${18 + (i % 3) * 8}px` } as React.CSSProperties} />
+                  ))}
+                </div>
               )}
 
-              {/* Screen glow when launching */}
-              {phase === "launching" && (
-                <div className="absolute inset-0 pointer-events-none screen-glow" style={{
-                  background: `radial-gradient(ellipse at 50% 30%, ${game.color}30, transparent 60%)`,
-                }} />
-              )}
+              {/* Accent strip takes the game's colour once the cart is read */}
+              <div className={`accent-strip ${phase === "reading" || phase === "launching" ? "accent-strip-on" : ""}`} />
 
-              {/* Pulsing slot indicator when idle */}
-              {phase === "idle" && (
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 slot-waiting rounded"
-                  style={{ top: "8%", width: "28%", height: "14%" }}
-                />
-              )}
+              {/* Front indicator LEDs chase while reading, then hold */}
+              <div className="led-row">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <span key={i} className={`led ${phase === "reading" ? "led-chase" : ""} ${phase === "launching" ? "led-on" : ""}`} style={{ ["--i" as string]: i } as React.CSSProperties} />
+                ))}
+              </div>
             </div>
+
           </div>
+
+          {/* Power-on wash: floods the whole screen with the game colour then flashes white. Lives OUTSIDE the
+              animated scene: position:fixed inside a transformed ancestor would be clipped to that box. */}
+          {phase === "launching" && typeof document !== "undefined" && createPortal(
+            <div className="boot-wash" style={{ background: `radial-gradient(ellipse at 50% 40%, ${game.color}, ${game.color}cc 45%, #000 100%)` }} />,
+            document.body
+          )}
 
           {/* Status text */}
           <div className="mt-6 h-6">
@@ -411,17 +450,17 @@ function GameDetail({
             )}
             {(phase === "lifting" || phase === "dropping") && (
               <p className="text-sm text-[var(--accent)]">
-                Inserting...
+                Inserting…
               </p>
             )}
-            {(phase === "seated" || phase === "glowing") && (
+            {(phase === "seated" || phase === "reading") && (
               <p className="text-sm text-[var(--accent)] font-bold cart-text-pulse">
-                Cartridge detected!
+                Reading cartridge…
               </p>
             )}
             {phase === "launching" && (
               <p className="text-sm text-green-400 font-bold cart-text-pulse">
-                Launching {game.title}...
+                Launching {game.title}…
               </p>
             )}
           </div>
