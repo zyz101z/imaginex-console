@@ -1,5 +1,8 @@
 # Crazy Golf Kingdom — tests
 
+Syntax check (⚠️ `node --check file.js` treats .js as CommonJS and can pass BROKEN ESM — use this instead):
+    for f in src/*.mjs src/main.js; do node --input-type=module --check < $f || echo BAD $f; done
+
 Pure logic (no browser):
     node test/physics.test.mjs          # 35 checks: rolling, walls, cup, lip-out, sand/ice, ramps, bumpers, water, blocks, windmill, mover, boost, teleport, cannon
     node test/coursegen.test.mjs [N]    # ~670 checks over seeded holes in all 5 kingdoms; ghost golfer proves every hole completable

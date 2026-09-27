@@ -96,7 +96,9 @@ function fallbackModel(name, color) {
 export class GolfRenderer {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // preserveDrawingBuffer: the compositor may otherwise present a CLEARED (black) buffer if it samples the canvas
+    // between a clear and the next draw — which is exactly what happens while shaders compile at hole start on real GPUs.
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     const touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = touch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
@@ -154,7 +156,9 @@ export class GolfRenderer {
   warm(ball, worldT) { this.update(ball, worldT, 0.016, null); this.renderer.compile(this.scene, this.camera); this.renderer.render(this.scene, this.camera); }
   resize() {
     const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
-    this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    if (w === this._w && h === this._h) return;   // setSize clears the canvas — never do it for a no-op
+    this._w = w; this._h = h; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    if (this.world) this.renderer.render(this.scene, this.camera);   // redraw immediately so a resize never leaves a cleared frame
   }
   setPreview(points) { // [{x,y,z}] or null
     if (!points || !points.length) { this.preview.count = 0; return; }
@@ -365,6 +369,8 @@ export class GolfRenderer {
 
   // ---------- per-frame ----------
   update(ball, worldT, dt, aim) {
+    const c0 = this.cam; for (const k of ['yaw', 'pitch', 'dist', 'tx', 'ty', 'tz', 'sx', 'sy', 'sz']) if (!Number.isFinite(c0[k])) c0[k] = k === 'dist' ? 7 : k === 'pitch' ? 0.72 : 0;
+    if (!Number.isFinite(ball.x) || !Number.isFinite(ball.y) || !Number.isFinite(ball.z)) { ball.x = this.world ? this.world.teeX : 0; ball.z = this.world ? this.world.teeZ : 0; ball.y = 0; }
     // ball transform + rolling
     this.ball.position.set(ball.x, ball.y + BALL_R, ball.z);
     const sp = Math.hypot(ball.vx, ball.vz);

@@ -9,6 +9,7 @@ import { levelFromXp, titleFor, levelReward, SKIN_LEVEL, questsForDay, questEven
 
 const $ = (id) => document.getElementById(id);
 const IS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+const DEBUG = /[?&]debug/.test(location.search);   // ?debug → counts dark frames after each render and shows it in the HUD
 if (IS_TOUCH) document.documentElement.classList.add('touch');
 const SAVE_KEY = 'cgk_save_v1';
 const SKINS = [
@@ -524,6 +525,7 @@ function frame(now) {
   }
   R.setOther(S.players === 2 && !S.done[1 - S.player] ? S.balls[1 - S.player] : null);
   R.update(currentBall(), S.worldT, dt, S.aim.active && canShoot() ? S.aim : null);
+  if (DEBUG) { const gl = R.renderer.getContext(); const px = new Uint8Array(4); const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight; let lum = 0; for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) { gl.readPixels(Math.floor(W * fx), Math.floor(H * fy), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); lum = Math.max(lum, (px[0] + px[1] + px[2]) / 3); } /* dark only if EVERY sample is dark (the cup itself is black) */ S.dbgFrames = (S.dbgFrames || 0) + 1; if (lum < 8) { S.dbgDark = (S.dbgDark || 0) + 1; const e = { lum, t: +performance.now().toFixed(0), cam: { yaw: +R.cam.yaw.toFixed(2), pitch: +R.cam.pitch.toFixed(2), dist: +R.cam.dist.toFixed(2), sx: +R.cam.sx.toFixed(1), sy: +R.cam.sy.toFixed(2), sz: +R.cam.sz.toFixed(1) }, hole: S.holeIdx, fly: !!S.flyover, flyT: S.flyover ? +S.flyover.t.toFixed(2) : null, ball: [+currentBall().x.toFixed(1), +currentBall().y.toFixed(2), +currentBall().z.toFixed(1)], loading: document.getElementById('loading').classList.contains('on') }; (S.dbgLog = S.dbgLog || []).push(e); console.warn('CGK dark frame ' + JSON.stringify(e)); } $('hKing').textContent = `dbg frames ${S.dbgFrames} dark ${S.dbgDark || 0}`; }
   // other player's ball ghost (2P): draw as small marker via particles? keep simple: show in HUD only
 }
 R.resize(); renderTitle(); show('title'); requestAnimationFrame(frame);

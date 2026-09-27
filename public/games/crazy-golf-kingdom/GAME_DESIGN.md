@@ -75,6 +75,12 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   `test/browser.flicker.js` burst-screenshots transitions and fails on any near-black frame (was 3 fails → 0).
   Same pass: `canShoot()` now requires a loaded hole (a drag during the load gap could fire a phantom shot on the old
   ball); drag direction falls back to camera-yaw screen mapping when the pointer ray misses the floor plane (above horizon).
+- 2026-09-27 (later) black flicker STILL reported on a real GPU (headless can't reproduce). Defensive set shipped:
+  `preserveDrawingBuffer:true` (compositor can otherwise present a cleared buffer between clear and draw while shaders
+  compile), all `backdrop-filter` removed (Chrome flicker trigger over WebGL), `resize()` no-ops unless size changed and
+  redraws immediately, non-finite camera/ball guard in `R.update`. `?debug` query flag counts dark frames (centre-pixel
+  readPixels after each render) in the HUD and logs them with camera state — ask the user to play with `?debug=1` if it
+  persists.
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 
