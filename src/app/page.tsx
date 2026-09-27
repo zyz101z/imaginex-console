@@ -245,7 +245,7 @@ function GameDetail({
       const now = ctx.currentTime;
 
       // Mechanical slide sound (filtered noise burst)
-      const noiseLen = 0.15;
+      const noiseLen = 0.45;
       const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * noiseLen, ctx.sampleRate);
       const noiseData = noiseBuf.getChannelData(0);
       for (let i = 0; i < noiseData.length; i++) noiseData[i] = (Math.random() * 2 - 1) * 0.3;
@@ -260,33 +260,33 @@ function GameDetail({
       noiseGain.gain.setValueAtTime(0.4, now);
       noiseGain.gain.linearRampToValueAtTime(0, now + noiseLen);
       noiseSrc.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
-      noiseSrc.start(now + 0.45);
+      noiseSrc.start(now + 0.5);
 
       // Thunk + latch click when the cartridge seats (0.9 s)
       const thunk = ctx.createOscillator();
       thunk.type = "sine";
-      thunk.frequency.setValueAtTime(110, now + 0.9);
-      thunk.frequency.exponentialRampToValueAtTime(35, now + 1.0);
+      thunk.frequency.setValueAtTime(110, now + 1.15);
+      thunk.frequency.exponentialRampToValueAtTime(35, now + 1.25);
       const thunkGain = ctx.createGain();
-      thunkGain.gain.setValueAtTime(0.7, now + 0.9);
-      thunkGain.gain.exponentialRampToValueAtTime(0.01, now + 1.05);
+      thunkGain.gain.setValueAtTime(0.7, now + 1.15);
+      thunkGain.gain.exponentialRampToValueAtTime(0.01, now + 1.3);
       thunk.connect(thunkGain).connect(ctx.destination);
-      thunk.start(now + 0.9);
-      thunk.stop(now + 1.05);
+      thunk.start(now + 1.15);
+      thunk.stop(now + 1.3);
       const clickOsc = ctx.createOscillator();
       clickOsc.type = "square";
-      clickOsc.frequency.setValueAtTime(900, now + 0.93);
-      clickOsc.frequency.exponentialRampToValueAtTime(200, now + 0.97);
+      clickOsc.frequency.setValueAtTime(900, now + 1.18);
+      clickOsc.frequency.exponentialRampToValueAtTime(200, now + 1.22);
       const clickGain = ctx.createGain();
-      clickGain.gain.setValueAtTime(0.25, now + 0.93);
-      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 0.99);
+      clickGain.gain.setValueAtTime(0.25, now + 1.18);
+      clickGain.gain.exponentialRampToValueAtTime(0.01, now + 1.24);
       clickOsc.connect(clickGain).connect(ctx.destination);
-      clickOsc.start(now + 0.93);
-      clickOsc.stop(now + 0.99);
+      clickOsc.start(now + 1.18);
+      clickOsc.stop(now + 1.24);
 
       // "Reading" ticks while the LEDs chase (1.05 → 1.6 s)
       [0, 1, 2, 3, 4].forEach((i) => {
-        const t = now + 1.05 + i * 0.13;
+        const t = now + 1.3 + i * 0.13;
         const o = ctx.createOscillator();
         o.type = "square";
         o.frequency.setValueAtTime(1800 + i * 120, t);
@@ -302,7 +302,7 @@ function GameDetail({
       [440, 554, 659, 880].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         osc.type = "sine";
-        const t = now + 1.7 + i * 0.11;
+        const t = now + 2.0 + i * 0.11;
         osc.frequency.setValueAtTime(freq, t);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, t);
@@ -326,10 +326,10 @@ function GameDetail({
     setPhase("lifting");
     insertTimersRef.current = [
       window.setTimeout(() => setPhase("dropping"), 350),
-      window.setTimeout(() => setPhase("seated"), 900),
-      window.setTimeout(() => setPhase("reading"), 1000),
-      window.setTimeout(() => setPhase("launching"), 1700),
-      window.setTimeout(() => onPlay(), 2300),
+      window.setTimeout(() => setPhase("seated"), 1150),
+      window.setTimeout(() => setPhase("reading"), 1250),
+      window.setTimeout(() => setPhase("launching"), 2000),
+      window.setTimeout(() => onPlay(), 2600),
     ];
   };
 
