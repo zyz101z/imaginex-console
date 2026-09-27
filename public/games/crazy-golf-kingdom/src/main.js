@@ -104,7 +104,7 @@ const S = {
 window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
-function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
+function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; if (id !== 'play') coach(null); $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
   if (id === 'title' || id === 'modes' || id === 'kingdoms' || id === 'shop' || id === 'how') { if (!S.attract && S.attractSeq === S.attractStopped) startAttract(); } else if (id === 'play') { S.attractSeq++; S.attractStopped = S.attractSeq; S.attract = null; } }
 function renderTitle() { $('coinsTitle').textContent = save.coins; { const L = levelFromXp(save.xp || 0); $('lvlTitle').textContent = `Lv ${L.level} ${titleFor(L.level)}`; } const tot = KINGDOMS.reduce((a, K) => a + careerStars(K.id), 0); $('starsTitle').textContent = `★ ${tot}/${KINGDOMS.length * 27}`; $('easyChk').checked = !!save.easy; }
 function renderModes() {
@@ -143,6 +143,7 @@ function genAsync(kind, args) {
 }
 // a course is a list of "specs" that become holes lazily; ensureHole(i) resolves the hole object
 function courseSpecs(mode, kingdom) {
+  if (mode === 'tutorial') return [{ kingdom: 'meadow', index: 0, seed: 4242, difficulty: 0, budget: 0 }, { kingdom: 'meadow', index: 1, seed: 777, difficulty: 2, budget: 0 }, { kingdom: 'meadow', index: 2, seed: 99, difficulty: 2, budget: 1 }];
   if (mode === 'daily') { const seed = dailySeed(new Date()); const rng = makeRng(seed); const out = []; for (let i = 0; i < 9; i++) { const k = KINGDOMS[Math.floor(rng() * KINGDOMS.length)].id; out.push({ kingdom: k, index: i, seed: seed + i * 131, difficulty: Math.min(8, 1 + i) }); } return out; }
   const seed = mode === 'career' ? 777 + KINGDOMS.findIndex(k => k.id === kingdom) * 1000 : (Math.random() * 1e9) | 0;
   return Array.from({ length: 9 }, (_, i) => i === 8 ? { kingdom, index: 8, seed: seed + 8 * 17, _finale: true } : ({ kingdom, index: i, seed: seed + i * 17 }));
@@ -155,6 +156,22 @@ async function ensureHole(i) {
   return c[i]._promise;
 }
 function prefetchHole(i) { if (S.course[i] && !S.course[i].tiles) ensureHole(i).catch(() => {}); }
+
+// ---------- tutorial: three coached holes on first play ----------
+const COACH = {
+  0: [() => save.aimMode === 'push' ? 'Press anywhere and drag TOWARD the hole, then let go.' : 'Press anywhere and drag AWAY from the hole, like a slingshot. Let go to shoot.', () => 'The dots show where your ball will roll. A longer drag hits harder.'],
+  1: [() => 'Corners: bounce off the walls to get around. Right-drag or two fingers to look around.', () => 'Nice. Sink it to move on.'],
+  2: [() => 'Obstacles! Bumpers bounce you, windmills need timing. Stuck? ↩ undoes a shot.', () => 'Last hole of the tutorial. Finish it to earn your first coins.'],
+};
+function coach(text) { const el = $('coach'); if (!text) { el.classList.remove('on'); return; } $('coachText').textContent = text; el.classList.add('on'); }
+function coachStep() { if (S.mode !== 'tutorial') return; const steps = COACH[S.holeIdx] || []; const i = Math.min(steps.length - 1, S.strokes[0] > 0 ? 1 : 0); coach(steps[i] ? steps[i]() : null); }
+async function startTutorial() { S.players = 1; save.mulligans = Math.max(save.mulligans || 0, 1); await startRound('tutorial', 'meadow'); }
+function finishTutorial() {
+  coach(null); save.tutorialDone = true; save.coins += 100; persist(save); addXp(200, 'tutorial');
+  popup('🎓 TUTORIAL COMPLETE', '+100 coins · now pick a way to play', 2600); SFX.fanfare(5);
+  setTimeout(() => { renderModes(); show('modes'); }, 2400);
+}
+$('btnSkipTut').onclick = (e) => { e.stopPropagation(); save.tutorialDone = true; persist(save); coach(null); renderModes(); show('modes'); };
 
 // ---------- Shot of the Day: one hole, three balls, ace it ----------
 const ACE_POINTS = [300, 200, 100];
@@ -204,9 +221,9 @@ function questFire(ev, value) {
   done.forEach((q, i) => setTimeout(() => { toast(`✅ Quest: ${q.text} · +${q.reward.coins}🪙 +${q.reward.xp}xp${q.reward.mulligans ? ' +' + q.reward.mulligans + ' mulligan' : ''}`, 2400); save.coins += q.reward.coins; save.mulligans = (save.mulligans || 0) + (q.reward.mulligans || 0); SFX.coin(); addXp(q.reward.xp, 'quest'); }, 1200 + i * 900));
 }
 function badgeCheck() { const fresh = checkAchievements(save); fresh.forEach((a, i) => setTimeout(() => { toast(`${a.icon} Achievement: ${a.name} · +${a.xp}xp`, 2400); SFX.coin(); addXp(a.xp, 'badge'); }, 2000 + i * 900)); if (fresh.length) persist(save); }
-function updateXpHud() { const L = levelFromXp(save.xp || 0); const el = $('hXp'); if (el) { el.textContent = `Lv ${L.level}`; el.style.setProperty('--p', L.need ? L.into / L.need : 1); } const mb = $('btnMulligan'); if (mb) { mb.textContent = `↩ ${save.mulligans || 0}`; mb.style.display = (S.mode === 'quick' || S.mode === 'career') && S.screen === 'play' ? '' : 'none'; mb.disabled = !(save.mulligans > 0 && S.lastShot && currentBall().resting && !currentBall().inCup); } }
+function updateXpHud() { const L = levelFromXp(save.xp || 0); const el = $('hXp'); if (el) { el.textContent = `Lv ${L.level}`; el.style.setProperty('--p', L.need ? L.into / L.need : 1); } const mb = $('btnMulligan'); if (mb) { mb.textContent = `↩ ${save.mulligans || 0}`; mb.style.display = (S.mode === 'quick' || S.mode === 'career' || S.mode === 'tutorial') && S.screen === 'play' ? '' : 'none'; mb.disabled = !(save.mulligans > 0 && S.lastShot && currentBall().resting && !currentBall().inCup); } }
 function useMulligan() {
-  const b = currentBall(); if (!(save.mulligans > 0 && S.lastShot && b.resting && !b.inCup && (S.mode === 'quick' || S.mode === 'career'))) return;
+  const b = currentBall(); if (!(save.mulligans > 0 && S.lastShot && b.resting && !b.inCup && (S.mode === 'quick' || S.mode === 'career' || S.mode === 'tutorial'))) return;
   const ls = S.lastShot; b.x = ls.x; b.z = ls.z; b.y = floorHeight(S.world, b.x, b.z); b.vx = b.vz = 0; b.lastX = b.x; b.lastZ = b.z; S.strokes[S.player] = ls.strokes; save.mulligans--; persist(save); S.lastShot = null;
   R.burst(b.x, b.y + 0.2, b.z, 20, [0xffffff, 0x90caf9], 1.5, 0.5, 0.7); SFX.teleport(); toast('↩ Mulligan! Shot undone', 1400); S.autoFace = true; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); updateHud();
 }
@@ -285,7 +302,7 @@ async function loadHole(i) {
   if (gen !== S.loadSeq) return;
   clearTimeout(S.loadTimer); $('loading').classList.remove('on');
   if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else if (S.hole.finale) { popup(`👑 FINALE: ${S.hole.name.toUpperCase()}`, `${S.hole.blurb} · Par ${S.hole.par}`, 3200); SFX.fanfare(3); } else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
-  S.lastShot = null; updateXpHud();
+  S.lastShot = null; updateXpHud(); if (S.mode === 'tutorial') { popup(`LESSON ${i + 1}`, ['Your first putt', 'Around the corner', 'Obstacles'][i] || '', 1800); setTimeout(coachStep, 600); } else coach(null);
 }
 function currentBall() { return S.balls[S.player]; }
 function nextPlayer() {
@@ -326,6 +343,7 @@ function finishBall(p, holed) {
   else nextPlayer();
 }
 function showHoleEnd() {
+  if (S.mode === 'tutorial' && S.holeIdx >= S.course.length - 1) return finishTutorial();
   if (S.holeIdx >= S.course.length - 1) return showScorecard();
   loadHole(S.holeIdx + 1);
 }
@@ -392,7 +410,7 @@ function pointerUp() {
 }
 function doShot(dx, dz, power) {
   const b = currentBall(); shoot(b, dx, dz, power); S.strokes[S.player]++; SFX.putt(power); S.autoFace = false; R.setPreview(null);
-  S.lastShot = { x: b.x, z: b.z, strokes: S.strokes[S.player] - 1 };
+  S.lastShot = { x: b.x, z: b.z, strokes: S.strokes[S.player] - 1 }; R.putt(power); if (S.mode === 'tutorial') setTimeout(coachStep, 300);
   S.shot = { x0: b.x, z0: b.z, walls: 0, bumpers: 0, lip: false, tele: false, cannon: false, jump: false }; S.idleT = 0; if (S.mode === 'ace' && S.ace) S.ace.attempt++; updateHud();
   R.burst(b.x, b.y + 0.05, b.z, 8, [0xffffff, 0xdddddd], 1.2, 1, 0.5);
 }
@@ -437,7 +455,8 @@ window.addEventListener('resize', () => R.resize());
 function togglePause() { S.paused = !S.paused; $('pause').classList.toggle('on', S.paused); if (MUSIC.cur) MUSIC.cur.volume = S.paused ? MUSIC.vol * 0.35 : MUSIC.vol; }
 
 // ---------- buttons ----------
-$('btnPlay').onclick = () => { SFX.click(); renderModes(); show('modes'); };
+$('btnPlay').onclick = () => { SFX.click(); if (!save.tutorialDone) { startTutorial(); return; } renderModes(); show('modes'); };
+$('btnTutorial').onclick = () => { SFX.click(); startTutorial(); };
 $('btnShop').onclick = () => { SFX.click(); renderShop(); show('shop'); };
 $('btnHow').onclick = () => { SFX.click(); show('how'); };
 for (const el of document.querySelectorAll('[data-back]')) el.onclick = () => { SFX.click(); renderTitle(); show(el.dataset.back); };
@@ -456,6 +475,7 @@ $('btnMusic').textContent = save.music ? '🎵' : '🎵̸'; $('btnMusicTitle').t
 window.__cgk.MUSIC = MUSIC;
 $('btnSound').textContent = save.sound ? '🔊' : '🔇';
 $('btnCam').onclick = () => { S.autoFace = true; };
+$('btnPeek').onclick = () => { if (S.screen !== 'play' || S.flyover || !S.world) return; const b = currentBall(); const yaw0 = R.cam.yaw; S.flyover = { t: 0, dur: 3.2, peek: true, from: { x: b.x, z: b.z, yaw: yaw0 }, to: { x: S.world.cupX, z: S.world.cupZ, yaw: yaw0 } }; };
 $('easyChk').onchange = (e) => { save.easy = e.target.checked; persist(save); };
 function aimLabel() { return save.aimMode === 'push' ? '🎯 Aim: PUSH toward target' : '🎯 Aim: PULL back (slingshot)'; }
 function toggleAim() { save.aimMode = save.aimMode === 'push' ? 'pull' : 'push'; persist(save); for (const el of document.querySelectorAll('.aimBtn')) el.textContent = aimLabel(); toast(save.aimMode === 'push' ? 'Drag toward where you want the ball to go' : 'Drag back like a slingshot', 1800); }
@@ -488,10 +508,10 @@ function frame(now) {
   if (S.screen !== 'play') { if (S.attract && S.screen !== 'scorecard') attractFrame(dt); return; }
   if (!S.world || !S.hole) return;
   if (S.flyover) {
-    const f = S.flyover; f.t += dt; const u = Math.min(1, f.t / f.dur); const e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u;
+    const f = S.flyover; f.t += dt; const u = Math.min(1, f.t / f.dur); let e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u; if (f.peek) { const v = u < 0.5 ? u * 2 : 2 - u * 2; e = v < 0.5 ? 2 * v * v : -1 + (4 - 2 * v) * v; }
     R.cam.tx = R.cam.sx = f.from.x + (f.to.x - f.from.x) * e; R.cam.tz = R.cam.sz = f.from.z + (f.to.z - f.from.z) * e; { const fh = floorHeight(S.world, R.cam.tx, R.cam.tz); R.cam.ty = R.cam.sy = isFinite(fh) ? fh : 0; }
     R.cam.yaw = f.from.yaw + (f.to.yaw - f.from.yaw) * e; R.cam.dist = 7 + Math.sin(u * Math.PI) * 4;
-    if (u >= 1) { S.flyover = null; R.cam.dist = 7; R.cam.pitch = 0.72; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - f.to.z, S.world.cupX - f.to.x); }
+    if (u >= 1) { const wasPeek = f.peek; S.flyover = null; R.cam.dist = 7; R.cam.pitch = 0.72; if (!wasPeek) S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - f.to.z, S.world.cupX - f.to.x); }
   }
   if (!S.paused && !S.flyover) {
     // keyboard aim/charge
@@ -516,7 +536,12 @@ function frame(now) {
     // shot preview: simulate the real physics for up to 1.4 s or until the first bounce
     if (S.aim.active && S.aim.power > 0.02 && canShoot()) {
       const t = { ...b, events: [] }; shoot(t, S.aim.dx, S.aim.dz, S.aim.power); const pts = []; let tt = S.worldT, k = 0;
-      while (!t.resting && tt - S.worldT < 1.4 && pts.length < 40) { step(S.world, t, tt); tt += STEP; if (++k % 5 === 0) pts.push({ x: t.x, y: t.y, z: t.z }); if (t.events.some(e => e.type === 'wall' || e.type === 'bumper' || e.type === 'model' || e.type === 'reset' || e.type === 'cannon' || e.type === 'teleport')) break; }
+      let stopEv = null;
+      while (!t.resting && tt - S.worldT < 1.4 && pts.length < 40) { step(S.world, t, tt); tt += STEP; if (++k % 5 === 0) pts.push({ x: t.x, y: t.y, z: t.z }); stopEv = t.events.find(e => e.type === 'wall' || e.type === 'bumper' || e.type === 'model' || e.type === 'reset' || e.type === 'cannon' || e.type === 'teleport'); if (stopEv) break; }
+      if (stopEv && (stopEv.type === 'cannon' || stopEv.type === 'teleport')) { // show where the ride ends: an arc to the cannon target / a hop to the portal exit
+        const pad = S.world.pads.find(p => p.type === stopEv.type && Math.hypot(p.x - t.x, p.z - t.z) < (stopEv.type === 'cannon' ? 0.9 : 0.8) + p.r);
+        if (pad) { const tx = pad.tx, tz = pad.tz; const y0 = t.y; for (let j = 1; j <= 8; j++) { const u = j / 8; pts.push({ x: pad.x + (tx - pad.x) * u, y: y0 + (stopEv.type === 'cannon' ? Math.sin(u * Math.PI) * 2.2 : 0.4 * Math.sin(u * Math.PI)), z: pad.z + (tz - pad.z) * u }); } }
+      }
       R.setPreview(pts);
     } else R.setPreview(null);
     R.setCupNear(b.resting && !b.inCup ? Math.hypot(b.x - S.world.cupX, b.z - S.world.cupZ) : 9);

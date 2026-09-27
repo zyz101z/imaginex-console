@@ -70,7 +70,7 @@ function runs(path) {
 const dirOf = (a, b) => b.x > a.x ? 'x' : b.x < a.x ? '-x' : b.z > a.z ? 'z' : '-z';
 
 // ---------- generate ----------
-export function generateHole({ kingdom = 'meadow', index = 0, seed = 1, difficulty = null } = {}) {
+export function generateHole({ kingdom = 'meadow', index = 0, seed = 1, difficulty = null, budget: budgetOverride = null } = {}) {
   const K = kingdomById(kingdom);
   const diff = difficulty == null ? index : difficulty;    // 0..8
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -109,7 +109,7 @@ export function generateHole({ kingdom = 'meadow', index = 0, seed = 1, difficul
       }
     }
     // obstacles
-    const budget = Math.min(5, 1 + Math.floor(diff / 2) + (diff >= 6 ? 1 : 0));
+    const budget = budgetOverride != null ? budgetOverride : Math.min(5, 1 + Math.floor(diff / 2) + (diff >= 6 ? 1 : 0));
     const obstacles = []; const gaps = []; const taken = new Set([0, 1, path.length - 2, path.length - 1]);
     for (const i of rampTiles) { taken.add(i - 1); taken.add(i); taken.add(i + 1); }
     const free = () => path.map((_, i) => i).filter(i => !taken.has(i));

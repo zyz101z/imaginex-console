@@ -150,6 +150,12 @@ export class GolfRenderer {
     this.hitNodes = new Map(); this.hitAnims = [];
     this.cupGlow = new THREE.Mesh(new THREE.RingGeometry(CUP_R + 0.05, CUP_R + 0.22, 32), new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })); this.cupGlow.rotation.x = -Math.PI / 2; this.scene.add(this.cupGlow);
     this.idlePulse = 0;
+    // putter: shaft + head, shown behind the ball while aiming, swings on the shot
+    this.putter = new THREE.Group(); const shaftMat = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, metalness: 0.7, roughness: 0.3 });
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.9, 8), shaftMat); shaft.position.set(0, 0.45, 0); shaft.rotation.z = 0.35; shaft.position.x = -0.16;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), new THREE.MeshStandardMaterial({ color: 0x37474f, metalness: 0.6, roughness: 0.35 })); head.position.set(0, 0.03, 0);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.018, 0.22, 8), new THREE.MeshStandardMaterial({ color: 0x212121 })); grip.position.set(-0.31, 0.86, 0); grip.rotation.z = 0.35;
+    this.putter.add(shaft, head, grip); this.putter.visible = false; this.putter.traverse(o => { o.castShadow = true; }); this.scene.add(this.putter); this.putterSwing = null;
     this.resize();
   }
   preloadModels(names) { return Promise.all(names.map(n => loadModel(n))); }
@@ -160,6 +166,7 @@ export class GolfRenderer {
     this._w = w; this._h = h; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     if (this.world) this.renderer.render(this.scene, this.camera);   // redraw immediately so a resize never leaves a cleared frame
   }
+  putt(power) { this.putterSwing = { t: 0, power }; }
   setPreview(points) { // [{x,y,z}] or null
     if (!points || !points.length) { this.preview.count = 0; return; }
     const n = Math.min(points.length, this.previewMax);
@@ -401,6 +408,12 @@ export class GolfRenderer {
     this.moon.position.set(this.camera.position.x - 60, 55, this.camera.position.z - 90);
     if (this.cupGlow.userData.on) { const k = 1 + Math.sin(worldT * 6) * 0.08; this.cupGlow.scale.set(k, k, 1); }
     if (aim && aim.active && aim.power <= 0.02) { this.idlePulse += dt; const k = 1 + Math.max(0, Math.sin(this.idlePulse * 3)) * 0.25; this.arrowRing.scale.set(k, k, 1); } else { this.idlePulse = 0; this.arrowRing.scale.set(1, 1, 1); }
+    // putter behind the ball, pulled back with power; swings through on a shot
+    if (this.putterSwing) { const sw = this.putterSwing; sw.t += dt * 7; const u = Math.min(1, sw.t); const back = 0.22 + sw.power * 0.4; const off = back * (1 - u) - 0.12 * u;
+      this.putter.visible = true; this.putter.position.set(ball.x - Math.cos(this.putterYaw || 0) * off, ball.y, ball.z - Math.sin(this.putterYaw || 0) * off); this.putter.rotation.y = -(this.putterYaw || 0); this.putter.rotation.z = -0.1 - (1 - u) * (0.25 + sw.power * 0.3);
+      if (u >= 1) { this.putterSwing = null; this.putter.visible = false; } }
+    else if (aim && aim.active) { this.putterYaw = Math.atan2(aim.dz, aim.dx); const back = 0.22 + aim.power * 0.4; this.putter.visible = true; this.putter.position.set(ball.x - aim.dx * back, ball.y, ball.z - aim.dz * back); this.putter.rotation.y = -this.putterYaw; this.putter.rotation.z = -0.1 - aim.power * 0.35; }
+    else this.putter.visible = false;
     // aim arrow
     if (aim && aim.active) {
       this.arrow.visible = true; this.arrow.position.set(ball.x, ball.y + 0.02, ball.z); this.arrow.rotation.y = -Math.atan2(aim.dz, aim.dx);

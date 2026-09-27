@@ -85,7 +85,11 @@
   html.touch .btn.small { padding:12px 22px; } html.touch .pill { padding:9px 16px; }
   .panel { -webkit-overflow-scrolling:touch; padding-bottom:calc(22px + env(safe-area-inset-bottom)); }
   #hud .pill, .hbtn { margin-bottom:env(safe-area-inset-bottom); }
-  #btnPause { bottom:12px; right:12px; } #btnSound { bottom:12px; right:62px; } #btnMusic { bottom:12px; right:112px; } #btnCam { bottom:12px; right:162px; }
+  #btnPause { bottom:12px; right:12px; } #btnSound { bottom:12px; right:62px; } #btnMusic { bottom:12px; right:112px; } #btnCam { bottom:12px; right:162px; } #btnPeek { bottom:12px; right:212px; }
+  html.touch #btnPeek { right:244px; }
+  #coach { position:absolute; left:50%; top:64px; transform:translateX(-50%) translateY(-10px); max-width:min(92vw, 520px); background:rgba(255,224,130,0.96); color:#3d2410; border-radius:14px; padding:10px 14px 10px 16px; font-weight:800; font-size:15px; line-height:1.3; display:flex; gap:12px; align-items:center; pointer-events:none; opacity:0; transition:opacity .25s, transform .25s; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+  #coach.on { opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+  #coach .cap { font-size:24px; } #btnSkipTut { background:rgba(0,0,0,0.12); border:none; border-radius:8px; padding:6px 10px; font:800 12px inherit; color:#3d2410; cursor:pointer; white-space:nowrap; }
   #power { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); width:min(70vw, 420px); height:26px; border-radius:10px; background:rgba(0,0,0,0.45); border:2px solid rgba(255,255,255,0.4); overflow:hidden; opacity:0; transition:opacity .15s; }
   #power.on { opacity:1; } #power::after { content:''; position:absolute; inset:0; width:calc(var(--p, 0) * 100%); background:linear-gradient(90deg,#69f0ae,#ffeb3b 60%,#ff5252); }
   #popup { position:absolute; left:50%; top:26%; transform:translate(-50%,-50%) scale(0.6); opacity:0; transition:transform .25s cubic-bezier(.2,1.6,.4,1), opacity .2s; text-align:center; }
@@ -124,6 +128,8 @@
   <div id="coinFly">+10 🪙</div>
   <div id="power"></div>
   <div id="popup"><div class="big"></div><div class="small"></div></div>
+  <div id="coach"><span class="cap">🎓</span><span id="coachText"></span><button id="btnSkipTut">Skip tutorial</button></div>
+  <button class="hbtn" id="btnPeek" title="Fly over the hole">👁</button>
   <button class="hbtn" id="btnCam" title="Face the cup (R)">🎯</button>
   <button class="hbtn" id="btnSound" title="Sound effects">🔊</button>
   <button class="hbtn" id="btnMusic" title="Music">🎵</button>
@@ -142,6 +148,7 @@
     <button class="btn blue" id="btnShop">🛍️ BALLS <span id="coinsTitle">0</span>🪙</button>
     <button class="btn ghost" id="btnHow">HOW TO PLAY</button>
     <button class="btn pink" id="btnProfile">👤 PROFILE</button>
+    <button class="btn small ghost" id="btnTutorial">🎓 Tutorial</button>
   </div>
   <div class="row" style="align-items:center; gap:18px">
     <span class="pill" style="position:static" id="starsTitle">★ 0/135</span>
@@ -190,7 +197,7 @@
     <h2>How to play</h2>
     <p>🖱️ <b>Shoot:</b> press anywhere and drag. Default is slingshot: drag <i>away</i> from where you want the ball to go. Prefer pushing toward the target? Flip it with the 🎯 Aim button. Longer drag = harder hit; drag back to the start to cancel.</p>
     <p>⌨️ <b>Keyboard:</b> ← → to aim (hold <b>Shift</b> for fine steps), hold <b>SPACE</b> to charge (fills up and holds), release to hit. <b>R</b> faces the cup. <b>Q/E</b> orbit.</p>
-    <p>📷 <b>Camera:</b> right-drag (or two fingers) to look around, wheel to zoom. 🎯 button re-faces the cup.</p>
+    <p>📷 <b>Camera:</b> right-drag (or two fingers) to look around, wheel to zoom. 🎯 re-faces the cup, 👁 flies you over the whole hole and back.</p>
     <p>⛳ <b>Rules:</b> water and the void cost a stroke. 8 strokes max per hole. Under par = more points, more coins, more stars.</p>
     <p>📈 <b>Progression:</b> every point is XP. Levels pay coins and mulligans (↩ undoes your last shot in Quick Round and Career). Three quests a day and 20 achievements in your Profile. Clear a kingdom's finale in Career for a crown; 27 stars turns it gold.</p>
     <p>🎡 <b>Obstacles:</b> bumpers add speed, windmills and moving walls need timing, green arrows boost, blue rings teleport to the pink ring, cannons fire you to the yellow target, sand and syrup are slow, ice is slick, and the guardians just get in the way.</p>

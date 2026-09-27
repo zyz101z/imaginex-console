@@ -81,6 +81,16 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   redraws immediately, non-finite camera/ball guard in `R.update`. `?debug` query flag counts dark frames (centre-pixel
   readPixels after each render) in the HUD and logs them with camera state — ask the user to play with `?debug=1` if it
   persists.
+- 2026-09-27 "2-3-7" pass: MODEL AUDIT — 8 of 15 retextured (80 credits) with explicit colour prompts: windmill (cream/
+  red/wood), lollipop (pink swirl), gingerbread (brown + icing; was blue), cupcake (pink), palm (brown trunk; was red),
+  volcano (dark rock + lava; was pink), ghost (white; was peach w/ flame), ufo (silver + green dome; was red). Mushroom,
+  gnome, pumpkin, rocket kept. Balance ≈ 801. TUTORIAL — mode 'tutorial': 3 coached Meadow holes (`courseSpecs`, seeds
+  4242/777/99, `budget` override so lessons 1-2 have no obstacles), coach pill `#coach` with per-lesson text
+  (COACH table; respects pull/push aim mode), Skip button, +100 coins +200 XP on completion, `save.tutorialDone`; first
+  PLAY starts it, 🎓 button on the title replays it. POLISH — 👁 "fly the hole" peek (flyover ball→cup→ball, 3.2 s,
+  keeps aim), PUTTER (shaft/head/grip mesh behind the ball while aiming, pulled back with power, swings on shot via
+  `R.putt`), cannon/portal PREVIEW extension (dots arc from the pad to its target). SEO — `gameSeo.ts` entry + sitemap
+  URL so `/play/crazy-golf-kingdom` exists (it 404'd before). `test/browser.tutorial.js` (13 checks).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

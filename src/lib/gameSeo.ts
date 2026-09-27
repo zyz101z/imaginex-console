@@ -301,6 +301,33 @@ export const gameSeo: GameSeo[] = [
     ],
     keywords: ["drawing game free online", "graffiti game browser", "creative game for kids free", "free painting game no download"],
   },
+  {
+    id: "crazy-golf-kingdom",
+    seoTitle: "Crazy Golf Kingdom — Free 3D Mini Golf Game in Your Browser",
+    metaDescription:
+      "Play free 3D mini golf online: windmills, bumpers, cannons, portals and jump pads across five wild kingdoms, with new holes every time. No download, works on iPad.",
+    tagline: "Five kingdoms. Endless holes. Zero sensible obstacles.",
+    about: [
+      "Crazy Golf Kingdom is a free browser mini-golf game rendered in real 3D. Every hole is generated fresh from a seed and proven playable before you see it, so no two rounds are the same, and each of the five kingdoms — Meadow, Candy, Dino Swamp, Haunted Castle and Space Station — ends on a hand-built finale hole with its own signature obstacle.",
+      "Aim by dragging anywhere on the screen, watch the physics-accurate preview dots, and let go. Bumpers add speed, windmills and moving walls need timing, green pads boost, portals teleport, cannons launch you across the map, and a UFO's tractor beam bends every shot. Trick-shot bonuses reward bank shots, long bombs and holing out off a jump pad.",
+      "Progress through Career to earn stars and kingdom crowns, level up for coins, mulligans and titles, chase three daily quests and twenty achievements, and take one swing at the Shot of the Day for a spot on its daily leaderboard. Saves live in your browser.",
+    ],
+    features: [
+      "Real 3D mini golf with a physics-accurate shot preview",
+      "Five themed kingdoms, procedurally generated holes, five hand-built finales",
+      "Windmills, bumpers, cannons, portals, jump pads, turntables, gravity wells",
+      "Career stars and crowns, XP levels, daily quests, achievements, ball skins",
+      "Daily Course and Shot of the Day leaderboards, easy mode for kids",
+      "Touch controls: works on iPad and phones",
+    ],
+    howToPlay: [
+      "Press anywhere and drag away from the hole (slingshot), then release. Longer drag = harder hit.",
+      "Right-drag or use two fingers to look around; pinch or scroll to zoom.",
+      "Water and the void cost a stroke; eight strokes max per hole. Under par earns more points, coins and stars.",
+      "Clear a kingdom's finale in Career to earn its crown and unlock the next kingdom.",
+    ],
+    keywords: ["mini golf game", "free mini golf online", "3D mini golf browser", "crazy golf game", "putt putt game online", "golf game for kids", "browser game no download"],
+  },
 ];
 
 export const gameSeoById = (id: string) => gameSeo.find((g) => g.id === id);

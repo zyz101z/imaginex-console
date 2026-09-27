@@ -33,7 +33,7 @@ let pass = 0, fail = 0; const check = (n, c, d = '') => { if (c) pass++; else { 
   const yaw0 = s2.yaw; await page.mouse.move(400, 400); await page.mouse.down({ button: 'right' }); for (let i = 1; i <= 10; i++) { await page.mouse.move(400 + i * 20, 400); await new Promise(r => setTimeout(r, 10)); } await page.mouse.up({ button: 'right' });
   const s3 = await state(); check('right-drag orbits', Math.abs(s3.yaw - yaw0) > 0.3, (s3.yaw - yaw0).toFixed(2)); check('right-drag does not shoot', s3.strokes === 1);
   // 4. PUSH mode: toggle, then drag toward the camera → ball comes toward camera
-  await page.evaluate(() => document.querySelector('.aimBtn').click()); await page.keyboard.press('r'); await new Promise(r => setTimeout(r, 1300));
+  await page.evaluate(() => document.querySelector('.aimBtn').click()); await page.keyboard.press('r'); await new Promise(r => setTimeout(r, 300)); await page.waitForFunction(() => window.__cgk.S.autoFace === false, { timeout: 10000 }); await new Promise(r => setTimeout(r, 200));
   const camDir2 = await page.evaluate(() => { const c = window.__cgk.R.cam; return { x: -Math.cos(c.yaw), z: -Math.sin(c.yaw) }; });
   await page.mouse.move(900, 300); await page.mouse.down(); for (let i = 1; i <= 10; i++) { await page.mouse.move(900, 300 + i * 12); await new Promise(r => setTimeout(r, 16)); } await page.mouse.up(); await new Promise(r => setTimeout(r, 120));
   const s4 = await state();
