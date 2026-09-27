@@ -63,6 +63,17 @@
   #hKing { bottom:12px; left:12px; font-size:13px; opacity:.85; }
   #hScore { bottom:44px; left:12px; font-size:13px; color:#ffe082; }
   #hStreak { top:52px; right:12px; background:#e65100; border-color:#ffab40; }
+  #hXp { bottom:76px; left:12px; font-size:12px; position:absolute; background:linear-gradient(90deg, rgba(105,240,174,0.55) calc(var(--p,0)*100%), rgba(11,16,36,0.72) calc(var(--p,0)*100%)); }
+  #btnMulligan { bottom:64px; right:12px; width:auto; padding:0 12px; font-size:16px; font-weight:900; }
+  #btnMulligan:disabled { opacity:0.35; }
+  .kcrown { position:absolute; top:6px; left:10px; font-size:22px; }
+  .skin.locked { filter:grayscale(0.8) brightness(0.7); }
+  .pfGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(90px, 1fr)); gap:8px; width:min(90vw, 620px); }
+  .pfGrid div { background:rgba(255,255,255,0.06); border-radius:10px; padding:8px; } .pfGrid b { display:block; font-size:20px; color:#ffe082; } .pfGrid small { color:#b0bec5; }
+  #pfBar { width:min(80vw, 420px); height:14px; border-radius:8px; background:rgba(255,255,255,0.12); overflow:hidden; margin:6px auto; } #pfBar::after { content:''; display:block; height:100%; width:calc(var(--p,0)*100%); background:linear-gradient(90deg,#69f0ae,#ffeb3b); }
+  #pfCrowns { display:flex; gap:10px; justify-content:center; margin:6px 0; } .crown { font-size:30px; opacity:0.35; text-align:center; } .crown.on { opacity:1; } .crown small { display:block; font-size:14px; }
+  #pfQuests { display:flex; flex-direction:column; gap:6px; width:min(90vw, 520px); margin:0 auto; } .quest { display:flex; justify-content:space-between; gap:10px; background:rgba(255,255,255,0.06); border-radius:10px; padding:8px 12px; text-align:left; } .quest.done { opacity:0.55; } .quest small { color:#ffe082; white-space:nowrap; }
+  #pfBadges { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:6px; width:min(92vw, 640px); margin:0 auto; } .badge { background:rgba(255,255,255,0.05); border-radius:10px; padding:6px 4px; opacity:0.3; } .badge.on { opacity:1; background:rgba(255,224,130,0.15); } .badge span { font-size:22px; display:block; } .badge small { font-size:10.5px; line-height:1.1; display:block; }
   #stars { position:absolute; left:50%; top:42%; transform:translate(-50%,-50%) scale(0.4); font-size:clamp(40px,9vw,90px); color:#ffd54f; text-shadow:0 4px 0 #8d6e00, 0 10px 30px rgba(0,0,0,.5); opacity:0; transition:transform .35s cubic-bezier(.2,1.8,.4,1), opacity .2s; letter-spacing:6px; }
   #stars.on { opacity:1; transform:translate(-50%,-50%) scale(1); }
   #coinFly { position:absolute; right:14px; top:60px; font-weight:900; color:#ffe082; font-size:20px; text-shadow:0 2px 4px rgba(0,0,0,.6); opacity:0; }
@@ -107,6 +118,8 @@
   <div class="pill" id="hKing">🌻 Meadow Kingdom</div>
   <div class="pill" id="hScore">0 pts</div>
   <div class="pill" id="hStreak" style="display:none">🔥 2</div>
+  <div class="pill" id="hXp">Lv 1</div>
+  <button class="hbtn" id="btnMulligan" title="Mulligan: undo your last shot" style="display:none">↩ 0</button>
   <div id="stars">☆☆☆</div>
   <div id="coinFly">+10 🪙</div>
   <div id="power"></div>
@@ -128,9 +141,11 @@
     <button class="btn" id="btnPlay">⛳ PLAY</button>
     <button class="btn blue" id="btnShop">🛍️ BALLS <span id="coinsTitle">0</span>🪙</button>
     <button class="btn ghost" id="btnHow">HOW TO PLAY</button>
+    <button class="btn pink" id="btnProfile">👤 PROFILE</button>
   </div>
   <div class="row" style="align-items:center; gap:18px">
     <span class="pill" style="position:static" id="starsTitle">★ 0/135</span>
+    <span class="pill" style="position:static" id="lvlTitle">Lv 1 Rookie</span>
     <button class="btn small ghost" id="btnMusicTitle">🎵 Music: ON</button>
     <button class="btn small ghost aimBtn">🎯 Aim</button>
     <label class="pill" style="position:static; pointer-events:auto; cursor:pointer"><input type="checkbox" id="easyChk" style="transform:scale(1.3); margin-right:8px"> Easy mode (no water penalty, 20 strokes)</label>
@@ -177,7 +192,22 @@
     <p>⌨️ <b>Keyboard:</b> ← → to aim (hold <b>Shift</b> for fine steps), hold <b>SPACE</b> to charge (fills up and holds), release to hit. <b>R</b> faces the cup. <b>Q/E</b> orbit.</p>
     <p>📷 <b>Camera:</b> right-drag (or two fingers) to look around, wheel to zoom. 🎯 button re-faces the cup.</p>
     <p>⛳ <b>Rules:</b> water and the void cost a stroke. 8 strokes max per hole. Under par = more points, more coins, more stars.</p>
+    <p>📈 <b>Progression:</b> every point is XP. Levels pay coins and mulligans (↩ undoes your last shot in Quick Round and Career). Three quests a day and 20 achievements in your Profile. Clear a kingdom's finale in Career for a crown; 27 stars turns it gold.</p>
     <p>🎡 <b>Obstacles:</b> bumpers add speed, windmills and moving walls need timing, green arrows boost, blue rings teleport to the pink ring, cannons fire you to the yellow target, sand and syrup are slow, ice is slick, and the guardians just get in the way.</p>
+    <div class="row" style="margin-top:14px"><button class="btn small ghost" data-back="title">← Back</button></div>
+  </div>
+</div>
+
+<div class="screen" id="profile">
+  <div class="panel">
+    <h2 id="pfLevel">Level 1 · Rookie</h2>
+    <div id="pfBar"></div><div class="hint" id="pfXp"></div>
+    <div id="pfCrowns"></div>
+    <div class="pfGrid" id="pfStats"></div>
+    <h2 style="font-size:20px;margin-top:14px">Today's quests</h2>
+    <div id="pfQuests"></div>
+    <h2 style="font-size:20px;margin-top:14px">Achievements</h2>
+    <div id="pfBadges"></div>
     <div class="row" style="margin-top:14px"><button class="btn small ghost" data-back="title">← Back</button></div>
   </div>
 </div>

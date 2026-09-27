@@ -59,10 +59,11 @@ export function compileWorld(hole) {
                    { ax: x1, az: z1, bx: x0, bz: z1, kind: 'block' }, { ax: x0, az: z1, bx: x0, bz: z0, kind: 'block' });
         break; }
       case 'windmill': dynamics.push({ type: 'windmill', x: cx, z: cz, len: o.len || TILE * 0.95, speed: o.speed || 1.2, phase: o.phase || 0, blades: 2 }); break;
-      case 'spinner':  dynamics.push({ type: 'spinner', x: cx, z: cz, len: o.len || TILE * 0.8, speed: o.speed || 2.0, phase: o.phase || 0, blades: 1 }); break;
-      case 'mover': dynamics.push({ type: 'mover', x: cx, z: cz, axis: o.axis || 'x', amp: (o.amp || 0.6) * TILE, speed: o.speed || 1.0, phase: o.phase || 0, hw: 0.14, hd: TILE * 0.42 }); break;
+      case 'spinner':  dynamics.push({ type: 'spinner', x: cx, z: cz, len: o.len || TILE * 0.8, speed: o.speed || 2.0, phase: o.phase || 0, blades: 1 }); if (o.hubR) circles.push({ x: cx, z: cz, r: o.hubR, kind: 'model', rest: 0.6 }); break;
+      case 'mover': dynamics.push({ type: 'mover', x: cx, z: cz, axis: o.axis || 'x', amp: (o.amp || 0.6) * TILE, speed: o.speed || 1.0, phase: o.phase || 0, hw: o.hw != null ? o.hw * TILE : 0.14, hd: o.hd != null ? o.hd * TILE : TILE * 0.42 }); break;
+      case 'attractor': pads.push({ type: 'attractor', x: cx, z: cz, r: o.r || TILE * 2, strength: o.strength || 5, core: o.core || 0.4 }); circles.push({ x: cx, z: cz, r: o.core || 0.4, kind: 'model', rest: 0.85 }); break;
       case 'boost': pads.push({ type: 'boost', x: cx, z: cz, r: TILE * 0.42, dirx: o.dirx, dirz: o.dirz, strength: o.strength || 7 }); break;
-      case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: 0.3, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id }); break;
+      case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: 0.45, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id, exits: o.exits ? o.exits.map(e => ({ tx: (e.tx + 0.5) * TILE, tz: (e.tz + 0.5) * TILE })) : null }); break;
       case 'cannon': pads.push({ type: 'cannon', x: cx, z: cz, r: 0.34, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE }); break;
       case 'water': waters.push({ x: cx, z: cz, r: (o.r || 0.42) * TILE }); break;
       case 'turntable': pads.push({ type: 'turntable', x: cx, z: cz, r: TILE * 0.48, omega: o.omega || 1.6 }); break;
@@ -201,6 +202,11 @@ export function step(world, ball, t, dt = STEP) {
     }
   }
   for (const p of world.pads) {
+    if (p.type === 'attractor') {
+      const rx = p.x - ball.x, rz = p.z - ball.z; const d = len(rx, rz);
+      if (d < p.r && d > 1e-3) { const f = p.strength * (1 - d / p.r) * (1 - d / p.r) + 0.6; ball.vx += rx / d * f * dt; ball.vz += rz / d * f * dt; if (!ball._pulled) { ball.events.push({ type: 'attract' }); ball._pulled = true; } }
+      else if (d >= p.r) ball._pulled = false;
+    }
     if (p.type === 'turntable') {
       const rx = ball.x - p.x, rz = ball.z - p.z; if (len(rx, rz) < p.r) { const svx = -rz * p.omega, svz = rx * p.omega; const k = Math.min(1, dt * 4); ball.vx += (svx - ball.vx) * k; ball.vz += (svz - ball.vz) * k; if (!ball._spinning) { ball.events.push({ type: 'turntable' }); ball._spinning = true; } }
     }
@@ -257,7 +263,8 @@ export function step(world, ball, t, dt = STEP) {
     if (p.type === 'boost') continue;
     if (len(ball.x - p.x, ball.z - p.z) > p.r) continue;
     if (p.type === 'teleport' && ball.teleportCooldown <= 0) {
-      ball.x = p.tx; ball.z = p.tz; ball.teleportCooldown = 0.6; ball.events.push({ type: 'teleport' });
+      let tx = p.tx, tz = p.tz; if (p.exits && p.exits.length) { const h = Math.abs(Math.sin(ball.x * 12.9898 + ball.z * 78.233 + ball.vx * 3.7 + ball.vz * 1.3)) * p.exits.length; const e = p.exits[Math.min(p.exits.length - 1, Math.floor(h))]; tx = e.tx; tz = e.tz; }
+      ball.x = tx; ball.z = tz; ball.teleportCooldown = 0.6; ball.events.push({ type: 'teleport' });
     } else if (p.type === 'jump' && ball.jumpCooldown <= 0) {
       const sp = len(ball.vx, ball.vz); const along = (ball.vx * p.dirx + ball.vz * p.dirz);
       if (along > 0.3) { // launched in the pad's direction; slow balls get a helping push to the minimum
@@ -286,7 +293,8 @@ export function step(world, ball, t, dt = STEP) {
   // --- rolling: rest detection ---
   const [gx2, gz2] = gradient(world, ball.x, ball.z);
   let onSlope = len(gx2, gz2) > 0.05;
-  for (const p of world.pads) if (p.type === 'turntable' && len(ball.x - p.x, ball.z - p.z) < p.r) onSlope = true;
+  for (const p of world.pads) if ((p.type === 'turntable' || p.type === 'attractor') && len(ball.x - p.x, ball.z - p.z) < p.r) onSlope = true;
+  if (onSlope && spd < REST_SPEED && world.pads.some(p => p.type === 'attractor' && len(ball.x - p.x, ball.z - p.z) < p.core + BALL_R + 0.05)) { ball.vx = ball.vz = 0; ball.resting = true; ball.events.push({ type: 'rest' }); }
   if (!world.pads.some(p => p.type === 'turntable' && len(ball.x - p.x, ball.z - p.z) < p.r)) ball._spinning = false;
   if (spd < REST_SPEED && !onSlope) { ball.vx = ball.vz = 0; ball.resting = true; ball._boosting = false; ball.events.push({ type: 'rest' }); }
   else if (spd < REST_SPEED * 0.4 && onSlope) { /* let gravity take it */ }
@@ -306,25 +314,43 @@ export function simulateUntilRest(world, ball, t0 = 0, maxT = 20) {
 }
 
 // ---------- Ghost golfer: greedy shot search proving a hole is completable ----------
+// With hole.waypoints, "distance" = remaining length along the tee→waypoints→cup polyline (progress, not proximity).
+function pathRemaining(P, x, z, minJ = 0) {
+  let best = null;
+  for (let j = minJ; j < P.length - 1; j++) {
+    const ax = P[j].x, az = P[j].z, bx = P[j + 1].x, bz = P[j + 1].z; const abx = bx - ax, abz = bz - az; const l2 = abx * abx + abz * abz || 1e-9;
+    let u = ((x - ax) * abx + (z - az) * abz) / l2; u = clamp(u, 0, 1); const px = ax + abx * u, pz = az + abz * u; const off = len(x - px, z - pz);
+    let rest = (1 - u) * Math.sqrt(l2); for (let m = j + 1; m < P.length - 1; m++) rest += len(P[m + 1].x - P[m].x, P[m + 1].z - P[m].z);
+    if (j > minJ && off > TILE * 0.75) continue;   // only credit a later corridor if the ball is really on it
+    const score = rest + off * 1.5; if (!best || score < best.score) best = { score, j, u, off };
+  }
+  return best;
+}
 export function ghostGolf(hole, maxStrokes = 12, rng = Math.random) {
   const world = compileWorld(hole);
   const ball = newBall(world);
-  let strokes = 0, t = 0;
+  let strokes = 0, t = 0; const trace = [];
+  const P = hole.waypoints && hole.waypoints.length ? [{ x: world.teeX, z: world.teeZ }, ...hole.waypoints.map(w => ({ x: (w[0] + 0.5) * TILE, z: (w[1] + 0.5) * TILE })), { x: world.cupX, z: world.cupZ }] : null;
+  let minJ = 0;
+  const scoreOf = (b) => b.inCup ? -1 : (P ? pathRemaining(P, b.x, b.z, minJ).score : len(world.cupX - b.x, world.cupZ - b.z)) + (b.penalty || 0) * 50;
   while (!ball.inCup && strokes < maxStrokes) {
     let best = null;
-    const dx0 = world.cupX - ball.x, dz0 = world.cupZ - ball.z, base = Math.atan2(dz0, dx0);
+    let tgt = { x: world.cupX, z: world.cupZ };
+    if (P) { const pr = pathRemaining(P, ball.x, ball.z, minJ); minJ = pr.j; tgt = pr.u > 0.85 && pr.j + 2 < P.length ? P[pr.j + 2] : P[pr.j + 1]; }
+    const base = Math.atan2(tgt.z - ball.z, tgt.x - ball.x);
     const angles = [0, 0.18, -0.18, 0.4, -0.4, 0.7, -0.7, 1.05, -1.05, 1.5, -1.5, 2.0, -2.0, 2.6, -2.6, Math.PI];
     const powers = [0.12, 0.25, 0.4, 0.55, 0.75, 1.0];
-    for (const a of angles) for (const p of powers) {
+    const waits = world.dynamics.length ? [0, 0.7, 1.4] : [0];   // moving pieces: a player would wait for the gap
+    for (const w of waits) for (const a of angles) for (const p of powers) {
       const trial = { ...ball, events: [] };
       shoot(trial, Math.cos(base + a), Math.sin(base + a), p);
-      simulateUntilRest(world, trial, t, 14);
-      const d = trial.inCup ? -1 : len(world.cupX - trial.x, world.cupZ - trial.z) + (trial.penalty || 0) * 50;
-      if (!best || d < best.d) best = { d, a, p, trial };
+      simulateUntilRest(world, trial, t + w, 14);
+      const d = scoreOf(trial);
+      if (!best || d < best.d) best = { d, a, p, w, trial };
       if (trial.inCup) break;
     }
     Object.assign(ball, best.trial, { events: [] });
-    strokes++; t += 15;
+    strokes++; t += 15 + (best.w || 0); trace.push({ x: +(ball.x / TILE).toFixed(1), z: +(ball.z / TILE).toFixed(1), pen: ball.penalty || 0, a: +best.a.toFixed(2), p: best.p, d: +best.d.toFixed(1) });
   }
-  return { strokes, holed: ball.inCup };
+  return { strokes, holed: ball.inCup, trace };
 }

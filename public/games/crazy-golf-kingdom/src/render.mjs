@@ -260,12 +260,14 @@ export class GolfRenderer {
           const d = world.dynamics.find(dd => Math.abs(dd.x - cx) < 1e-6 && Math.abs(dd.z - cz) < 1e-6 && dd.type === o.type);
           const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.4, 12), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })); hub.position.set(cx, y + 0.2, cz); G.add(hub);
           const grp = new THREE.Group(); grp.position.set(cx, y + 0.17, cz); G.add(grp);
-          const bladeMat = new THREE.MeshStandardMaterial({ color: o.type === 'windmill' ? 0xfff176 : 0x4dd0e1, roughness: 0.5 });
-          for (let i = 0; i < (d ? d.blades : 2); i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(d ? d.len : TILE, 0.28, 0.1), bladeMat); b.rotation.y = i * Math.PI / (d ? d.blades : 2); b.castShadow = true; grp.add(b); }
+          const bladeMat = new THREE.MeshStandardMaterial({ color: o.model ? 0x6ab04c : o.type === 'windmill' ? 0xfff176 : 0x4dd0e1, roughness: 0.5 });
+          for (let i = 0; i < (d ? d.blades : 2); i++) { const b = new THREE.Mesh(o.model ? new THREE.CylinderGeometry(0.08, 0.18, d ? d.len : TILE, 10) : new THREE.BoxGeometry(d ? d.len : TILE, 0.28, 0.1), bladeMat); if (o.model) b.rotation.z = Math.PI / 2; b.rotation.y = i * Math.PI / (d ? d.blades : 2); b.castShadow = true; grp.add(b); }
+          if (o.model) { hub.visible = false; this._placeModel(G, o.model, cx, y, cz, (o.hubR || 0.5) * 5.2, o.rot || 0, K, true); }
           if (d) this.dynamicNodes.push({ node: grp, dyn: d }); break; }
         case 'mover': {
           const d = world.dynamics.find(dd => Math.abs(dd.x - cx) < 1e-6 && Math.abs(dd.z - cz) < 1e-6 && dd.type === 'mover');
-          const m = new THREE.Mesh(new THREE.BoxGeometry(d.axis === 'x' ? d.hw * 2 : d.hd * 2, WALL_H, d.axis === 'x' ? d.hd * 2 : d.hw * 2), new THREE.MeshStandardMaterial({ color: 0x9575cd, roughness: 0.5 })); m.position.set(cx, y + WALL_H / 2, cz); m.castShadow = true; G.add(m);
+          const m = new THREE.Mesh(new THREE.BoxGeometry(d.axis === 'x' ? d.hw * 2 : d.hd * 2, WALL_H, d.axis === 'x' ? d.hd * 2 : d.hw * 2), new THREE.MeshStandardMaterial({ color: 0x9575cd, roughness: 0.5, transparent: !!o.model, opacity: o.model ? 0.25 : 1 })); m.position.set(cx, y + WALL_H / 2, cz); m.castShadow = !o.model; G.add(m);
+          if (o.model) { const rider = new THREE.Group(); rider.position.set(0, -WALL_H / 2, 0); m.add(rider); loadModel(o.model).then(mm => { const src = mm || fallbackModel(o.model, K.wall); const c = src.clone(); const sz = src.userData.size || new THREE.Vector3(1, 1, 1); const target = Math.max(d.hw, d.hd) * 2.1; c.scale.setScalar(Math.min(target / Math.max(sz.x, sz.z), 1.7 / sz.y)); c.rotation.y = d.axis === 'x' ? Math.PI / 2 : 0; rider.add(c); }); }
           // rail
           const rail = new THREE.Mesh(new THREE.BoxGeometry(d.axis === 'x' ? d.amp * 2 + d.hw * 2 : 0.08, 0.02, d.axis === 'x' ? 0.08 : d.amp * 2 + d.hw * 2), new THREE.MeshStandardMaterial({ color: 0x333333 })); rail.position.set(cx, y + 0.012, cz); G.add(rail);
           this.dynamicNodes.push({ node: m, dyn: d, baseX: cx, baseZ: cz }); break; }
@@ -291,6 +293,13 @@ export class GolfRenderer {
           const lip = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.05, 32), new THREE.MeshBasicMaterial({ color: 0xe0f7fa })); lip.rotation.x = -Math.PI / 2; lip.position.set(cx, y + 0.007, cz); G.add(lip);
           this.animNodes.push({ n: w, f: (t, node) => { node.material.map.offset.set(Math.sin(t * 0.7) * 0.08, t * 0.05); node.material.opacity = 0.8 + Math.sin(t * 2 + cx) * 0.08; }, mat: true }); break; }
         case 'model': { this._placeModel(G, o.model, cx, y, cz, (o.r || 0.5) * 2.1, o.rot || 0, K); break; }
+        case 'attractor': {
+          const r = o.r || TILE * 2; const well = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.12, depthWrite: false })); well.rotation.x = -Math.PI / 2; well.position.set(cx, y + 0.004, cz); G.add(well);
+          for (let k = 1; k <= 3; k++) { const ring = new THREE.Mesh(new THREE.RingGeometry(r * k / 3 - 0.03, r * k / 3, 48), new THREE.MeshBasicMaterial({ color: 0x84ffff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(cx, y + 0.005, cz); G.add(ring); this.animNodes.push({ n: ring, f: (t, node) => { const sc = 1 - ((t * 0.35 + k / 3) % 1) * 0.9; node.scale.set(sc, sc, 1); node.material.opacity = 0.1 + sc * 0.35; }, mat: true }); }
+          const core = new THREE.Mesh(new THREE.CylinderGeometry(o.core || 0.4, (o.core || 0.4) * 1.1, 0.25, 24), new THREE.MeshStandardMaterial({ color: 0x263238, emissive: 0x00bcd4, emissiveIntensity: 0.6 })); core.position.set(cx, y + 0.12, cz); G.add(core);
+          const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, (o.core || 0.4) * 1.3, 1.5, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x84ffff, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })); beam.position.set(cx, y + 0.95, cz); G.add(beam);
+          if (o.model) { const holder = new THREE.Group(); holder.position.set(cx, y + 1.6, cz); G.add(holder); loadModel(o.model).then(mm => { const src = mm || fallbackModel(o.model, K.wall); const c = src.clone(); const sz = src.userData.size || new THREE.Vector3(1, 1, 1); c.scale.setScalar(2.6 / Math.max(sz.x, sz.z)); c.position.y = -sz.y * c.scale.y / 2; holder.add(c); }); this.animNodes.push({ n: holder, f: (t, node) => { node.rotation.y = t * 0.8; node.position.y = y + 1.9 + Math.sin(t * 1.5) * 0.12; } }); }
+          break; }
         case 'turntable': {
           const disc = new THREE.Mesh(new THREE.CircleGeometry(TILE * 0.48, 40), new THREE.MeshStandardMaterial({ map: this.discTex, roughness: 0.6 })); disc.rotation.x = -Math.PI / 2; disc.position.set(cx, y + 0.006, cz); G.add(disc);
           const pad = world.pads.find(p => p.type === 'turntable' && Math.abs(p.x - cx) < 1e-6 && Math.abs(p.z - cz) < 1e-6);

@@ -4,6 +4,8 @@ import { compileWorld, newBall, shoot, step, STEP, MAX_STROKES, floorHeight, TIL
 const EASY_MAX = 20;
 const maxStrokes = () => save.easy ? EASY_MAX : MAX_STROKES;
 import { GolfRenderer } from './render.mjs';
+import { buildFinale } from './finales.mjs';
+import { levelFromXp, titleFor, levelReward, SKIN_LEVEL, questsForDay, questEvent, checkAchievements, ACHIEVEMENTS, LEVEL_MAX } from './progression.mjs';
 
 const $ = (id) => document.getElementById(id);
 const IS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
@@ -23,7 +25,7 @@ const RESULT = (s, par) => s === 1 ? ['HOLE IN ONE!', 500, '⛳'] : s - par <= -
 const STARS_NEEDED = 14;
 
 // ---------- save ----------
-function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, aimMode: 'pull', holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
+function loadSave() { try { return Object.assign({ coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, music: true, easy: false, aimMode: 'pull', xp: 0, mulligans: 1, rounds: 0, underParRounds: 0, bestStreak: 0, crowns: {}, tricks: {}, portals: 0, splashes: 0, dailyAces: 0, badges: {}, quests: {}, questDay: '', holesPlayed: 0, bestRound: null, aces: 0 }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) { return { coins: 0, skins: ['classic'], skin: 'classic', career: {}, dailyBest: {}, sound: true, holesPlayed: 0, bestRound: null, aces: 0 }; } }
 function persist(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {} }
 const save = loadSave();
 const careerStars = (kid) => Object.values(save.career[kid] || {}).reduce((a, b) => a + b, 0);
@@ -98,12 +100,12 @@ const S = {
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
   shot: null, streak: 0, idleT: 0, aimTarget: 0, loadSeq: 0, attract: null, attractSeq: 0, attractStopped: 0,
 };
-window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
+window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
   if (id === 'title' || id === 'modes' || id === 'kingdoms' || id === 'shop' || id === 'how') { if (!S.attract && S.attractSeq === S.attractStopped) startAttract(); } else if (id === 'play') { S.attractSeq++; S.attractStopped = S.attractSeq; S.attract = null; } }
-function renderTitle() { $('coinsTitle').textContent = save.coins; const tot = KINGDOMS.reduce((a, K) => a + careerStars(K.id), 0); $('starsTitle').textContent = `★ ${tot}/${KINGDOMS.length * 27}`; $('easyChk').checked = !!save.easy; }
+function renderTitle() { $('coinsTitle').textContent = save.coins; { const L = levelFromXp(save.xp || 0); $('lvlTitle').textContent = `Lv ${L.level} ${titleFor(L.level)}`; } const tot = KINGDOMS.reduce((a, K) => a + careerStars(K.id), 0); $('starsTitle').textContent = `★ ${tot}/${KINGDOMS.length * 27}`; $('easyChk').checked = !!save.easy; }
 function renderModes() {
   const d = new Date(); const key = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
   $('dailyInfo').textContent = save.dailyBest[key] != null ? `Today's best: ${save.dailyBest[key]} pts` : 'One scored attempt per day';
@@ -115,16 +117,16 @@ function renderKingdoms() {
     const unlocked = S.mode !== 'career' || kingdomUnlocked(i);
     const stars = careerStars(K.id); const need = i > 0 ? STARS_NEEDED : 0;
     const el = document.createElement('button'); el.className = 'kcard' + (unlocked ? '' : ' locked'); el.style.setProperty('--k', '#' + K.felt.toString(16).padStart(6, '0')); el.style.setProperty('--w', '#' + K.wall.toString(16).padStart(6, '0'));
-    el.innerHTML = `<div class="kemoji">${K.emoji}</div><div class="kname">${K.name}</div><div class="kdesc">${K.desc}</div>` + (S.mode === 'career' ? `<div class="kstars">★ ${stars}/27${unlocked ? '' : ` — need ${need}★ in ${KINGDOMS[i - 1].name}`}</div>` : '');
+    el.innerHTML = `<div class="kemoji">${K.emoji}${(save.crowns || {})[K.id] ? '<span class="kcrown">' + (stars >= 27 ? '👑' : '🥇') + '</span>' : ''}</div><div class="kname">${K.name}</div><div class="kdesc">${K.desc}</div>` + (S.mode === 'career' ? `<div class="kstars">★ ${stars}/27${unlocked ? '' : ` — need ${need}★ in ${KINGDOMS[i - 1].name}`}</div>` : '');
     el.disabled = !unlocked; el.onclick = () => { SFX.click(); startRound(S.mode, K.id); }; box.appendChild(el);
   });
 }
 function renderShop() {
   $('shopCoins').textContent = save.coins; const box = $('skinList'); box.innerHTML = '';
   for (const sk of SKINS) {
-    const owned = save.skins.includes(sk.id); const el = document.createElement('button'); el.className = 'skin' + (save.skin === sk.id ? ' sel' : '');
-    el.innerHTML = `<span class="sw" style="background:${sk.base};border-color:${sk.accent}">${sk.pattern === 'eyes' ? '👀' : sk.pattern === 'stars' ? '✨' : sk.pattern === 'flame' ? '🔥' : sk.pattern === 'soccer' ? '⚽' : sk.pattern === 'stripe' ? '🏁' : ''}</span><b>${sk.name}</b><em>${sk.blurb || ''}</em><small>${owned ? (save.skin === sk.id ? 'equipped' : 'owned') : sk.cost + ' 🪙'}</small>`;
-    el.onclick = () => { if (!owned) { if (save.coins < sk.cost) { toast('Not enough coins'); return; } save.coins -= sk.cost; save.skins.push(sk.id); SFX.coin(); } save.skin = sk.id; R.setSkin(sk); persist(save); renderShop(); };
+    const owned = save.skins.includes(sk.id); const need = SKIN_LEVEL[sk.id] || 1; const lvl = levelFromXp(save.xp || 0).level; const locked = !owned && lvl < need; const el = document.createElement('button'); el.className = 'skin' + (save.skin === sk.id ? ' sel' : '') + (locked ? ' locked' : '');
+    el.innerHTML = `<span class="sw" style="background:${sk.base};border-color:${sk.accent}">${sk.pattern === 'eyes' ? '👀' : sk.pattern === 'stars' ? '✨' : sk.pattern === 'flame' ? '🔥' : sk.pattern === 'soccer' ? '⚽' : sk.pattern === 'stripe' ? '🏁' : ''}</span><b>${sk.name}</b><em>${sk.blurb || ''}</em><small>${owned ? (save.skin === sk.id ? 'equipped' : 'owned') : locked ? '🔒 level ' + need : sk.cost + ' 🪙'}</small>`;
+    el.onclick = () => { if (!owned) { if (locked) { toast(`Reach level ${need} to unlock ${sk.name}`); return; } if (save.coins < sk.cost) { toast('Not enough coins'); return; } save.coins -= sk.cost; save.skins.push(sk.id); SFX.coin(); } save.skin = sk.id; R.setSkin(sk); persist(save); renderShop(); };
     box.appendChild(el);
   }
 }
@@ -142,11 +144,12 @@ function genAsync(kind, args) {
 function courseSpecs(mode, kingdom) {
   if (mode === 'daily') { const seed = dailySeed(new Date()); const rng = makeRng(seed); const out = []; for (let i = 0; i < 9; i++) { const k = KINGDOMS[Math.floor(rng() * KINGDOMS.length)].id; out.push({ kingdom: k, index: i, seed: seed + i * 131, difficulty: Math.min(8, 1 + i) }); } return out; }
   const seed = mode === 'career' ? 777 + KINGDOMS.findIndex(k => k.id === kingdom) * 1000 : (Math.random() * 1e9) | 0;
-  return Array.from({ length: 9 }, (_, i) => ({ kingdom, index: i, seed: seed + i * 17 }));
+  return Array.from({ length: 9 }, (_, i) => i === 8 ? { kingdom, index: 8, seed: seed + 8 * 17, _finale: true } : ({ kingdom, index: i, seed: seed + i * 17 }));
 }
 async function ensureHole(i) {
   const c = S.course; if (!c[i]) return null;
   if (c[i].tiles) return c[i];
+  if (c[i]._finale) { const h = buildFinale(c[i].kingdom, kingdomById(c[i].kingdom)); if (h) { c[i] = h; return h; } }
   if (!c[i]._promise) c[i]._promise = genAsync('hole', c[i]).then(h => { c[i] = h; return h; });
   return c[i]._promise;
 }
@@ -163,7 +166,7 @@ async function startAce() {
 }
 function aceAfterRest(b) {
   const a = S.ace; if (!a || a.done) return;
-  if (b.inCup) { a.aced = a.attempt; a.done = true; const pts = ACE_POINTS[a.attempt - 1] || 100; S.points[0] = pts; save.coins += Math.round(pts / 5); persist(save); popup(`⛳ ACE!`, `Ball ${a.attempt} of 3 · +${pts} pts`, 2200); SFX.fanfare(5); setTimeout(() => finishAce(pts), 2300); return; }
+  if (b.inCup) { a.aced = a.attempt; a.done = true; const pts = ACE_POINTS[a.attempt - 1] || 100; S.points[0] = pts; save.coins += Math.round(pts / 5); save.dailyAces = (save.dailyAces || 0) + 1; save.aces = (save.aces || 0) + 1; persist(save); questFire('aceDaily', 1); addXp(pts, 'ace'); badgeCheck(); popup(`⛳ ACE!`, `Ball ${a.attempt} of 3 · +${pts} pts`, 2200); SFX.fanfare(5); setTimeout(() => finishAce(pts), 2300); return; }
   const d = Math.hypot(b.x - S.world.cupX, b.z - S.world.cupZ); a.best = Math.min(a.best, d);
   if (a.attempt >= 3) { a.done = true; const pts = Math.max(0, Math.round(50 - a.best * 10)); S.points[0] = pts; save.coins += Math.round(pts / 5); persist(save); popup('😬 NO ACE', `Closest: ${a.best.toFixed(2)} m · +${pts} pts`, 2000); setTimeout(() => finishAce(pts), 2100); return; }
   toast(`Ball ${a.attempt} missed by ${d.toFixed(2)} m — ${3 - a.attempt} left`, 1600);
@@ -186,6 +189,34 @@ function postAce(pts) {
   const fetchBoard = () => fetch('/api/leaderboard?gameId=' + aceId()).then(r => r.ok ? r.json() : []).then(rows => render(Array.isArray(rows) ? rows : [])).catch(() => render(null));
   if (pts != null && nameFor() && pts > 0) fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: aceId(), nickname: nameFor(), score: pts }) }).catch(() => {}).finally(fetchBoard); else fetchBoard();
 }
+// ---------- progression: XP, levels, quests, achievements, mulligans ----------
+function todayKey() { const d = new Date(); return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); }
+function ensureQuests() { const k = todayKey(); if (save.questDay !== k) { save.questDay = k; save.quests = {}; persist(save); } return questsForDay(k); }
+function addXp(n, why) {
+  if (!n) return; const before = levelFromXp(save.xp || 0).level; save.xp = (save.xp || 0) + n; const after = levelFromXp(save.xp).level; persist(save);
+  if (after > before) { for (let l = before + 1; l <= after; l++) { const r = levelReward(l); save.coins += r.coins; save.mulligans = (save.mulligans || 0) + r.mulligans; } persist(save);
+    setTimeout(() => { popup(`⬆️ LEVEL ${after}`, `${titleFor(after)} · ${levelReward(after).label}`, 2400); SFX.fanfare(4); R.burst(currentBall ? currentBall().x : 0, 0.5, currentBall ? currentBall().z : 0, 40, [0xffeb3b, 0x69f0ae, 0x40c4ff], 3, 0.8, 1.4); }, 600); }
+  updateXpHud();
+}
+function questFire(ev, value) {
+  const quests = ensureQuests(); const done = questEvent(quests, save.quests, ev, value); persist(save);
+  done.forEach((q, i) => setTimeout(() => { toast(`✅ Quest: ${q.text} · +${q.reward.coins}🪙 +${q.reward.xp}xp${q.reward.mulligans ? ' +' + q.reward.mulligans + ' mulligan' : ''}`, 2400); save.coins += q.reward.coins; save.mulligans = (save.mulligans || 0) + (q.reward.mulligans || 0); SFX.coin(); addXp(q.reward.xp, 'quest'); }, 1200 + i * 900));
+}
+function badgeCheck() { const fresh = checkAchievements(save); fresh.forEach((a, i) => setTimeout(() => { toast(`${a.icon} Achievement: ${a.name} · +${a.xp}xp`, 2400); SFX.coin(); addXp(a.xp, 'badge'); }, 2000 + i * 900)); if (fresh.length) persist(save); }
+function updateXpHud() { const L = levelFromXp(save.xp || 0); const el = $('hXp'); if (el) { el.textContent = `Lv ${L.level}`; el.style.setProperty('--p', L.need ? L.into / L.need : 1); } const mb = $('btnMulligan'); if (mb) { mb.textContent = `↩ ${save.mulligans || 0}`; mb.style.display = (S.mode === 'quick' || S.mode === 'career') && S.screen === 'play' ? '' : 'none'; mb.disabled = !(save.mulligans > 0 && S.lastShot && currentBall().resting && !currentBall().inCup); } }
+function useMulligan() {
+  const b = currentBall(); if (!(save.mulligans > 0 && S.lastShot && b.resting && !b.inCup && (S.mode === 'quick' || S.mode === 'career'))) return;
+  const ls = S.lastShot; b.x = ls.x; b.z = ls.z; b.y = floorHeight(S.world, b.x, b.z); b.vx = b.vz = 0; b.lastX = b.x; b.lastZ = b.z; S.strokes[S.player] = ls.strokes; save.mulligans--; persist(save); S.lastShot = null;
+  R.burst(b.x, b.y + 0.2, b.z, 20, [0xffffff, 0x90caf9], 1.5, 0.5, 0.7); SFX.teleport(); toast('↩ Mulligan! Shot undone', 1400); S.autoFace = true; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); updateHud();
+}
+function renderProfile() {
+  const L = levelFromXp(save.xp || 0); $('pfLevel').textContent = `Level ${L.level} · ${titleFor(L.level)}`; $('pfXp').textContent = L.need ? `${L.into} / ${L.need} XP to level ${L.level + 1}` : 'MAX LEVEL'; $('pfBar').style.setProperty('--p', L.need ? L.into / L.need : 1);
+  $('pfStats').innerHTML = [['Holes', save.holesPlayed || 0], ['Rounds', save.rounds || 0], ['Aces', save.aces || 0], ['Best streak', save.bestStreak || 0], ['Coins', save.coins], ['Mulligans', save.mulligans || 0]].map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('');
+  $('pfCrowns').innerHTML = KINGDOMS.map(K => { const c = (save.crowns || {})[K.id]; const gold = careerStars(K.id) >= 27; return `<div class="crown ${c ? 'on' : ''} ${gold ? 'gold' : ''}" title="${K.name}">${gold ? '👑' : c ? '🥇' : '⚪'}<small>${K.emoji}</small></div>`; }).join('');
+  const quests = ensureQuests(); $('pfQuests').innerHTML = quests.map(q => { const st = save.quests[q.id] || { n: 0 }; return `<div class="quest ${st.done ? 'done' : ''}"><span>${st.done ? '✅' : '▫️'} ${q.text}</span><small>${Math.min(st.n, q.goal)}/${q.goal} · ${q.reward.coins}🪙 ${q.reward.xp}xp</small></div>`; }).join('');
+  $('pfBadges').innerHTML = ACHIEVEMENTS.map(a => `<div class="badge ${save.badges[a.id] ? 'on' : ''}" title="${a.desc}"><span>${a.icon}</span><small>${a.name}</small></div>`).join('');
+}
+
 // ---------- attract mode: a live hole with a ghost golfer behind the menus ----------
 async function startAttract() {
   const seq = ++S.attractSeq; S.attract = null;
@@ -220,7 +251,7 @@ function attractFrame(dt) {
 }
 // ---------- round flow ----------
 async function startRound(mode, kingdom) {
-  S.mode = mode; S.kingdom = kingdom; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.aces = 0; S.streak = 0;
+  S.mode = mode; S.kingdom = kingdom; S.holeIdx = 0; S.scores = [[], []]; S.points = [0, 0]; S.aces = 0; S.streak = 0; S.roundPenalties = 0; S.lastShot = null;
   S.course = courseSpecs(mode, kingdom);
   show('play'); await loadHole(0);
 }
@@ -252,7 +283,8 @@ async function loadHole(i) {
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   if (gen !== S.loadSeq) return;
   clearTimeout(S.loadTimer); $('loading').classList.remove('on');
-  if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
+  if (S.mode === 'ace') popup('SHOT OF THE DAY', `Ace it in 3 balls · ${S.K.emoji} ${S.K.name}`, 2400); else if (S.hole.finale) { popup(`👑 FINALE: ${S.hole.name.toUpperCase()}`, `${S.hole.blurb} · Par ${S.hole.par}`, 3200); SFX.fanfare(3); } else popup(`HOLE ${i + 1}`, `Par ${S.hole.par} · ${S.K.emoji} ${S.K.name}`, 2000);
+  S.lastShot = null; updateXpHud();
 }
 function currentBall() { return S.balls[S.player]; }
 function nextPlayer() {
@@ -272,8 +304,9 @@ function finishBall(p, holed) {
     if (sh.lip) tricks.push(['🍀 LUCKY LIP', 50]); if (sh.tele) tricks.push(['🌀 PORTAL PUTT', 75]); if (sh.cannon) tricks.push(['💥 CANNONBALL', 75]); if (sh.jump) tricks.push(['🦘 AIR MAIL', 100]);
   }
   for (const [, v] of tricks) pts += v;
+  save.tricks = save.tricks || {}; for (const [t] of tricks) { const k = /BANK/.test(t) ? 'bank' : /BUSTER/.test(t) ? 'buster' : /BOMB/.test(t) ? 'bomb' : /AIR/.test(t) ? 'air' : /LIP/.test(t) ? 'lip' : /PORTAL/.test(t) ? 'portal' : 'cannon'; save.tricks[k] = (save.tricks[k] || 0) + 1; if (k === 'bank') questFire('trick:bank', 1); if (k === 'air') questFire('trick:air', 1); }
   // streak: consecutive holes at or under par (solo modes)
-  if (p === 0) { if (holed && strokes <= S.hole.par) S.streak++; else { if (S.streak >= 2) toast(`💔 Streak of ${S.streak} broken`, 1600); S.streak = 0; } }
+  if (p === 0) { if (holed && strokes <= S.hole.par) { S.streak++; save.bestStreak = Math.max(save.bestStreak || 0, S.streak); questFire('parOrBetter', 1); if (strokes < S.hole.par) questFire('birdie', 1); } else { if (S.streak >= 2) toast(`💔 Streak of ${S.streak} broken`, 1600); S.streak = 0; } questFire('kingdom', S.K.id); }
   const mult = p === 0 ? Math.min(3, 1 + Math.floor(S.streak / 2) * 0.5) : 1; if (mult > 1) pts = Math.round(pts * mult);
   S.scores[p][S.holeIdx] = strokes; S.points[p] += pts;
   tricks.forEach(([t, v], i) => setTimeout(() => { toast(`${t} +${v}`, 1300); SFX.coin(); }, 900 + i * 700));
@@ -285,6 +318,7 @@ function finishBall(p, holed) {
   if (S.mode !== 'daily' || true) { save.coins += Math.round(pts / 10); }
   if (S.mode === 'career' && p === 0) { const cs = Math.max(1, stars); save.career[S.kingdom] = save.career[S.kingdom] || {}; save.career[S.kingdom][S.holeIdx] = Math.max(save.career[S.kingdom][S.holeIdx] || 0, cs); }
   save.holesPlayed++; persist(save);
+  if (p === 0) { addXp(pts, 'hole'); if (holed && S.hole.finale && S.mode === 'career') { if (!save.crowns[S.kingdom]) { save.crowns[S.kingdom] = Date.now(); persist(save); setTimeout(() => { popup('👑 KINGDOM CLEARED', `${S.K.name} · crown earned`, 2600); SFX.fanfare(5); R.addShake(0.2); for (let k = 0; k < 3; k++) setTimeout(() => R.burst(S.world.cupX + (Math.random() - 0.5) * 3, 0.8, S.world.cupZ + (Math.random() - 0.5) * 3, 60, [0xffd54f, 0xffffff, 0xff4081], 4, 0.6, 1.8), 200 + k * 300); }, 2000); } questFire('finale', 1); } else if (holed && S.hole.finale) questFire('finale', 1); badgeCheck(); }
   popup(`${emoji} ${label}`, `${S.players === 2 ? 'P' + (p + 1) + ' · ' : ''}${strokes} stroke${strokes === 1 ? '' : 's'} · +${pts} pts`, 1800);
   if (holed) { SFX.fanfare(strokes === 1 ? 5 : strokes <= S.hole.par ? 4 : 2); if (strokes === 1) { for (let k = 0; k < 4; k++) setTimeout(() => R.burst(S.world.cupX + (Math.random() - 0.5) * 2, 0.6, S.world.cupZ + (Math.random() - 0.5) * 2, 50, [0xffeb3b, 0xff4081, 0x40c4ff, 0x69f0ae, 0xffffff], 4, 0.6, 1.8), 250 + k * 260); R.addShake(0.2); } }
   if (S.done[0] && (S.players === 1 || S.done[1])) { S.holeOver = true; setTimeout(showHoleEnd, 1500); }
@@ -307,6 +341,7 @@ async function showScorecard() {
   const key = dailyKey();
   if (S.mode === 'daily') { if (save.dailyBest[key] == null || S.points[0] > save.dailyBest[key]) save.dailyBest[key] = S.points[0]; try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'crazy-golf-kingdom', score: S.points[0] }, '*'); } catch (e) {} }
   if (S.mode !== 'daily' && (save.bestRound == null || total(0) < save.bestRound)) save.bestRound = total(0);
+  save.rounds = (save.rounds || 0) + 1; if (total(0) < parT) save.underParRounds = (save.underParRounds || 0) + 1; questFire('round', 1); if (S.points[0] >= 1500) questFire('round1500', 1); if (!(S.roundPenalties || 0)) questFire('cleanRound', 1); addXp(200, 'round'); badgeCheck();
   const extra = S.mode === 'career' ? `★ ${careerStars(S.kingdom)}/27 in ${S.K.name}` + (KINGDOMS.findIndex(k => k.id === S.kingdom) < KINGDOMS.length - 1 && careerStars(S.kingdom) >= STARS_NEEDED ? ' — next kingdom unlocked!' : '') : S.mode === 'daily' ? 'Score posted to the daily leaderboard' : '';
   $('scoreExtra').textContent = extra; persist(save); show('scorecard');
 }
@@ -321,6 +356,7 @@ function updateHud() {
   const done = S.scores[0].filter(x => x != null).length; const rel = S.scores[0].reduce((a, sc, i) => a + (sc == null || !S.course[i].par ? 0 : sc - S.course[i].par), 0);
   $('hScore').textContent = done ? `${rel === 0 ? 'E' : rel > 0 ? '+' + rel : rel} thru ${done} · ${S.points[0]} pts` : `${S.points[0]} pts`;
   $('hStreak').textContent = S.streak >= 2 ? `🔥 ${S.streak}` : ''; $('hStreak').style.display = S.streak >= 2 ? '' : 'none';
+  updateXpHud();
 }
 function popup(big, small, ms = 1500) { const p = $('popup'); p.querySelector('.big').textContent = big; p.querySelector('.small').textContent = small; p.classList.add('on'); clearTimeout(p._t); p._t = setTimeout(() => p.classList.remove('on'), ms); }
 
@@ -355,6 +391,7 @@ function pointerUp() {
 }
 function doShot(dx, dz, power) {
   const b = currentBall(); shoot(b, dx, dz, power); S.strokes[S.player]++; SFX.putt(power); S.autoFace = false; R.setPreview(null);
+  S.lastShot = { x: b.x, z: b.z, strokes: S.strokes[S.player] - 1 };
   S.shot = { x0: b.x, z0: b.z, walls: 0, bumpers: 0, lip: false, tele: false, cannon: false, jump: false }; S.idleT = 0; if (S.mode === 'ace' && S.ace) S.ace.attempt++; updateHud();
   R.burst(b.x, b.y + 0.05, b.z, 8, [0xffffff, 0xdddddd], 1.2, 1, 0.5);
 }
@@ -406,6 +443,8 @@ for (const el of document.querySelectorAll('[data-back]')) el.onclick = () => { 
 for (const el of document.querySelectorAll('[data-mode]')) el.onclick = () => { SFX.click(); S.mode = el.dataset.mode; S.players = el.dataset.players ? Number(el.dataset.players) : 1; if (S.mode === 'daily') startRound('daily', 'meadow'); else { renderKingdoms(); $('kingTitle').textContent = S.mode === 'career' ? 'Career — pick a kingdom' : S.players === 2 ? '2 Players — pick a kingdom' : 'Quick Round — pick a kingdom'; show('kingdoms'); } };
 $('btnAgain').onclick = () => { SFX.click(); $('btnAgain').textContent = 'PLAY AGAIN'; if (S.mode === 'ace') startAce(); else if (S.mode === 'daily') { renderTitle(); show('title'); } else startRound(S.mode, S.kingdom); };
 $('btnAce').onclick = () => { SFX.click(); startAce(); };
+$('btnProfile').onclick = () => { SFX.click(); renderProfile(); show('profile'); };
+$('btnMulligan').onclick = () => useMulligan();
 $('btnMenu').onclick = () => { SFX.click(); renderTitle(); show('title'); };
 $('btnPause').onclick = () => togglePause();
 $('btnResume').onclick = () => togglePause();
@@ -426,18 +465,18 @@ function handleEvents(b) {
   for (const e of b.events) {
     switch (e.type) {
       case 'wall': SFX.wall(e.v); if (S.shot && e.v > 1.5) S.shot.walls++; if (e.v > 6) R.addShake(0.06); R.burst(e.x, b.y + 0.1, e.z, 5, [0xffffff, 0xffe082], 1.2, 1, 0.4); break;
-      case 'bumper': SFX.bumper(); if (S.shot) S.shot.bumpers++; R.hit(e.x, e.z); R.addShake(0.12 + Math.min(0.15, e.v * 0.02)); R.burst(e.x, b.y + 0.15, e.z, 14, [0xff7043, 0xffffff, 0xffeb3b], 2.2, 1, 0.6); break;
+      case 'bumper': SFX.bumper(); if (S.shot) S.shot.bumpers++; questFire('bumper', 1); R.hit(e.x, e.z); R.addShake(0.12 + Math.min(0.15, e.v * 0.02)); R.burst(e.x, b.y + 0.15, e.z, 14, [0xff7043, 0xffffff, 0xffeb3b], 2.2, 1, 0.6); break;
       case 'model': SFX.model(); R.hit(e.x, e.z); R.burst(e.x, b.y + 0.15, e.z, 8, [0xffffff], 1.5, 1, 0.5); break;
       case 'cup': SFX.cup(); { const sk = SKINS.find(k => k.id === save.skin); if (sk && sk.sfx) setTimeout(() => SFX.skin(sk.sfx), 250); } R.burst(S.world.cupX, b.y + 0.2, S.world.cupZ, 60, [0xffeb3b, 0xff4081, 0x40c4ff, 0x69f0ae, 0xffffff], 3.5, 0.8, 1.6); b.events.length = 0; S.cupZoom = { t: 0 }; if (S.mode === 'ace') { aceAfterRest(b); return true; } finishBall(S.player, true); return true;
-      case 'reset': SFX.water(); R.addShake(0.15); { const msg = e.reason === 'water' ? '💦 Splash!' : e.reason === 'gap' ? '🕳️ Into the pit!' : '🕳️ Off course!'; if (S.mode === 'ace') toast(msg, 1200); else if (save.easy) toast(msg + ' (easy mode: no penalty)'); else { toast(msg + ' +1 stroke'); S.strokes[S.player]++; } } updateHud(); break;
+      case 'reset': SFX.water(); R.addShake(0.15); save.splashes = (save.splashes || 0) + 1; S.roundPenalties = (S.roundPenalties || 0) + 1; { const msg = e.reason === 'water' ? '💦 Splash!' : e.reason === 'gap' ? '🕳️ Into the pit!' : '🕳️ Off course!'; if (S.mode === 'ace') toast(msg, 1200); else if (save.easy) toast(msg + ' (easy mode: no penalty)'); else { toast(msg + ' +1 stroke'); S.strokes[S.player]++; } } updateHud(); break;
       case 'boost': SFX.boost(); break;
-      case 'teleport': SFX.teleport(); if (S.shot) S.shot.tele = true; R.burst(b.x, b.y + 0.1, b.z, 20, [0x40c4ff, 0xff4081], 2, 0.3, 0.8); break;
+      case 'teleport': SFX.teleport(); if (S.shot) S.shot.tele = true; save.portals = (save.portals || 0) + 1; questFire('teleport', 1); R.burst(b.x, b.y + 0.1, b.z, 20, [0x40c4ff, 0xff4081], 2, 0.3, 0.8); break;
       case 'cannon': SFX.cannon(); if (S.shot) S.shot.cannon = true; R.addShake(0.28); R.burst(b.x, b.y + 0.2, b.z, 25, [0x90a4ae, 0xffffff, 0xff9800], 2.5, 0.8, 0.8); break;
       case 'land': R.burst(b.x, b.y + 0.05, b.z, 10, [0xffffff], 1.4, 1, 0.5); R.addShake(0.08); break;
       case 'jump': SFX.boost(); R.addShake(0.1); R.burst(b.x, b.y + 0.1, b.z, 16, [0xffd600, 0xffffff], 2, 1, 0.6); if (S.shot) S.shot.jump = true; break;
       case 'turntable': SFX.teleport(); break;
       case 'lipout': SFX.lipout(); if (S.shot) S.shot.lip = true; toast('😮 SO CLOSE!', 900); break;
-      case 'rest': if (S.mode === 'ace') { b.events.length = 0; aceAfterRest(b); return true; } if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
+      case 'rest': updateXpHud(); if (S.mode === 'ace') { b.events.length = 0; aceAfterRest(b); return true; } if (S.strokes[S.player] >= maxStrokes() && !b.inCup) { b.events.length = 0; finishBall(S.player, false); return true; } if (S.players === 2 && !S.done[S.player]) nextPlayer(); S.autoFace = true; S.idleT = 0; S.aimAngle = S.aimTarget = Math.atan2(S.world.cupZ - b.z, S.world.cupX - b.x); if (S.strokes[S.player] === maxStrokes() - 1) toast('Last stroke!'); break;
     }
   }
   b.events.length = 0; return false;

@@ -97,6 +97,27 @@ ball skins, a daily seeded course with a leaderboard.
 - Juice: aim arrow + power ring, hit puff, wall-hit sparks, cup-in confetti + fanfare, camera
   flyover of each hole, ball trail on fast shots, screen-space score popups (BIRDIE! etc).
 
+## Progression (added 2026-09-27; `src/progression.mjs`)
+- **XP = points.** Level curve `350·L^1.45` per level, cap 40. Level-ups pay coins (+ mulligans on even levels, 300c+2 on
+  every 5th) with a title (Rookie → … → Grand Champion, one per 2 levels). Skins also gate by level (`SKIN_LEVEL`).
+- **Mulligans** (`save.mulligans`, ↩ HUD button): undo the last shot — restores position + stroke; Quick Round and Career only.
+- **Daily quests**: 3/day seeded by UTC date from a 12-quest pool, progress via `questFire(ev)`; pay coins/XP/mulligans.
+- **Achievements**: 20 badges (`ACHIEVEMENTS`), checked after every hole/round/ace; each pays XP.
+- **Crowns**: clear a kingdom's finale in Career → 🥇 crown; 27★ in that kingdom → 👑 gold. Shown on kingdom cards + Profile.
+- **Profile screen** (title 👤): level bar, crowns, stats, quests, badge wall.
+
+## Finale holes (hole 9 of every kingdom; `src/finales.mjs`, ASCII grid + obstacle list, NOT procedural)
+| Kingdom | Name | Mechanic |
+|---|---|---|
+| Meadow | The Gauntlet | three windmills in a 1-wide corridor (shorter blades so a wall-hugging ball can slip by), snake layout |
+| Candy | Rolling Lollipop | two model-riding movers (lollipop, cupcake) patrol a 5-wide green |
+| Dino | Tail Sweep | spinner with the T-rex at the hub (hub collider) sweeping a 7-wide field, water |
+| Castle | Spooky Portals | portal with 3 exits (deterministic pseudo-random from entry position), moving walls |
+| Space | Tractor Beam | `attractor` pad: gravity well toward the hovering UFO (core collider), turntables |
+Each carries `waypoints` so the ghost golfer can prove it (ghost now scores progress along the tee→waypoints→cup
+polyline, only credits corridors it is actually on, and tries 0/0.7/1.4 s waits when the hole has moving pieces).
+Career only: holing the finale awards the crown. Daily Course stays procedural.
+
 ## Kingdoms (themes) — each 9 holes, unlocked in order in Career
 | # | Kingdom | Palette | Models | Signature gimmick |
 |---|---|---|---|---|

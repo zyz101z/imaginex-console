@@ -1,6 +1,7 @@
 // CRAZY GOLF KINGDOM — generator battery. Run: node test/coursegen.test.mjs
 import { generateHole, generateCourse, generateDaily, generateAceHole, KINGDOMS, dailySeed } from '../src/coursegen.mjs';
 import { ghostGolf, compileWorld, TILE } from '../src/physics.mjs';
+import { buildFinale, FINALE_KINGDOMS } from '../src/finales.mjs';
 
 let pass = 0, fail = 0;
 const check = (n, c, d = '') => { if (c) pass++; else { fail++; console.log('  FAIL:', n, d); } };
@@ -54,5 +55,7 @@ for (const K of KINGDOMS) {
   const a1 = generateAceHole(new Date(Date.UTC(2026, 8, 27))), a2 = generateAceHole(new Date(Date.UTC(2026, 8, 27))), a3 = generateAceHole(new Date(Date.UTC(2026, 8, 28)));
   check('ace hole deterministic per day', JSON.stringify(a1) === JSON.stringify(a2)); check('ace hole changes by day', JSON.stringify(a1) !== JSON.stringify(a3)); check('ace hole is short', a1.path.length <= 14, a1.path.length); check('tee world coords', w.teeX === (c[0].tee.x + 0.5) * TILE); }
 
+// finales: hand-laid hole 9s must be provable too
+for (const k of FINALE_KINGDOMS) { const h = buildFinale(k, KINGDOMS.find(K => K.id === k)); const g = ghostGolf(h, h.par + 4); check(`finale ${k} (${h.name}) provable`, g.holed, `${g.strokes} strokes`); check(`finale ${k} has tee+cup`, !!h.tee && !!h.cup); const c9 = generateCourse({ kingdom: k, seed: 3 }); check(`course hole 9 is the ${k} finale`, c9[8].finale === true && c9[8].name === h.name); }
 console.log(`coursegen: ${pass} passed, ${fail} failed — ghost avg ${(ghostTotal / (parTotal || 1) * 100).toFixed(0)}% of par, worst +${worst}, fallbacks ${fallbacks}, ${((Date.now() - t0) / 1000).toFixed(1)}s, obstacles`, kinds);
 process.exit(fail ? 1 : 0);

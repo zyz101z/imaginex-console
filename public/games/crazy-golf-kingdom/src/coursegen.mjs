@@ -1,5 +1,6 @@
 // CRAZY GOLF KINGDOM — procedural hole generator. Pure + seeded. No hole is hand-built.
 import { ghostGolf } from './physics.mjs';
+import { buildFinale } from './finales.mjs';
 
 export const KINGDOMS = [
   { id: 'meadow', name: 'Meadow Kingdom', emoji: '🌻', felt: 0x4caf50, feltDark: 0x43a047, wall: 0xe53935, wallTop: 0xff5252,
@@ -188,8 +189,8 @@ export function generateHole({ kingdom = 'meadow', index = 0, seed = 1, difficul
   return { kingdom: K.id, index, seed, attempt: -1, tiles, tee: { x: 0, z: 0 }, cup: { x: 5, z: 0 }, obstacles: [], gaps: [], decor: [], par: 2, gravity: K.gravity, path: tiles.map(t => ({ x: t.x, z: t.z })), bounds: { minX: 0, maxX: 5, minZ: 0, maxZ: 0 }, ghostStrokes: 1 };
 }
 
-export function generateCourse({ kingdom = 'meadow', seed = 1, holes = 9 } = {}) {
-  const out = []; for (let i = 0; i < holes; i++) out.push(generateHole({ kingdom, index: i, seed: seed + i * 17 }));
+export function generateCourse({ kingdom = 'meadow', seed = 1, holes = 9, finale = true } = {}) {
+  const out = []; for (let i = 0; i < holes; i++) out.push(finale && i === holes - 1 ? (buildFinale(kingdom, kingdomById(kingdom)) || generateHole({ kingdom, index: i, seed: seed + i * 17 })) : generateHole({ kingdom, index: i, seed: seed + i * 17 }));
   return out;
 }
 export function dailySeed(date = new Date()) {
