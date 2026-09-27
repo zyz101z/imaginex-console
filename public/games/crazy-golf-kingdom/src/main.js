@@ -101,7 +101,7 @@ const S = {
   pointers: new Map(), pinch: null, autoFace: true, cupZoom: null,
   shot: null, streak: 0, idleT: 0, aimTarget: 0, loadSeq: 0, attract: null, attractSeq: 0, attractStopped: 0,
 };
-window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
+window.__cgk = { S, R, save, KINGDOMS, SKINS, generateCourse, startAce, renderLeaderboards, nameFor, dailyId, aceId, addXp, questFire, useMulligan, renderProfile, ensureQuests, loadHole: (i) => loadHole(i), startRound, shootBall: (dx, dz, p) => { if (canShoot()) doShot(dx, dz, p); }, canShoot: () => canShoot(), skipFlyover: () => { if (S.flyover) S.flyover.t = 99; } };
 
 // ---------- screens ----------
 function show(id) { for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id); S.screen = id; if (id !== 'play') coach(null); $('hud').classList.toggle('on', id === 'play'); if (id !== 'play' && id !== 'pause') playMusic('title');
@@ -199,13 +199,40 @@ function finishAce(pts) {
   show('scorecard'); $('btnAgain').textContent = 'TRY AGAIN';
   postAce(isBest ? pts : null);
 }
-function nameFor() { return (save.name || '').trim().slice(0, 16); }
+function profileName() { try { const p = JSON.parse(localStorage.getItem('imaginex_profile') || 'null'); return p && p.nickname ? String(p.nickname).trim().slice(0, 16) : ''; } catch (e) { return ''; } }
+function nameFor() { return profileName() || (save.name || '').trim().slice(0, 16); }
+function dailyId() { return 'crazy-golf-daily-' + aceKey(); }
+// ---------- leaderboards: fetch/post helpers + the in-game screen ----------
+const boardCache = {};
+function fetchBoard(id) { return fetch('/api/leaderboard?gameId=' + id).then(r => r.ok ? r.json() : []).then(rows => { rows = Array.isArray(rows) ? rows : []; boardCache[id] = rows; return rows; }).catch(() => null); }
+function postBoard(id, score) { const n = nameFor(); if (!n || !(score > 0)) return Promise.resolve(false); return fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: id, nickname: n, score }) }).then(r => r.ok).catch(() => false); }
+function rankOf(rows, name) { const i = (rows || []).findIndex(r => r.nickname === name); return i >= 0 ? i + 1 : null; }
+function boardHtml(rows, unit, empty) {
+  if (rows == null) return '<div class="lbEmpty">Offline — could not load this board.</div>';
+  if (!rows.length) return `<div class="lbEmpty">${empty}</div>`;
+  const me = nameFor();
+  return '<div class="lbRows">' + rows.slice(0, 10).map((r, i) => `<div class="lbRow ${r.nickname === me ? 'me' : ''}"><span class="lbRank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.'}</span><span class="lbName">${String(r.nickname).slice(0, 16)}</span><span class="lbScore">${r.score}${unit}</span></div>`).join('') + '</div>';
+}
+async function renderLeaderboards() {
+  $('lbName').textContent = nameFor() ? `Posting as ${nameFor()}` : 'Set a name to post scores'; $('lbNameRow').style.display = profileName() ? 'none' : '';
+  if (!profileName()) $('lbNameInput').value = save.name || '';
+  const best = (k) => { const c = save.career[k] || {}; const st = Object.values(c).reduce((a, b) => a + b, 0); return st; };
+  $('lbPersonal').innerHTML = [['Best round', save.bestRound != null ? save.bestRound + ' strokes' : '—'], ['Aces', save.aces || 0], ['Best streak', save.bestStreak || 0], ['Crowns', Object.keys(save.crowns || {}).length + '/5'], ...KINGDOMS.map(K => [K.emoji + ' ' + K.name, '★ ' + best(K.id) + '/27'])].map(([k, v]) => `<div><b>${v}</b><small>${k}</small></div>`).join('');
+  for (const el of ['lbDaily', 'lbAce', 'lbAll']) $(el).innerHTML = '<div class="lbEmpty">Loading…</div>';
+  const [d, a, all] = await Promise.all([fetchBoard(dailyId()), fetchBoard(aceId()), fetchBoard('crazy-golf-kingdom')]);
+  $('lbDaily').innerHTML = boardHtml(d, ' pts', 'No rounds posted yet today. Play the Daily Course!'); $('lbAce').innerHTML = boardHtml(a, ' pts', 'No aces yet today — be first!'); $('lbAll').innerHTML = boardHtml(all, ' pts', 'Nobody on the all-time board yet.');
+  const me = nameFor(); const rd = rankOf(d, me), ra = rankOf(a, me), rall = rankOf(all, me);
+  $('lbYou').textContent = me ? [rd ? `Daily #${rd}` : null, ra ? `Shot of the Day #${ra}` : null, rall ? `All-time #${rall}` : null].filter(Boolean).join(' · ') || 'Not on a board yet today' : '';
+}
+$('btnBoards').onclick = () => { SFX.click(); renderLeaderboards(); show('boards'); };
+$('lbNameBtn').onclick = () => { const v = ($('lbNameInput').value || '').trim().slice(0, 16); if (!v) return; save.name = v; persist(save); renderLeaderboards(); };
+for (const tab of document.querySelectorAll('.lbTab')) tab.onclick = () => { for (const t of document.querySelectorAll('.lbTab')) t.classList.toggle('sel', t === tab); for (const pane of document.querySelectorAll('.lbPane')) pane.classList.toggle('on', pane.id === tab.dataset.pane); };
 function postAce(pts) {
   const box = $('aceBoard'); const render = (rows) => { if (!rows) { box.textContent = 'Board unavailable offline.'; return; }
     box.innerHTML = `<b style="color:#ffe082">Today's top 10</b><div style="display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;text-align:left;margin:6px auto 0;max-width:320px">` + (rows.slice(0, 10).map((r, i) => `<span>${i + 1}.</span><span style="${r.nickname === nameFor() ? 'color:#ffd166;font-weight:800' : ''}">${String(r.nickname).slice(0, 16)}</span><span>${r.score}</span>`).join('') || '<span></span><span>No aces yet — be first!</span><span></span>') + '</div>' + (nameFor() ? '' : `<div style="margin-top:8px">Post your score: <input id="aceName" maxlength="16" placeholder="your name" style="padding:6px 10px;border-radius:8px;border:1px solid #888;background:#0b1024;color:#fff"> <button class="btn small ghost" id="aceNameBtn">POST</button></div>`); 
     const nb = $('aceNameBtn'); if (nb) nb.onclick = () => { const v = ($('aceName').value || '').trim().slice(0, 16); if (!v) return; save.name = v; persist(save); postAce(save.aceBest[aceKey()]); }; };
   const fetchBoard = () => fetch('/api/leaderboard?gameId=' + aceId()).then(r => r.ok ? r.json() : []).then(rows => render(Array.isArray(rows) ? rows : [])).catch(() => render(null));
-  if (pts != null && nameFor() && pts > 0) fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gameId: aceId(), nickname: nameFor(), score: pts }) }).catch(() => {}).finally(fetchBoard); else fetchBoard();
+  if (pts != null && nameFor() && pts > 0) postBoard(aceId(), pts).finally(fetchBoard); else fetchBoard();
 }
 // ---------- progression: XP, levels, quests, achievements, mulligans ----------
 function todayKey() { const d = new Date(); return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, '0') + String(d.getUTCDate()).padStart(2, '0'); }
@@ -358,11 +385,12 @@ async function showScorecard() {
   let head = S.players === 2 ? (total(0) === total(1) ? 'TIE GAME!' : total(0) < total(1) ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!') : `${relS} · ${S.points[0]} pts`;
   $('scoreHead').textContent = head;
   const key = dailyKey();
-  if (S.mode === 'daily') { if (save.dailyBest[key] == null || S.points[0] > save.dailyBest[key]) save.dailyBest[key] = S.points[0]; try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'crazy-golf-kingdom', score: S.points[0] }, '*'); } catch (e) {} }
+  if (S.mode === 'daily') { if (save.dailyBest[key] == null || S.points[0] > save.dailyBest[key]) save.dailyBest[key] = S.points[0]; try { window.parent.postMessage({ type: 'imaginex-score', gameId: 'crazy-golf-kingdom', score: S.points[0] }, '*'); } catch (e) {}
+    const pts = S.points[0]; postBoard(dailyId(), pts).then(() => fetchBoard(dailyId())).then(rows => { const r = rankOf(rows, nameFor()); const el = $('scoreRank'); if (!el) return; el.innerHTML = rows == null ? '' : (r ? `🏆 You're <b>#${r}</b> on today's Daily Course board` : (nameFor() ? `Today's board: ${rows.length ? rows.length + ' players' : 'be the first to post'}` : `<button class="btn small ghost" id="btnNameFromScore">Set a name to post your score</button>`)); const nb = $('btnNameFromScore'); if (nb) nb.onclick = () => { renderLeaderboards(); show('boards'); }; }); }
   if (S.mode !== 'daily' && (save.bestRound == null || total(0) < save.bestRound)) save.bestRound = total(0);
   save.rounds = (save.rounds || 0) + 1; if (total(0) < parT) save.underParRounds = (save.underParRounds || 0) + 1; questFire('round', 1); if (S.points[0] >= 1500) questFire('round1500', 1); if (!(S.roundPenalties || 0)) questFire('cleanRound', 1); addXp(200, 'round'); badgeCheck();
   const extra = S.mode === 'career' ? `★ ${careerStars(S.kingdom)}/27 in ${S.K.name}` + (KINGDOMS.findIndex(k => k.id === S.kingdom) < KINGDOMS.length - 1 && careerStars(S.kingdom) >= STARS_NEEDED ? ' — next kingdom unlocked!' : '') : S.mode === 'daily' ? 'Score posted to the daily leaderboard' : '';
-  $('scoreExtra').textContent = extra; persist(save); show('scorecard');
+  $('scoreExtra').textContent = extra; $('scoreRank').innerHTML = ''; persist(save); show('scorecard');
 }
 function dailyKey() { const d = new Date(); return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(); }
 

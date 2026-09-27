@@ -68,6 +68,9 @@
   #btnMulligan:disabled { opacity:0.35; }
   .kcrown { position:absolute; top:6px; left:10px; font-size:22px; }
   .skin.locked { filter:grayscale(0.8) brightness(0.7); }
+  .lbTabs { gap:6px; margin-bottom:10px; } .lbTab { background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.15); color:#fff; border-radius:10px; padding:8px 12px; font:800 13px inherit; cursor:pointer; } .lbTab.sel { background:rgba(255,224,130,0.2); border-color:#ffe082; color:#ffe082; }
+  .lbPane { display:none; } .lbPane.on { display:block; } .lbPane.pfGrid.on { display:grid; }
+  .lbRows { display:flex; flex-direction:column; gap:4px; width:min(90vw, 460px); margin:0 auto; } .lbRow { display:grid; grid-template-columns:36px 1fr auto; align-items:center; gap:10px; background:rgba(255,255,255,0.06); border-radius:10px; padding:7px 12px; text-align:left; font-weight:700; } .lbRow.me { background:rgba(105,240,174,0.18); outline:2px solid #69f0ae; } .lbRank { color:#ffe082; } .lbScore { font-family:ui-monospace, monospace; color:#ffe082; } .lbEmpty { color:#b0bec5; padding:14px; }
   .pfGrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(90px, 1fr)); gap:8px; width:min(90vw, 620px); }
   .pfGrid div { background:rgba(255,255,255,0.06); border-radius:10px; padding:8px; } .pfGrid b { display:block; font-size:20px; color:#ffe082; } .pfGrid small { color:#b0bec5; }
   #pfBar { width:min(80vw, 420px); height:14px; border-radius:8px; background:rgba(255,255,255,0.12); overflow:hidden; margin:6px auto; } #pfBar::after { content:''; display:block; height:100%; width:calc(var(--p,0)*100%); background:linear-gradient(90deg,#69f0ae,#ffeb3b); }
@@ -148,6 +151,7 @@
     <button class="btn blue" id="btnShop">🛍️ BALLS <span id="coinsTitle">0</span>🪙</button>
     <button class="btn ghost" id="btnHow">HOW TO PLAY</button>
     <button class="btn pink" id="btnProfile">👤 PROFILE</button>
+    <button class="btn green" id="btnBoards">🏆 BOARDS</button>
     <button class="btn small ghost" id="btnTutorial">🎓 Tutorial</button>
   </div>
   <div class="row" style="align-items:center; gap:18px">
@@ -219,11 +223,33 @@
   </div>
 </div>
 
+<div class="screen" id="boards">
+  <div class="panel">
+    <h2>🏆 Leaderboards</h2>
+    <div class="hint" id="lbName"></div>
+    <div id="lbNameRow" class="row" style="margin:6px 0"><input id="lbNameInput" maxlength="16" placeholder="your name" style="padding:8px 12px;border-radius:10px;border:1px solid #888;background:#0b1024;color:#fff;font-family:inherit"> <button class="btn small ghost" id="lbNameBtn">SAVE</button></div>
+    <div id="lbYou" style="font-weight:800;color:#69f0ae;margin:4px 0 10px"></div>
+    <div class="row lbTabs">
+      <button class="lbTab sel" data-pane="lbDaily">📅 Daily Course</button>
+      <button class="lbTab" data-pane="lbAce">⛳ Shot of the Day</button>
+      <button class="lbTab" data-pane="lbAll">🌍 All-time</button>
+      <button class="lbTab" data-pane="lbPersonal">👤 My bests</button>
+    </div>
+    <div class="lbPane on" id="lbDaily"></div>
+    <div class="lbPane" id="lbAce"></div>
+    <div class="lbPane" id="lbAll"></div>
+    <div class="lbPane pfGrid" id="lbPersonal"></div>
+    <div class="hint" style="margin-top:8px">Daily and Shot of the Day boards reset every day (UTC). All-time keeps your best Daily Course score.</div>
+    <div class="row" style="margin-top:14px"><button class="btn small ghost" data-back="title">← Back</button></div>
+  </div>
+</div>
+
 <div class="screen" id="scorecard">
   <div class="panel">
     <div id="scoreHead">EVEN</div>
     <table id="scoreTable"></table>
-    <div id="scoreExtra" class="hint" style="margin:6px 0 10px"></div>
+    <div id="scoreExtra" class="hint" style="margin:6px 0 4px"></div>
+    <div id="scoreRank" style="margin:0 0 10px; font-weight:800; color:#ffe082"></div>
     <div class="row"><button class="btn green" id="btnAgain">PLAY AGAIN</button><button class="btn ghost small" id="btnMenu">MENU</button></div>
   </div>
 </div>

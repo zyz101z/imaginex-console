@@ -9,8 +9,8 @@ let pass = 0, fail = 0; const check = (n, c, d = '') => { if (c) pass++; else { 
   // stub the leaderboard API so the flow can be checked offline
   await page.setRequestInterception(true); const posted = [];
   page.on('request', r => { const u = r.url(); if (u.includes('/api/leaderboard')) { if (r.method() === 'POST') { posted.push(JSON.parse(r.postData())); r.respond({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); } else r.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([{ nickname: 'Noah', score: 300 }, { nickname: 'Dad', score: 200 }]) }); } else r.continue(); });
+  await page.evaluateOnNewDocument(() => { localStorage.setItem('cgk_save_v1', JSON.stringify({ tutorialDone: true, name: 'Tester' })); });
   await page.goto('http://127.0.0.1:8093/index.html', { waitUntil: 'networkidle2', timeout: 60000 });
-  await page.evaluate(() => { window.__cgk.save.name = 'Tester'; });
   // 1. ace mode: three misses (shoot sideways, weak) → NO ACE result, board rendered, closest posted
   await page.click('#btnPlay'); await page.waitForSelector('#btnAce'); await page.click('#btnAce');
   await page.waitForFunction(() => window.__cgk.S.world && !document.getElementById('loading').classList.contains('on'), { timeout: 60000 });

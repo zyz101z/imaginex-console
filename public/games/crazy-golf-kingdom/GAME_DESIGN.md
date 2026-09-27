@@ -91,6 +91,12 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
   keeps aim), PUTTER (shaft/head/grip mesh behind the ball while aiming, pulled back with power, swings on shot via
   `R.putt`), cannon/portal PREVIEW extension (dots arc from the pad to its target). SEO — `gameSeo.ts` entry + sitemap
   URL so `/play/crazy-golf-kingdom` exists (it 404'd before). `test/browser.tutorial.js` (13 checks).
+- 2026-09-27 LEADERBOARDS: in-game 🏆 BOARDS screen (tabs: today's Daily Course `crazy-golf-daily-YYYYMMDD` [new
+  per-day id, route DAILY_ID regex extended, 3-day TTL], today's Shot of the Day, all-time `crazy-golf-kingdom` [the
+  console's board], My bests); my row highlighted + rank summary; name = console profile nickname (`imaginex_profile`
+  in same-origin localStorage) → `save.name` fallback with an inline input. Daily Course now posts to BOTH the per-day
+  board (fetch, name) and the console board (postMessage) and the scorecard shows "You're #N today".
+  `test/browser.leaderboards.js` (9 checks, API stubbed). `browser.ace.js` pre-seeds tutorialDone (first PLAY = tutorial).
 - Playtest questions below still open. Not yet done: mobile pinch-zoom, ball trail, kingdom-specific
   ambient props beyond the two guardians, music (user usually supplies Suno tracks).
 

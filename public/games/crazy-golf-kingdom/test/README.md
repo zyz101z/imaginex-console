@@ -19,4 +19,5 @@ Browser (real three.js scene, headless Chrome via puppeteer-core):
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.flicker.js   # burst-screenshots hole transitions; fails on any near-black frame (needs sharp)
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.progression.js   # XP/levels, quests, mulligan, profile, finale crown
     LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.tutorial.js   # tutorial flow, putter, peek flyover, cannon preview
+    LD_LIBRARY_PATH=<dir-with-libasound> node test/browser.leaderboards.js   # boards screen, per-day daily posting, rank (API stubbed)
 All scripts need `puppeteer-core` resolvable (npm i puppeteer-core in the cwd).
