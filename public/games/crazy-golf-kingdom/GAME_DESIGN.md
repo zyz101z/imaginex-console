@@ -6,6 +6,14 @@ Cover: user-supplied `D:\ImagineX\crazygolfkingdom.png` (1024×1536 with red Ima
 `cover.png`; spine-less crop `title_art.jpg` is the title-screen background (blurred copy fills wide screens).
 
 ## Build ledger
+- 2026-10-02 **PIRATE COVE (6th kingdom)**: new obstacle types `tide` (physics `tideLevel(w,t)` shared by sim+render; water
+  kills only when level > 0.5, 12% ramps), `whirlpool` (attractor pad with `sink: true` + a core water disc; no solid core;
+  reset reason 'whirlpool' → "🌀 Swallowed" toast), `barrel` (= mover with the barrel model). Renderer: sand basin w/ rim +
+  rising/draining disc + foam pulse at full; swirl canvas texture spinning over a tile-clamped sea disc + faint pull ring
+  + orbiting bubbles; sunset light (0xffc27a sun), palms/driftwood/starfish scatter, ocean RingGeometry(34..420) beyond
+  the sand re-centred per hole. 5 Meshy models (150 credits, balance 651). Finale "The Kraken". Counts bumped: tag line
+  "Six kingdoms", crowns /6, 'every kingdom' quest goal 6, SEO copy. Tests: coursegen 823, pirate 360-hole gen check
+  (0 ghost fails, par avg 3.77), `test/browser.pirate.js`.
 - 2026-09-26 v1: physics.mjs (custom ball sim, 35 tests) · coursegen.mjs (seeded generator, ghost golfer
   proves every hole, ~670 tests) · render.mjs (three.js r169 CDN, shadows, canvas textures, Meshy GLBs)
   · main.js (modes, input, HUD, save, procedural SFX) · 15 Meshy models (450 credits; textures shrunk
@@ -145,6 +153,7 @@ ball skins, a daily seeded course with a leaderboard.
 | Candy | Rolling Lollipop | two model-riding movers (lollipop, cupcake) patrol a 5-wide green |
 | Dino | Tail Sweep | spinner with the T-rex at the hub (hub collider) sweeping a 7-wide field, water |
 | Castle | Spooky Portals | portal with 3 exits (deterministic pseudo-random from entry position), moving walls |
+| Pirate | The Kraken | kraken spinner + a second counter-rotating tentacle, both lane-wide; two phased tide pools before it; whirlpool filling the final bend (skirt it fast or ride it round to the cup); par 4 |
 | Space | Tractor Beam | `attractor` pad: gravity well toward the hovering UFO (core collider), turntables |
 2026-09-27 REBUILD (user: "the T-rex is out of the way and easily avoided"): every finale re-laid so the gimmick is
 UNAVOIDABLE — Dino and Candy are 3-wide lanes with the tail / the sliding sweets spanning the full width; Space is a
@@ -162,6 +171,7 @@ Career only: holing the finale awards the crown. Daily Course stays procedural.
 | 3 | Dino Swamp | olive / brown | trex, palm, volcano | water hazards, sweeping tail (rotating bar) |
 | 4 | Haunted Castle | purple felt / grey stone | tower, ghost, pumpkin | moving walls, teleporters |
 | 5 | Space Station | navy / neon cyan | ufo, rocket, alien | low gravity (long rolls), cannons, ice |
+| 6 | Pirate Cove 🏴‍☠️ | sunset / sea-green felt / driftwood walls / sand + ocean ring | chest, kraken, skull, ship (decor), barrel (mover) | TIDE POOLS (fill/drain on a timer, deadly only when full), WHIRLPOOLS (attractor + sinking eye = swallowed), rolling barrels, cannons |
 
 ## Hole generation (`src/coursegen.mjs`, pure, seeded)
 - Grid of 1-unit tiles (rendered at 2.2 m). Random walk from tee to cup: 6–22 tiles long,

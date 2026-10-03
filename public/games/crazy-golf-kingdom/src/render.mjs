@@ -1,7 +1,7 @@
 // CRAZY GOLF KINGDOM — three.js renderer. Everything on screen is built here from the hole data.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { TILE, BALL_R, CUP_R, bladeAngle, moverOffset, floorHeight } from './physics.mjs';
+import { TILE, BALL_R, CUP_R, bladeAngle, moverOffset, floorHeight, tideLevel } from './physics.mjs';
 
 const WALL_H = 0.34, WALL_T = 0.17;
 
@@ -153,6 +153,9 @@ export class GolfRenderer {
     this.pMesh = new THREE.Points(this.pGeo, new THREE.PointsMaterial({ size: 0.09, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
     this.scene.add(this.pMesh); this.pMesh.frustumCulled = false;
     this.checker = checkerTexture(); this.arrowTex = arrowTexture(); this.chevronTex = chevronTexture(); this.discTex = discTexture();
+    { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.translate(128, 128); g.lineCap = 'round';
+      for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let i = 0; i <= 90; i++) { const a = i / 90 * Math.PI * 2.6 + arm * 2.094; const rr = 8 + i / 90 * 118; const x = Math.cos(a) * rr, yy = Math.sin(a) * rr; i ? g.lineTo(x, yy) : g.moveTo(x, yy); } g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 7; g.stroke(); g.strokeStyle = 'rgba(179,229,252,0.6)'; g.lineWidth = 3; g.stroke(); }
+      this.swirlTex = new THREE.CanvasTexture(c); }
     // shot preview (instanced dots) + ball trail + shake
     this.previewMax = 40; this.preview = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff59d, transparent: true, opacity: 0.95, depthTest: false }), this.previewMax);
     this.preview.renderOrder = 11; this.preview.count = 0; this.preview.frustumCulled = false; this.scene.add(this.preview);
@@ -220,8 +223,9 @@ export class GolfRenderer {
     const G = this.holeGroup = new THREE.Group(); this.scene.add(G);
     this.sky.material.uniforms.top.value.set(K.sky[0]); this.sky.material.uniforms.bot.value.set(K.sky[1]);
     this.ground.material.color.set(0xffffff); const gt = noiseTexture(K.ground, K.id === 'space' ? 6 : 12); gt.repeat.set(140, 140); this.ground.material.map = gt; this.ground.material.needsUpdate = true; this.scene.fog = new THREE.Fog(K.fog, 40, 140);
-    this.hemi.intensity = K.id === 'space' ? 0.5 : K.id === 'castle' ? 0.6 : 0.9; this.sun.intensity = K.id === 'space' ? 1.6 : K.id === 'castle' ? 1.5 : 2.2;
-    this.sun.color.set(K.id === 'castle' ? 0xc9b7ff : K.id === 'space' ? 0xdfe9ff : 0xfff4e0);
+    this.hemi.intensity = K.id === 'space' ? 0.5 : K.id === 'castle' ? 0.6 : K.id === 'pirate' ? 0.75 : 0.9; this.sun.intensity = K.id === 'space' ? 1.6 : K.id === 'castle' ? 1.5 : K.id === 'pirate' ? 2.0 : 2.2;
+    this.sun.color.set(K.id === 'castle' ? 0xc9b7ff : K.id === 'space' ? 0xdfe9ff : K.id === 'pirate' ? 0xffc27a : 0xfff4e0);
+    if (K.id === 'pirate') { if (!this.sea) { const st = noiseTexture(0x1e88e5, 6); st.repeat.set(40, 40); this.sea = new THREE.Mesh(new THREE.RingGeometry(34, 420, 64, 1), new THREE.MeshStandardMaterial({ map: st, color: 0x29b6f6, roughness: 0.15, metalness: 0.25 })); this.sea.rotation.x = -Math.PI / 2; this.sea.position.y = -0.86; const surf = new THREE.Mesh(new THREE.RingGeometry(33.4, 35.2, 64, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false })); surf.position.y = 0.01; this.sea.add(surf); this.animNodes_sea = (t) => { st.offset.set(t * 0.01, Math.sin(t * 0.5) * 0.01); surf.material.opacity = 0.35 + Math.sin(t * 1.3) * 0.2; }; } this.scene.add(this.sea); } else if (this.sea) this.scene.remove(this.sea);
     if (K.id === 'space') { if (!this.stars) { const g = new THREE.BufferGeometry(); const p = new Float32Array(1200 * 3); for (let i = 0; i < p.length; i += 3) { const v = new THREE.Vector3().randomDirection().multiplyScalar(280); if (v.y < 5) v.y = 5 + Math.random() * 100; p[i] = v.x; p[i + 1] = v.y; p[i + 2] = v.z; } g.setAttribute('position', new THREE.BufferAttribute(p, 3)); this.stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: true })); } this.scene.add(this.stars); }
     else if (this.stars) this.scene.remove(this.stars);
     this.clouds.visible = K.id !== 'space'; this.moon.visible = K.id === 'castle';
@@ -301,8 +305,8 @@ export class GolfRenderer {
           const d = world.dynamics.find(dd => Math.abs(dd.x - cx) < 1e-6 && Math.abs(dd.z - cz) < 1e-6 && dd.type === o.type);
           const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.4, 12), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })); hub.position.set(cx, y + 0.2, cz); G.add(hub);
           const grp = new THREE.Group(); grp.position.set(cx, y + 0.17, cz); G.add(grp);
-          const bladeMat = new THREE.MeshStandardMaterial({ color: o.model ? 0x6ab04c : o.type === 'windmill' ? 0xfff176 : 0x4dd0e1, roughness: 0.5 });
-          for (let i = 0; i < (d ? d.blades : 2); i++) { const b = new THREE.Mesh(o.model ? new THREE.CylinderGeometry(0.08, 0.18, d ? d.len : TILE, 10) : new THREE.BoxGeometry(d ? d.len : TILE, 0.28, 0.1), bladeMat); if (o.model) b.rotation.z = Math.PI / 2; b.rotation.y = i * Math.PI / (d ? d.blades : 2); b.castShadow = true; grp.add(b); }
+          const bladeMat = new THREE.MeshStandardMaterial({ color: o.color != null ? o.color : o.model === 'kraken' ? 0x8e24aa : o.model ? 0x6ab04c : o.type === 'windmill' ? 0xfff176 : 0x4dd0e1, roughness: 0.5 });
+          for (let i = 0; i < (d ? d.blades : 2); i++) { const b = new THREE.Mesh(o.model ? new THREE.CylinderGeometry(0.08, 0.18, d ? d.len : TILE, 10) : new THREE.BoxGeometry(d ? d.len : TILE, 0.28, 0.1), bladeMat); if (o.model) b.rotation.z = Math.PI / 2; b.rotation.y = i * Math.PI / (d ? d.blades : 2); b.castShadow = true; grp.add(b); if ((o.color != null && o.color === 0x8e24aa) || o.model === 'kraken') { const L = d ? d.len : TILE; for (let k = 1; k <= 5; k++) { const su = new THREE.Mesh(new THREE.SphereGeometry(0.07, 7, 6), new THREE.MeshStandardMaterial({ color: 0xf48fb1 })); su.position.set(Math.cos(b.rotation.y) * (L / 2 - k * L / 6), 0.14, -Math.sin(b.rotation.y) * (L / 2 - k * L / 6)); grp.add(su); } } }
           if (o.model) { hub.visible = false; this._placeModel(G, o.model, cx, y, cz, (o.hubR || 0.5) * 5.2, o.rot || 0, K, true); }
           if (d) this.dynamicNodes.push({ node: grp, dyn: d }); break; }
         case 'mover': {
@@ -333,6 +337,25 @@ export class GolfRenderer {
           w.rotation.x = -Math.PI / 2; w.position.set(cx, y + 0.004, cz); G.add(w);
           const lip = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.05, 32), new THREE.MeshBasicMaterial({ color: 0xe0f7fa })); lip.rotation.x = -Math.PI / 2; lip.position.set(cx, y + 0.007, cz); G.add(lip);
           this.animNodes.push({ n: w, f: (t, node) => { node.material.map.offset.set(Math.sin(t * 0.7) * 0.08, t * 0.05); node.material.opacity = 0.8 + Math.sin(t * 2 + cx) * 0.08; }, mat: true }); break; }
+        case 'tide': {
+          // a sand-rimmed basin: the water disc rises to the brim (deadly) and drains to a damp floor on a timer
+          const r = (o.r || 0.42) * TILE; const wspec = world.waters.find(w => Math.abs(w.x - cx) < 1e-6 && Math.abs(w.z - cz) < 1e-6);
+          const basin = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshStandardMaterial({ color: 0xc9b37a, roughness: 1 })); basin.rotation.x = -Math.PI / 2; basin.position.set(cx, y + 0.003, cz); G.add(basin);
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(r + 0.03, 0.05, 8, 32), new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.9 })); rim.rotation.x = Math.PI / 2; rim.position.set(cx, y + 0.02, cz); G.add(rim);
+          const wt = noiseTexture(0x26c6da, 40); wt.repeat.set(2, 2); const w = new THREE.Mesh(new THREE.CircleGeometry(r * 0.97, 32), new THREE.MeshStandardMaterial({ map: wt, color: 0x4dd0e1, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.9 }));
+          w.rotation.x = -Math.PI / 2; w.position.set(cx, y + 0.006, cz); G.add(w);
+          const foam = new THREE.Mesh(new THREE.RingGeometry(r * 0.82, r * 0.97, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); foam.rotation.x = -Math.PI / 2; foam.position.set(cx, y + 0.008, cz); G.add(foam);
+          this.animNodes.push({ n: w, f: (t, node) => { const L = wspec ? tideLevel(wspec, t) : 1; node.scale.setScalar(0.25 + 0.75 * L); node.material.opacity = 0.25 + 0.65 * L; node.material.map.offset.set(Math.sin(t * 0.7) * 0.08, t * 0.05); foam.scale.setScalar(0.25 + 0.75 * L); foam.material.opacity = L > 0.95 ? 0.5 + Math.sin(t * 5) * 0.2 : 0.35 * L; }, mat: true }); break; }
+        case 'whirlpool': {
+          const pull = o.r || TILE * 1.1; const r = Math.min(pull, TILE * 0.47); const core = o.core || 0.3;
+          if (pull > r + 0.2) { const ring = new THREE.Mesh(new THREE.RingGeometry(pull - 0.03, pull, 48), new THREE.MeshBasicMaterial({ color: 0x80deea, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(cx, y + 0.005, cz); G.add(ring); this.animNodes.push({ n: ring, f: (t, node) => { const sc = 1 - ((t * 0.5) % 1) * (1 - r / pull); node.scale.set(sc, sc, 1); node.material.opacity = 0.1 + ((t * 0.5) % 1) * 0.3; }, mat: true }); }
+          const sea = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color: 0x0288d1, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.85 })); sea.rotation.x = -Math.PI / 2; sea.position.set(cx, y + 0.004, cz); G.add(sea);
+          const swirl = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: this.swirlTex, transparent: true, opacity: 0.85, depthWrite: false })); swirl.rotation.x = -Math.PI / 2; swirl.position.set(cx, y + 0.007, cz); G.add(swirl);
+          const eye = new THREE.Mesh(new THREE.CylinderGeometry(core * 0.6, core, 0.3, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x01579b, side: THREE.DoubleSide })); eye.position.set(cx, y - 0.14, cz); G.add(eye);
+          const eyeCap = new THREE.Mesh(new THREE.CircleGeometry(core * 0.6, 24), new THREE.MeshBasicMaterial({ color: 0x002f6c })); eyeCap.rotation.x = -Math.PI / 2; eyeCap.position.set(cx, y - 0.28, cz); G.add(eyeCap);
+          this.animNodes.push({ n: swirl, f: (t, node) => { node.rotation.z = -t * 2.4; } });
+          for (let k = 0; k < 6; k++) { const bub = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })); G.add(bub); const ph = k * 1.05; this.animNodes.push({ n: bub, f: (t, node) => { const u = ((t * 0.5 + ph) % 2) / 2; const rr = core + (r - core) * (1 - u); node.position.set(cx + Math.cos(t * 2.4 + ph) * rr, y + 0.03, cz + Math.sin(t * 2.4 + ph) * rr); node.scale.setScalar(0.5 + u); } }); }
+          break; }
         case 'model': { this._placeModel(G, o.model, cx, y, cz, (o.r || 0.5) * 2.1, o.rot || 0, K); break; }
         case 'attractor': {
           const r = o.r || TILE * 2; const well = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.12, depthWrite: false })); well.rotation.x = -Math.PI / 2; well.position.set(cx, y + 0.004, cz); G.add(well);
@@ -359,7 +382,7 @@ export class GolfRenderer {
     const b = hole.bounds; const cxm = ((b.minX + b.maxX + 1) / 2) * TILE, czm = ((b.minZ + b.maxZ + 1) / 2) * TILE; const span = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * TILE + 12;
     this.sun.position.set(cxm + 14, 24, czm + 9); this.sun.target.position.set(cxm, 0, czm);
     const sc = this.sun.shadow.camera; sc.left = sc.bottom = -span / 1.6; sc.right = sc.top = span / 1.6; sc.near = 1; sc.far = 80; sc.updateProjectionMatrix();
-    this.courseCenter = { x: cxm, z: czm, span };
+    this.courseCenter = { x: cxm, z: czm, span }; if (this.sea) this.sea.position.set(cxm, -0.86, czm);
   }
   _scatter(G, hole, K) {
     let a = (hole.seed * 2654435761 + hole.index * 97) >>> 0; const rng = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -369,7 +392,7 @@ export class GolfRenderer {
       flower: new THREE.MeshStandardMaterial({ color: 0xffeb3b }), flower2: new THREE.MeshStandardMaterial({ color: 0xff5252 }),
       gum: new THREE.MeshStandardMaterial({ color: 0xff80ab, roughness: 0.3 }), gum2: new THREE.MeshStandardMaterial({ color: 0x80d8ff, roughness: 0.3 }), cane: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }), caneR: new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }),
       rock: new THREE.MeshStandardMaterial({ color: 0x6d6d6d, roughness: 1 }), fern: new THREE.MeshStandardMaterial({ color: 0x33691e, roughness: 1 }),
-      dead: new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 1 }), stone: new THREE.MeshStandardMaterial({ color: 0x78909c, roughness: 0.9 }),
+      dead: new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 1 }), palm: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1 }), frond: new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.9 }), coconut: new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 1 }), rockDark: new THREE.MeshStandardMaterial({ color: 0x546e7a, roughness: 1 }), drift: new THREE.MeshStandardMaterial({ color: 0xa1887f, roughness: 1 }), rope: new THREE.MeshStandardMaterial({ color: 0xd7ccc8, roughness: 1 }), starfish: new THREE.MeshStandardMaterial({ color: 0xff7043, roughness: 0.8 }), stone: new THREE.MeshStandardMaterial({ color: 0x78909c, roughness: 0.9 }),
       crystal: new THREE.MeshStandardMaterial({ color: 0x40c4ff, emissive: 0x0091ea, emissiveIntensity: 0.8, roughness: 0.2 }), crystal2: new THREE.MeshStandardMaterial({ color: 0xea80fc, emissive: 0xaa00ff, emissiveIntensity: 0.7, roughness: 0.2 }), asteroid: new THREE.MeshStandardMaterial({ color: 0x455a64, roughness: 1 }),
     };
     const n = 34;
@@ -387,6 +410,9 @@ export class GolfRenderer {
       if (K.id === 'meadow') { if (r < 0.6) { add(new THREE.CylinderGeometry(0.12, 0.16, 0.7, 7), mats.trunk, 0.35); add(new THREE.ConeGeometry(0.75, 1.5, 8), rng() < 0.5 ? mats.leaf : mats.leaf2, 1.3); add(new THREE.ConeGeometry(0.55, 1.1, 8), mats.leaf2, 2.0); } else { for (let k = 0; k < 4; k++) { const f = add(new THREE.SphereGeometry(0.11, 8, 6), rng() < 0.5 ? mats.flower : mats.flower2, 0.12); f.position.x = (rng() - 0.5) * 1.2; f.position.z = (rng() - 0.5) * 1.2; } } }
       else if (K.id === 'candy') { if (r < 0.5) { add(new THREE.SphereGeometry(0.42, 12, 10), rng() < 0.5 ? mats.gum : mats.gum2, 0.36).scale.y = 0.75; } else { add(new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8), mats.cane, 0.7); for (let k = 0; k < 4; k++) add(new THREE.TorusGeometry(0.085, 0.03, 6, 12), mats.caneR, 0.2 + k * 0.32).rotation.x = Math.PI / 2; add(new THREE.TorusGeometry(0.2, 0.08, 8, 14, Math.PI), mats.cane, 1.4); } }
       else if (K.id === 'dino') { if (r < 0.5) { for (let k = 0; k < 5; k++) { const f = add(new THREE.ConeGeometry(0.16, 0.9, 5), mats.fern, 0.45); f.rotation.z = (rng() - 0.5) * 1.2; f.rotation.y = k * 1.26; f.position.y = 0.3; } } else add(new THREE.DodecahedronGeometry(0.45, 0), mats.rock, 0.3).scale.y = 0.6; }
+      else if (K.id === 'pirate') { if (r < 0.45) { const tr = add(new THREE.CylinderGeometry(0.1, 0.17, 2.2, 7), mats.palm, 1.1); tr.rotation.z = (rng() - 0.5) * 0.5; for (let k = 0; k < 6; k++) { const fr = add(new THREE.ConeGeometry(0.22, 1.5, 4), mats.frond, 2.2); fr.rotation.z = 1.25 + rng() * 0.3; fr.rotation.y = k * 1.05; fr.position.x = Math.cos(k * 1.05) * 0.5; fr.position.z = Math.sin(k * 1.05) * 0.5; fr.position.y = 2.1; } for (let k = 0; k < 3; k++) { const co = add(new THREE.SphereGeometry(0.12, 7, 6), mats.coconut, 2.0); co.position.x = Math.cos(k * 2.1) * 0.18; co.position.z = Math.sin(k * 2.1) * 0.18; } }
+        else if (r < 0.7) { add(new THREE.DodecahedronGeometry(0.5, 0), mats.rockDark, 0.3).scale.y = 0.55; add(new THREE.DodecahedronGeometry(0.28, 0), mats.rockDark, 0.25).position.x = 0.55; }
+        else { const post = add(new THREE.CylinderGeometry(0.07, 0.09, 1.1, 6), mats.drift, 0.55); post.rotation.z = (rng() - 0.5) * 0.4; const rope = add(new THREE.TorusGeometry(0.12, 0.025, 6, 12), mats.rope, 0.95); rope.rotation.x = Math.PI / 2; const star = add(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 5), mats.starfish, 0.03); star.position.x = 0.5; } }
       else if (K.id === 'castle') { if (r < 0.5) { add(new THREE.CylinderGeometry(0.06, 0.14, 1.6, 6), mats.dead, 0.8); for (let k = 0; k < 3; k++) { const br = add(new THREE.CylinderGeometry(0.03, 0.06, 0.8, 5), mats.dead, 1.3); br.rotation.z = 0.8 + rng() * 0.4; br.rotation.y = k * 2.1; } } else { add(new THREE.BoxGeometry(0.5, 0.7, 0.14), mats.stone, 0.35); add(new THREE.CylinderGeometry(0.25, 0.25, 0.14, 12, 1, false, 0, Math.PI), mats.stone, 0.7).rotation.x = Math.PI / 2; } }
       else { if (r < 0.6) { add(new THREE.OctahedronGeometry(0.4, 0), rng() < 0.5 ? mats.crystal : mats.crystal2, 0.45).scale.y = 1.8; } else add(new THREE.DodecahedronGeometry(0.5, 0), mats.asteroid, 0.4); }
       g.scale.setScalar(sc); G.add(g);
@@ -431,7 +457,7 @@ export class GolfRenderer {
       if (n.dyn.type === 'mover') { const off = moverOffset(n.dyn, worldT); if (n.dyn.axis === 'x') n.node.position.x = n.baseX + off; else n.node.position.z = n.baseZ + off; }
       else n.node.rotation.y = -bladeAngle(n.dyn, worldT);
     }
-    for (const a of this.animNodes) a.f(worldT, a.n);
+    for (const a of this.animNodes) a.f(worldT, a.n); if (this.animNodes_sea && this.sea.parent) this.animNodes_sea(worldT);
     for (const a of this.hitAnims) { a.t += dt * 6; const u = Math.min(1, a.t); const k = Math.sin(u * Math.PI); if (a.h.kind === 'bumper') { a.h.node.scale.set(1 + k * 0.35, 1 - k * 0.4, 1 + k * 0.35); a.h.node.position.y = a.h.y - k * 0.07; } else { a.h.node.rotation.z = Math.sin(u * Math.PI * 3) * 0.18 * (1 - u); a.h.node.scale.setScalar(1 + k * 0.08); } }
     this.hitAnims = this.hitAnims.filter(a => a.t < 1);
     for (const sp of this.clouds.children) { sp.position.x += sp.userData.v * dt; if (sp.position.x > 120) sp.position.x = -120; }

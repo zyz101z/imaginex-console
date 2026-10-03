@@ -25,7 +25,7 @@ export const QUEST_POOL = [
   { id: 'bank', text: 'Make a Bank Shot', goal: 1, ev: 'trick:bank', reward: { coins: 90, xp: 150, mulligans: 1 } },
   { id: 'air', text: 'Hole out off a jump pad', goal: 1, ev: 'trick:air', reward: { coins: 90, xp: 150, mulligans: 1 } },
   { id: 'pars3', text: 'Make par or better on 3 holes', goal: 3, ev: 'parOrBetter', reward: { coins: 60, xp: 120 } },
-  { id: 'kingdom', text: 'Play a hole in every kingdom', goal: 5, ev: 'kingdom', distinct: true, reward: { coins: 120, xp: 220 } },
+  { id: 'kingdom', text: 'Play a hole in every kingdom', goal: 6, ev: 'kingdom', distinct: true, reward: { coins: 120, xp: 220 } },
   { id: 'ace', text: 'Ace the Shot of the Day', goal: 1, ev: 'aceDaily', reward: { coins: 200, xp: 400, mulligans: 2 } },
   { id: 'points1500', text: 'Score 1,500 points in one round', goal: 1, ev: 'round1500', reward: { coins: 120, xp: 250 } },
   { id: 'water0', text: 'Finish a round with no water or pit penalties', goal: 1, ev: 'cleanRound', reward: { coins: 100, xp: 200 } },

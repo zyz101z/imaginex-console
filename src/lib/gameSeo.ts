@@ -305,8 +305,8 @@ export const gameSeo: GameSeo[] = [
     id: "crazy-golf-kingdom",
     seoTitle: "Crazy Golf Kingdom — Free 3D Mini Golf Game in Your Browser",
     metaDescription:
-      "Play free 3D mini golf online: windmills, bumpers, cannons, portals and jump pads across five wild kingdoms, with new holes every time. No download, works on iPad.",
-    tagline: "Five kingdoms. Endless holes. Zero sensible obstacles.",
+      "Play free 3D mini golf online: windmills, bumpers, cannons, portals, whirlpools and jump pads across six wild kingdoms, with new holes every time. No download, works on iPad.",
+    tagline: "Six kingdoms. Endless holes. Zero sensible obstacles.",
     about: [
       "Crazy Golf Kingdom is a free browser mini-golf game rendered in real 3D. Every hole is generated fresh from a seed and proven playable before you see it, so no two rounds are the same, and each of the five kingdoms — Meadow, Candy, Dino Swamp, Haunted Castle and Space Station — ends on a hand-built finale hole with its own signature obstacle.",
       "Aim by dragging anywhere on the screen, watch the physics-accurate preview dots, and let go. Bumpers add speed, windmills and moving walls need timing, green pads boost, portals teleport, cannons launch you across the map, and a UFO's tractor beam bends every shot. Trick-shot bonuses reward bank shots, long bombs and holing out off a jump pad.",

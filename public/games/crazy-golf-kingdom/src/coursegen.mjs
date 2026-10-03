@@ -18,6 +18,9 @@ export const KINGDOMS = [
   { id: 'space', name: 'Space Station', emoji: '🚀', felt: 0x263c6b, feltDark: 0x1e3059, wall: 0x00e5ff, wallTop: 0x84ffff,
     sky: [0x03060f, 0x121a3a], ground: 0x0b1024, fog: 0x0b1024, gravity: 4.9, models: ['ufo', 'rocket', 'alien'],
     weights: { ice: 4, cannon: 3, bumper: 3, model: 3, mover: 2, teleport: 2, boost: 1, turntable: 3, jump: 4 }, desc: 'Low gravity, ice, and cannons. Nothing stops rolling.' },
+  { id: 'pirate', name: 'Pirate Cove', emoji: '🏴‍☠️', felt: 0x3aa78a, feltDark: 0x33957b, wall: 0x6d4c41, wallTop: 0xa1887f,
+    sky: [0xff8a65, 0xffe0b2], ground: 0xe8d29a, fog: 0xffd1a8, gravity: 9.8, models: ['chest', 'kraken', 'skull', 'ship'],
+    weights: { cannon: 4, tide: 4, whirlpool: 2, barrel: 3, water: 2, model: 3, bumper: 2, jump: 2, sand: 1 }, desc: 'Tide pools, whirlpools, rolling barrels and the Kraken. Arr.' },
 ];
 export const kingdomById = (id) => KINGDOMS.find(k => k.id === id) || KINGDOMS[0];
 
@@ -133,6 +136,9 @@ export function generateHole({ kingdom = 'meadow', index = 0, seed = 1, difficul
         case 'boost': add({ type: 'boost', dirx: along ? sign : 0, dirz: along ? 0 : sign, strength: 7 }); break;
         case 'sand': case 'ice': case 'syrup': { tile.surface = type; const n = path[i + 1]; if (n && !taken.has(i + 1)) tiles.get(key(n.x, n.z)).surface = type; taken.add(i); obstacles.push({ x: p.x, z: p.z, type: 'patch', surface: type }); break; }
         case 'water': add({ type: 'water', r: wide.has(i) ? 0.34 : 0.25 }); break;
+        case 'tide': add({ type: 'tide', r: wide.has(i) ? 0.36 : 0.3, period: 4.5 + rng() * 2, phase: rng() * 6, duty: 0.5 }); break;
+        case 'whirlpool': { if (!wide.has(i)) { guard++; break; } add({ type: 'whirlpool', r: 2.2 * 1.1, strength: 4.0, core: 0.3 }); break; }
+        case 'barrel': add({ type: 'mover', axis: along ? 'z' : 'x', amp: 0.5, speed: 1.1 + rng() * 0.7, phase: rng() * 6.28, model: 'barrel', hw: 0.16, hd: 0.42 }); break;
         case 'model': add({ type: 'model', model: pick(rng, K.models), r: 0.5, rot: rng() * 6.28 }); break;
         case 'turntable': { if (wide.has(i)) { guard++; break; } add({ type: 'turntable', omega: (rng() < 0.5 ? 1 : -1) * (1.3 + rng() * 0.8 + diff * 0.05) }); break; }
         case 'jump': { // pad at j, GAP at j+1, landing at j+2 — scan every free index for a straight, 1-wide, flat run

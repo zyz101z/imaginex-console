@@ -66,6 +66,8 @@ export function compileWorld(hole) {
       case 'teleport': pads.push({ type: 'teleport', x: cx, z: cz, r: o.r || 0.45, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE, id: o.id, exits: o.exits ? o.exits.map(e => ({ tx: (e.tx + 0.5) * TILE, tz: (e.tz + 0.5) * TILE })) : null }); break;
       case 'cannon': pads.push({ type: 'cannon', x: cx, z: cz, r: 0.34, tx: (o.tx + 0.5) * TILE, tz: (o.tz + 0.5) * TILE }); break;
       case 'water': waters.push({ x: cx, z: cz, r: (o.r || 0.42) * TILE }); break;
+      case 'tide': waters.push({ x: cx, z: cz, r: (o.r || 0.42) * TILE, period: o.period || 5.0, phase: o.phase || 0, duty: o.duty || 0.5 }); break;
+      case 'whirlpool': pads.push({ type: 'attractor', x: cx, z: cz, r: o.r || TILE * 1.2, strength: o.strength || 4.5, core: o.core || 0.3, sink: true }); waters.push({ x: cx, z: cz, r: o.core || 0.3, sink: true }); break;
       case 'turntable': pads.push({ type: 'turntable', x: cx, z: cz, r: TILE * 0.48, omega: o.omega || 1.6 }); break;
       case 'jump': pads.push({ type: 'jump', x: cx, z: cz, r: 0.36, dirx: o.dirx, dirz: o.dirz, vy: o.vy || 4.2, minSpeed: o.minSpeed || 4.6 }); break;
     }
@@ -75,6 +77,8 @@ export function compileWorld(hole) {
            cupX: (hole.cup.x + 0.5) * TILE, cupZ: (hole.cup.z + 0.5) * TILE };
 }
 
+// a tide pool is full (deadly) for `duty` of each period; render + physics share this
+export function tideLevel(w, t) { if (!w.period) return 1; const u = ((t + w.phase) % w.period) / w.period; const edge = 0.12; const d = w.duty; if (u < d - edge) return 1; if (u < d) return 1 - (u - (d - edge)) / edge; if (u < 1 - edge) return 0; return (u - (1 - edge)) / edge; }
 export function tileAt(world, x, z) {
   return world.tiles.get(Math.floor(x / TILE) + ',' + Math.floor(z / TILE)) || null;
 }
@@ -280,7 +284,7 @@ export function step(world, ball, t, dt = STEP) {
   if (!isFinite(fh)) { resetBall(world, ball, 'out'); return; }
   ball.y = fh;
   // --- water ---
-  for (const w of world.waters) if (len(ball.x - w.x, ball.z - w.z) < w.r) { resetBall(world, ball, 'water'); return; }
+  for (const w of world.waters) if (len(ball.x - w.x, ball.z - w.z) < w.r && tideLevel(w, t) > 0.5) { resetBall(world, ball, w.sink ? 'whirlpool' : 'water'); return; }
   // --- cup ---
   const cd = len(ball.x - world.cupX, ball.z - world.cupZ);
   const spd = len(ball.vx, ball.vz);
@@ -294,7 +298,7 @@ export function step(world, ball, t, dt = STEP) {
   const [gx2, gz2] = gradient(world, ball.x, ball.z);
   let onSlope = len(gx2, gz2) > 0.05;
   for (const p of world.pads) if ((p.type === 'turntable' || p.type === 'attractor') && len(ball.x - p.x, ball.z - p.z) < p.r) onSlope = true;
-  if (onSlope && spd < REST_SPEED && world.pads.some(p => p.type === 'attractor' && len(ball.x - p.x, ball.z - p.z) < p.core + BALL_R + 0.05)) { ball.vx = ball.vz = 0; ball.resting = true; ball.events.push({ type: 'rest' }); }
+  if (onSlope && spd < REST_SPEED && world.pads.some(p => p.type === 'attractor' && !p.sink && len(ball.x - p.x, ball.z - p.z) < p.core + BALL_R + 0.05)) { ball.vx = ball.vz = 0; ball.resting = true; ball.events.push({ type: 'rest' }); }
   if (!world.pads.some(p => p.type === 'turntable' && len(ball.x - p.x, ball.z - p.z) < p.r)) ball._spinning = false;
   if (spd < REST_SPEED && !onSlope) { ball.vx = ball.vz = 0; ball.resting = true; ball._boosting = false; ball.events.push({ type: 'rest' }); }
   else if (spd < REST_SPEED * 0.4 && onSlope) { /* let gravity take it */ }

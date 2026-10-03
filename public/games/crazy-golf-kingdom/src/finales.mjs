@@ -107,6 +107,32 @@ const FINALES = {
     ],
     decor: [{ at: [4, -2], model: 'rocket' }, { at: [4, 4], model: 'alien' }, { at: [10, 1], model: 'alien' }],
   },
+  pirate: {
+    name: 'The Kraken', blurb: 'Two tentacles sweep the only lane. The whirlpool at the end wants your ball.', par: 4, waypoints: [[2, 0], [2, 5], [2, 9], [5, 9]],
+    grid: [
+      ' T.  ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ... ',
+      ' ......',
+      '      C',
+    ],
+    // the kraken sits in the lane with two counter-rotating tentacles the width of the lane; after it, a whirlpool fills the bend,
+    // so the last shot either skirts the swirl at speed or rides it round to the cup
+    obstacles: [
+      { at: [2, 4], type: 'spinner', speed: 1.1, phase: 0, len: 2.2 * 2.85, model: 'kraken', hubR: 0.42 },
+      { at: [2, 7], type: 'spinner', speed: -1.5, phase: 1.6, len: 2.2 * 2.85, hubR: 0.2, color: 0x8e24aa },
+      { at: [1, 2], type: 'tide', r: 0.3, period: 4.5, phase: 0, duty: 0.5 }, { at: [3, 2], type: 'tide', r: 0.3, period: 4.5, phase: 2.25, duty: 0.5 },
+      { at: [4, 9], type: 'whirlpool', r: 2.2 * 1.1, strength: 3.6, core: 0.28 },
+      { at: [2, 1], type: 'sand' },
+    ],
+    decor: [{ at: [-2, 3], model: 'ship' }, { at: [6, 1], model: 'skull' }, { at: [-2, 8], model: 'chest' }],
+  },
 };
 
 export function finaleFor(kingdom) { return FINALES[kingdom] || null; }
