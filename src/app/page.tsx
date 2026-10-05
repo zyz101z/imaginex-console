@@ -8,6 +8,7 @@ import {
   saveProfile,
   PlayerProfile,
   updatePlayTime,
+  syncProfile,
   getStats,
   getLeaderboard,
   addLeaderboardEntry,
@@ -516,6 +517,7 @@ function GamePlayer({
       if (seconds > 0) {
         updatePlayTime(game.id, seconds);
         startTimeRef.current = Date.now();
+        syncProfile(true); // keep /players current while a game is open
       }
     };
 
@@ -832,6 +834,7 @@ export default function Console() {
 
   useEffect(() => {
     setProfile(getProfile());
+    syncProfile(true);
     setProfileLoaded(true);
     // deep link from the /play/<id> SEO landing pages: /?play=<id> boots the
     // console straight into that game (after the usual boot/profile gates)
@@ -850,6 +853,7 @@ export default function Console() {
   const handleProfileSave = useCallback((p: PlayerProfile) => {
     saveProfile(p);
     setProfile(p);
+    syncProfile(true);
   }, []);
 
   const handleSelectGame = useCallback((game: Game) => {

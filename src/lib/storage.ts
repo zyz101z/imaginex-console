@@ -124,3 +124,42 @@ export async function getStats() {
     leaderboardEntries: myEntries,
   };
 }
+
+// ---- Profile sync (nickname + play stats → /api/players, so /players can list everyone) ----
+// A random per-browser id keeps two players with the same nickname apart. No personal data leaves the browser:
+// nickname, avatar colour, created date and per-game play time / last played only.
+export function getPlayerId(): string {
+  let id = localStorage.getItem(`${STORAGE_PREFIX}pid`);
+  if (!id) {
+    id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(`${STORAGE_PREFIX}pid`, id);
+  }
+  return id;
+}
+
+export function collectGameStats(): Record<string, { playTime: number; lastPlayed: number }> {
+  const out: Record<string, { playTime: number; lastPlayed: number }> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i) || "";
+    if (!k.startsWith(`${STORAGE_PREFIX}save_`)) continue;
+    const save = safeParse<GameSaveData | null>(localStorage.getItem(k), null);
+    if (save && typeof save.totalPlayTime === "number") out[k.slice(`${STORAGE_PREFIX}save_`.length)] = { playTime: Math.round(save.totalPlayTime), lastPlayed: save.lastPlayed || 0 };
+  }
+  return out;
+}
+
+let lastSync = 0;
+export function syncProfile(force = false): void {
+  try {
+    const profile = getProfile();
+    if (!profile || !profile.nickname) return;
+    if (!force && Date.now() - lastSync < 60_000) return; // at most once a minute unless forced
+    lastSync = Date.now();
+    void fetch("/api/players", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ pid: getPlayerId(), nickname: profile.nickname, avatarColor: profile.avatarColor, createdAt: profile.createdAt, games: collectGameStats() }),
+    }).catch(() => {});
+  } catch {}
+}
