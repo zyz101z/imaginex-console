@@ -541,6 +541,10 @@ function GamePlayer({
   }, []);
 
   useEffect(() => {
+    // Play counter (see /api/play and /stats): one ping per game launch, fire-and-forget.
+    try {
+      void fetch("/api/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id }), keepalive: true }).catch(() => {});
+    } catch {}
     const handler = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
       if (e.data && e.data.type === "imaginex-score" && e.data.gameId === game.id) {

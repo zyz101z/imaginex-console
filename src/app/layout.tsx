@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,6 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.imaginex.games"),
+  // Google Search Console: set NEXT_PUBLIC_GSC_TOKEN in Vercel to the content= value of the HTML-tag verification method.
+  verification: process.env.NEXT_PUBLIC_GSC_TOKEN ? { google: process.env.NEXT_PUBLIC_GSC_TOKEN } : undefined,
   title: "ImagineX — Play Amazing Web Games",
   description:
     "ImagineX is a free web gaming console. Play Tennis World, Bloot, Froggo Adventure, Divided States and more — right in your browser, no downloads.",
@@ -49,6 +52,7 @@ export default function RootLayout({
     >
       <body className="h-screen overflow-hidden flex flex-col">
         {children}
+        <Analytics />
       </body>
     </html>
   );
