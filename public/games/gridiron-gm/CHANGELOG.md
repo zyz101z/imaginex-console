@@ -1,5 +1,12 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-07 — 🏆 DYNASTY SCORE leaderboard (first real players: one 5-hour session, Louisiana/Alabama cluster)
+- NEW `dynastyScore()` in app.mjs: 10/win + 100/season + 150/playoff trip + 500/title, summed over `S.history`. Posted to the
+  ImagineX console (`imaginex-score`, gameId `gridiron-gm`) after every completed season and on firing; console attaches the
+  player's nickname. Shown in Franchise history (🏆 Dynasty Score, tooltip explains the formula) and on the YOU'RE FIRED screen.
+- `S.history[]` rows now carry `playoffs: bool` (old saves: undefined → 0 pts for that trip).
+- Console: `gridiron-gm` added to KNOWN_GAMES; score label "Dynasty Pts". Cache bump ?v=20261007a. gm battery 18,851 green.
+
 ## 2026-09-01 (later) — Same-round picks are distinct trade assets (user follow-up)
 Trade UI checkboxes were keyed by ROUND — a team holding two R2s (own + acquired) could only
 select one, and execTrade moved "first match" (mid-draft that re-slots the WRONG board slot).

@@ -60,6 +60,21 @@ function setOwnerGoal() {
   else S.goal = { text: "Show progress: win 6+ games", minWins: 6 };
 }
 
+// ---- Dynasty Score (ImagineX leaderboard) ----
+// 10 per regular-season win + 100 per season completed + 150 per playoff appearance + 500 per Gridiron Bowl title,
+// summed over the franchise's history. Posted to the console after every season (and on firing).
+export function dynastyScore(history = S && S.history || []) {
+  let sc = 0;
+  for (const h of history) { sc += 100 + 10 * (parseInt(h.record, 10) || 0) + (h.playoffs ? 150 : 0) + (h.champ === S.teamId ? 500 : 0); }
+  return sc;
+}
+function postDynastyScore() {
+  try {
+    const score = dynastyScore();
+    if (score > 0 && window.parent && window.parent !== window)
+      window.parent.postMessage({ type: "imaginex-score", gameId: "gridiron-gm", score, nickname: "Coach" }, "*");
+  } catch (e) { /* standalone (not in the console) */ }
+}
 function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* full */ }
 }
@@ -734,7 +749,8 @@ function viewBracket() {
     html += `<h3>Franchise history</h3>
       <p class="dim">🏈 GM legacy: <b>${S.history.length}</b> season${S.history.length > 1 ? "s" : ""} ·
       <b class="${titles ? "champ" : ""}">${titles}</b> title${titles === 1 ? "" : "s"} ·
-      best <b>${best.h.record}</b> (S${best.h.season}) · avg <b>${avgW}</b> wins</p>`;
+      best <b>${best.h.record}</b> (S${best.h.season}) · avg <b>${avgW}</b> wins</p>
+      <p class="dim"><span class="tt" title="10 per win + 100 per season + 150 per playoff trip + 500 per Gridiron Bowl. Posted to the ImagineX leaderboard after every season.">🏆 Dynasty Score: <b style="color:#c9a227">${dynastyScore().toLocaleString()}</b></span></p>`;
     html += "<table><tr class='hdr'><td>Season</td><td>Your record</td><td>Champion</td></tr>";
     for (const h of S.history) html += `<tr><td>${h.season}</td><td>${h.record}</td><td>${chip(h.champ)} ${teamName(h.champ)}</td></tr>`;
     html += "</table>";
@@ -1309,7 +1325,7 @@ function render() {
     }).sort((a, b) => a.v - b.v).slice(0, 10);
     $("#content").innerHTML = `<h2 class="loss">YOU'RE FIRED.</h2>
       <p>After ${S.seasonNum} season${S.seasonNum > 1 ? "s" : ""}, ${teamName(S.teamId)} ownership has moved on.
-      Your record: ${S.history.map(h => h.record).join(", ")}.</p>
+      Your record: ${S.history.map(h => h.record).join(", ")}. Final Dynasty Score: <b style="color:#c9a227">${dynastyScore().toLocaleString()}</b> (posted to the leaderboard).</p>
       <h3>Rebuild elsewhere — these franchises will take your call:</h3>
       <div class="pickgrid">` + candidates.map(c =>
         `<button class="pick" data-id="${c.t.id}" style="border-color:${c.t.color}" onclick="__gm.takeOver('${c.t.id}')">
@@ -1629,7 +1645,8 @@ function advance() {
     S.security = Math.max(0, Math.min(100, S.security + delta));
     S.yearbook = buildYearbook(s);
     S.history.push({ season: S.seasonNum, record: `${s.w}-${s.l}`, champ: S.bracket.champion,
-      awards: S.lastAwards, security: S.security });
+      awards: S.lastAwards, security: S.security, playoffs: madePlayoffs });
+    postDynastyScore();
     if (S.security <= 20 && S.seasonNum >= 2 && !champion) {
       S.phase = "fired";
       save(); render();

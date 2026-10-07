@@ -628,6 +628,7 @@ const GAME_SCORE_LABELS: Record<string, string> = {
   wilson: "Best Tag",
   "pig-merge-tycoon": "Farm Score",
   "crazy-golf-kingdom": "Daily Pts",
+  "gridiron-gm": "Dynasty Pts",
 };
 
 function LeaderboardView() {
