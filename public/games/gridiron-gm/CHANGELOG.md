@@ -1,5 +1,17 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-08 — 🎨 VISUAL PASS 1 (user: "make it more visually appealing"; items 1/2/5/7 of the audit)
+- LAYOUT: content column 1100→1560 px, tables no longer capped at 680 px, coach cards 820 px; standings divisions fill 3-wide.
+- TEAM THEME: `applyTheme()` on every render sets CSS vars --team/--team2/--accent/--teamText from TEAM_BY_ID colours
+  (color2 used only if its luminance is readable, else gold). Top bar gradient, ADVANCE button, nav active accent, h2 rule,
+  th colour and starter-row tint all follow the franchise (Seattle = navy/green, Steelers = black/gold, Raiders = silver/gold).
+- AT-A-GLANCE: OVR tier badges (90+ gold, 80 green, 70 blue, 60 grey, <60 dark) + thin rating bars under every attribute
+  cell; standings rows get a 5-game form strip (W/L squares) built from the played schedule.
+- FIXES: QB "undefined" header (mobility had no label); emoji that render as boxes on some systems replaced with text
+  (identity/holdout/offer/call/hall/yearbook/rankings/franchises/backup) + emoji font fallback stack for the ones kept.
+- Batteries gm 18,851 / sim 3,016; headless quick-start+slots 9/9. ?v=20261008a. Next visual items: player avatars (3),
+  broadcast-style ticker with a field diagram (4), full-screen moment cards (6).
+
 ## 2026-10-07 (later) — 🗂 3 SAVE SLOTS + ⚡ QUICK START (first-session design)
 - SAVE SLOTS: `gridiron_gm_slot` picks the active slot; slot 1 keeps the legacy key (existing dynasties untouched), slots 2-3 =
   `gridiron_gm_save_v1_s2/_s3`. New nav button 🗂 Franchises opens a chooser (team, season/week, record, seasons, titles,

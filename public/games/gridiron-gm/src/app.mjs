@@ -229,7 +229,7 @@ function viewStandings() {
       for (const t of teams) {
         const s = S.standings[t.id];
         const me = t.id === S.teamId ? ' class="me"' : "";
-        html += `<tr${me}><td>${chip(t.id)} ${t.name}</td><td>${s.w}-${s.l}</td><td>${s.pf}</td><td>${s.pa}</td></tr>`;
+        html += `<tr${me}><td>${chip(t.id)} ${t.name}${formStrip(t.id)}</td><td><b>${s.w}-${s.l}</b></td><td>${s.pf}</td><td>${s.pa}</td></tr>`;
       }
       html += "</table>";
     }
@@ -270,14 +270,14 @@ function viewRoster() {
     const lbs = chart.LB.slice(0, 3), dls = chart.DL.slice(0, 4);
     const bzTal = Math.round(0.55 * (lbs.length ? lbs.reduce((x, p) => x + (p.attrs?.blitz ?? p.ovr), 0) / lbs.length : 70)
                            + 0.45 * (dls.length ? dls.reduce((x, p) => x + (p.attrs?.passRush ?? p.ovr), 0) / dls.length : 70));
-    html += `<div class="units dim">🏷 Identity: <b>${SCHEMES[hc.scheme].name}</b> (${"★".repeat(hc.quality)}) — roster fit <b>${fitPct}%</b>
+    html += `<div class="units dim">Identity: <b>${SCHEMES[hc.scheme].name}</b> (${"★".repeat(hc.quality)}) — roster fit <b>${fitPct}%</b>
       <span class="small">(fit amplifies the coach bonus; build up: ${focus})</span>
       · Blitz unit <b>${bzTal}</b> <span class="small">(LB Blz + DL Rush — powers the blitz dial)</span></div>`;
   }
   const ATTR_LABEL = { arm: "Arm", accuracy: "Acc", decision: "Dec", speed: "Spd", power: "Pow",
     hands: "Hnd", route: "Rte", catching: "Cat", blocking: "Blk", passBlock: "PassBlk", runBlock: "RunBlk",
     passRush: "Rush", runStop: "RunStp", coverage: "Cov", tackling: "Tkl", blitz: "Blz",
-    runSupport: "RunSup", kickPower: "Pow", kickAcc: "Acc" };
+    runSupport: "RunSup", kickPower: "Pow", kickAcc: "Acc", mobility: "Mob" };
   const STARTERS = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 3, S: 2, K: 1 };
   for (const pos of ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "CB", "S", "K"]) {
     const defs = ATTR_DEFS[pos] || [];
@@ -297,14 +297,15 @@ function viewRoster() {
       const up = i > 0 && p.injuredWeeks === 0
         ? `<button class="mini up" onclick="__gm.promote(${p.id})" title="Move up the depth chart">▲</button>` : "";
       const starter = i < STARTERS[pos];
-      html += `<tr${p.real ? "" : ' class="genp"'}${starter ? ' style="background:#161c26"' : ""}>
-        <td>${up}</td><td>${pn(p)}</td><td>${p.age}</td><td>${p.ovr}</td>` +
+      html += `<tr class="${p.real ? "" : "genp"}${starter ? " starter" : ""}">
+        <td>${up}</td><td>${pn(p)}</td><td>${p.age}</td><td>${ovrBadge(p.ovr)}</td>` +
         defs.map(k => {
           const v = attr(p, k);
           const focused = S.training.some(t => t.playerId === p.id && t.attr === k);
           const cls = focused ? "focus" : (v >= p.ovr + 4 ? "win" : v <= p.ovr - 4 ? "loss" : "");
-          return `<td class="${cls} clickattr" onclick="__gm.train(${p.id}, '${k}')"
-            title="Click to set as offseason training focus (${S.training.length}/3 slots used)">${focused ? "🎯" : ""}${v}</td>`;
+          const pct = Math.max(4, Math.min(100, (v - 40) * 100 / 59));
+          return `<td class="${cls} clickattr abar" onclick="__gm.train(${p.id}, '${k}')"
+            title="Click to set as offseason training focus (${S.training.length}/3 slots used)">${focused ? "🎯" : ""}${v}<span class="bar"><i style="width:${pct}%;background:${barColor(v)}"></i></span></td>`;
         }).join("") +
         `<td>${status}</td><td class="dim small">${stat}</td></tr>`;
     });
@@ -319,7 +320,7 @@ function holdoutBanner() {
   if (!H || H.resolved) return "";
   const p = S.league[S.teamId].find(x => x.id === H.id);
   if (!p) return "";
-  return `<div class="coachcard" style="border-left:4px solid #ff8f9f">💢 <b>HOLDOUT:</b>
+  return `<div class="coachcard" style="border-left:4px solid #ff8f9f"><b>HOLDOUT:</b>
     <span class="pn" onclick="__gm.pcard(${p.id})">${p.name}</span> (${p.pos} ${p.ovr}, $${p.contract.salary}M now)
     demands <b>$${H.ask.salary}M × ${H.ask.years}y</b>.
     <button class="mini" onclick="__gm.resolveHoldout(true)">PAY HIM</button>
@@ -330,7 +331,7 @@ function viewSchedule() {
   if (S.seasonNum === 1 && S.week === 0 && !S.sawIntro) {
     html += `<div class="coachcard intro"><b>Welcome, Coach.</b> The loop: check <b>THIS WEEK</b> below → tweak your
       <b>gameplan slider</b> (My Roster) → hit <b>ADVANCE WEEK</b> and watch the game. Between seasons you'll re-sign,
-      shop free agency, and draft. Click attribute numbers to set 🎯 <b>training focuses</b>, spend <b>scout points</b>
+      shop free agency, and draft. Click attribute numbers to set <b>training focuses</b>, spend <b>scout points</b>
       (Draft/Scout) all season, and keep the owner happy — <span class="tt" title="Job security. Lose too much and you're fired.">Job %</span> is watching.
       <button class="mini" onclick="__gm.dismissIntro()">GOT IT</button></div>`;
   }
@@ -517,7 +518,7 @@ function hofCard(i) {
   const t = h2.totals || {};
   div.innerHTML = `<div class="pcBox" style="border-color:#c9a227">
     <button class="pcClose" onclick="__gm.closePcard()">✕</button>
-    <div style="text-align:center;margin-bottom:6px;font-size:26px">🏛️</div>
+    
     <div style="text-align:center"><b style="font-size:19px">${h2.name}</b><br>
       <span class="dim">${h2.pos}${h2.lastTeamId ? " · " + teamName(h2.lastTeamId) : ""}</span></div>
     <div class="pcSec">CAREER</div>
@@ -629,7 +630,7 @@ function powerRankingsHtml() {
   if (S.phase !== "season" || S.week === 0) return "";
   const rows = powerRankings();
   const myRank = rows.findIndex(r => r.id === S.teamId) + 1;
-  let h = `<div class="coachcard"><b>📊 WEEK ${S.week} POWER RANKINGS</b>` +
+  let h = `<div class="coachcard"><b>WEEK ${S.week} POWER RANKINGS</b>` +
     (myRank > 10 ? ` <span class="dim">— you: #${myRank}</span>` : "") + "<br>";
   rows.slice(0, 10).forEach((r, i) => {
     const mine = r.id === S.teamId;
@@ -677,7 +678,7 @@ function viewBracket() {
   }
   const yb = S.yearbook;
   if (yb && yb.season === S.seasonNum) {
-    html += `<h3>📖 Season ${yb.season} Yearbook — ${yb.record}</h3>`;
+    html += `<h3>Season ${yb.season} Yearbook — ${yb.record}</h3>`;
     html += `<div class="coachcard">`;
     if (yb.bigWin) html += `📈 <b>Signature win:</b> ${yb.bigWin.sc} over ${chip(yb.bigWin.opp)} ${teamName(yb.bigWin.opp)} (Week ${yb.bigWin.w})<br>`;
     if (yb.toughLoss) html += `📉 <b>The one that stung:</b> ${yb.toughLoss.sc} to ${chip(yb.toughLoss.opp)} ${teamName(yb.toughLoss.opp)} (Week ${yb.toughLoss.w})<br>`;
@@ -709,7 +710,7 @@ function viewBracket() {
     html += "</table>";
   }
   if (S.hof.length) {
-    html += `<h3>🏛️ Hall of Fame</h3><table>`;
+    html += `<h3>Hall of Fame</h3><table>`;
     for (const h of [...S.hof].reverse().slice(0, 15)) {
       const idx = S.hof.indexOf(h);
       html += `<tr><td><span class="pn" onclick="__gm.hofCard(${idx})">${h.name}</span> (${h.pos})</td><td class="dim">${h.seasons} seasons · retired S${h.seasonRetired}</td></tr>`;
@@ -913,7 +914,7 @@ function viewDraft() {
   if (myClock && D.offerHandled !== D.idx && !D.offer) D.offer = genPickOffer();
   if (myClock && D.offer) {
     const o = D.offer;
-    html += `<div class="coachcard">📞 <b>${teamName(o.partner)} want to trade up</b> — they covet <b>${o.covet}</b>.
+    html += `<div class="coachcard"><b>${teamName(o.partner)} want to trade up</b> — they covet <b>${o.covet}</b>.
       Their offer: your pick (R${o.round}P${(D.idx % 32) + 1}) for their <b>R${o.round}P${(o.backIdx % 32) + 1}</b>
       <b>PLUS their R${D.slots[o.extraIdx].round}</b> later in this draft.
       <button class="mini" onclick="__gm.acceptPickTrade()">ACCEPT — TRADE DOWN</button>
@@ -1017,7 +1018,7 @@ function pickLive(k) {
 // Season-open beats that make year 4 feel different from year 1.
 function seasonStorylines(rng) {
   S.holdout = null;
-  // 💢 HOLDOUT: a greedy/mercenary star clearly outplaying his contract wants a new one.
+  // HOLDOUT: a greedy/mercenary star clearly outplaying his contract wants a new one.
   // Franchise-tagged players never hold out — that's half the point of the tag.
   const candidates = S.league[S.teamId].filter(p => {
     const key = personaOf(p);
@@ -1030,9 +1031,9 @@ function seasonStorylines(rng) {
     const ask = { salary: Math.round(base.salary * 1.1 * 10) / 10, years: Math.max(2, base.years) };
     S.holdout = { id: p.id, ask, resolved: false };
     S.news.unshift({ week: 0, season: S.seasonNum,
-      text: `💢 HOLDOUT: ${p.name} (${p.pos} ${p.ovr}) wants a new deal — $${ask.salary}M × ${ask.years}y. Pay him or he sits 3 weeks.` });
+      text: `HOLDOUT: ${p.name} (${p.pos} ${p.ovr}) wants a new deal — $${ask.salary}M × ${ask.years}y. Pay him or he sits 3 weeks.` });
   }
-  // 🕯️ RETIREMENT WATCH: aging legends on their possible final ride (league-wide, max 3)
+  // RETIREMENT WATCH: aging legends on their possible final ride (league-wide, max 3)
   let watches = 0;
   for (const roster of Object.values(S.league)) {
     for (const p of roster) {
@@ -1041,7 +1042,7 @@ function seasonStorylines(rng) {
         p.rwatchSeason = S.seasonNum;
         watches++;
         S.news.unshift({ week: 0, season: S.seasonNum,
-          text: `🕯️ RETIREMENT WATCH: ${p.name} (${p.teamId} ${p.pos}, ${p.age}) enters what may be his final ride — a Hall of Fame case is on the line` });
+          text: `RETIREMENT WATCH: ${p.name} (${p.teamId} ${p.pos}, ${p.age}) enters what may be his final ride — a Hall of Fame case is on the line` });
       }
     }
   }
@@ -1186,7 +1187,7 @@ function viewTrades() {
       ${sellers.length ? sellers.map(id => chip(id)).join(" ") : '<span class="dim">nobody is selling yet</span>'}</div>`;
     const sale = fireSaleList();
     if (sale.length) {
-      offerHtml += `<h3>🏷️ Fire sale — veterans on the block</h3><table><tr class="hdr"><td>Team</td><td>Player</td><td>Age</td><td>OVR</td><td>Deal</td><td></td></tr>`;
+      offerHtml += `<h3>Fire sale — veterans on the block</h3><table><tr class="hdr"><td>Team</td><td>Player</td><td>Age</td><td>OVR</td><td>Deal</td><td></td></tr>`;
       for (const p of sale) {
         offerHtml += `<tr><td>${chip(p.teamId)}</td><td>${pn(p)}</td><td>${p.age}</td><td><b>${p.ovr}</b></td>
           <td class="dim">$${p.contract.salary}M × ${p.contract.years}y</td>
@@ -1325,7 +1326,29 @@ function updateMusic() {
   playMusic(want, { vol: 0.28 });
 }
 
+// Team colours drive the chrome (top bar, advance button, nav accent, headers). color2 is the accent unless it is
+// near-white/black, in which case the gold stays so headers remain readable.
+function applyTheme() {
+  const r = document.documentElement.style;
+  const t = S && TEAM_BY_ID[S.teamId];
+  if (!t) { r.setProperty("--team", "#2e7d32"); r.setProperty("--team2", "#ffc62f"); r.setProperty("--accent", "#ffc62f"); r.setProperty("--teamText", "#fff"); return; }
+  const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const c2ok = lum(t.color2) > 0.12 && lum(t.color2) < 0.92;
+  r.setProperty("--team", t.color); r.setProperty("--team2", c2ok ? t.color2 : "#ffc62f"); r.setProperty("--accent", c2ok ? t.color2 : "#ffc62f");
+  r.setProperty("--teamText", lum(t.color) > 0.55 ? "#0b0d12" : "#fff");
+}
+const ovrBadge = v => `<span class="ovr ${v >= 90 ? "t5" : v >= 80 ? "t4" : v >= 70 ? "t3" : v >= 60 ? "t2" : "t1"}">${v}</span>`;
+const barColor = v => v >= 90 ? "#ffd54f" : v >= 80 ? "#7ee787" : v >= 70 ? "#7cc4ff" : v >= 60 ? "#b0b7bc" : "#6b7280";
+function formStrip(teamId, n = 5) {
+  const res = [];
+  for (let w = 0; w < (S.schedule || []).length && w <= S.week; w++) {
+    const g = (S.schedule[w] || []).find(x => x.played && (x.home === teamId || x.away === teamId)); if (!g) continue;
+    const my = g.home === teamId ? g.scoreHome : g.scoreAway, th = g.home === teamId ? g.scoreAway : g.scoreHome; res.push(my > th ? "w" : my < th ? "l" : "t");
+  }
+  const last = res.slice(-n); return `<span class="form" title="Last ${last.length} games">${last.map(x => `<i class="${x}"></i>`).join("")}</span>`;
+}
 function render() {
+  applyTheme();
   updateMusic();
   if (S && S.phase === "offseason" && S.lastAwards && S.awardsCeremonySeason !== S.seasonNum
       && !document.getElementById("awardsNight")) {
@@ -1411,7 +1434,7 @@ function showDecisionPanel(ctx, onPick) {
       <button data-c="kick">🦶 KICK THE XP<br><span>~96% — take the sure point</span></button>`;
   } else if (ctx.type === "onside") {
     situation = `You scored — but they get the ball back. Steal it?`;
-    btns = `<button data-c="onside">🤯 ONSIDE KICK!<br><span>~18% to steal the ball back — fail = they get midfield</span></button>
+    btns = `<button data-c="onside">ONSIDE KICK!<br><span>~18% to steal the ball back — fail = they get midfield</span></button>
       <button data-c="deep">🦵 KICK DEEP<br><span>trust the defense to get one stop</span></button>`;
   } else if (ctx.type === "ice") {
     situation = `They're lining up a ${ctx.dist ? ctx.dist + "-yard " : ""}field goal to ${ctx.diff === 0 ? "WIN it" : "tie or win"} — mess with the kicker?`;
@@ -1423,7 +1446,7 @@ function showDecisionPanel(ctx, onPick) {
       <button data-c="fg">🎯 TAKE THE POINTS<br><span>work into field-goal range</span></button>
       <button data-c="safe">🛡️ PLAY IT SAFE<br><span>trust the defense — punt and flip the field</span></button>`;
   }
-  box.innerHTML = `<div class="dim" style="letter-spacing:2px">🧠 COACH'S CALL</div>
+  box.innerHTML = `<div class="dim" style="letter-spacing:2px">COACH'S CALL</div>
     <b>${situation}</b>
     ${chipRow}
     <div class="decBtns">${btns}</div>`;
@@ -1479,7 +1502,7 @@ function runTicker(myGame, results, done) {
     const desc = ({
       TD: "TOUCHDOWN!" + conv, FG: "Field goal is GOOD",
       "FG-MISS": d.iced ? "ICED!! The rattled kicker pushes it wide!" : "Field goal MISSES",
-      ONSIDE: "🤯 ONSIDE KICK RECOVERED — they never get the ball back!",
+      ONSIDE: "ONSIDE KICK RECOVERED — they never get the ball back!",
       PUNT: "drive stalls — punt",
       TO: d.downs ? "TURNOVER ON DOWNS — the gamble fails!" : "TURNOVER!",
       "OT-WIN": "wins it in overtime!",
@@ -1603,7 +1626,7 @@ function advance() {
       if (offer) {
         S.aiOffer = { ...offer, week: S.week };
         S.news.unshift({ week: S.week + 1, season: S.seasonNum,
-          text: `${inDeadline ? "🔥 DEADLINE" : "📞"}: The ${TEAM_BY_ID[offer.from].name} are calling about ${offer.wantName} — check the Trade Center` });
+          text: `${inDeadline ? "DEADLINE" : "OFFER"}: The ${TEAM_BY_ID[offer.from].name} are calling about ${offer.wantName} — check the Trade Center` });
       }
     }
     if (S.week === 5) S.news.unshift({ week: 6, season: S.seasonNum,
@@ -2379,7 +2402,7 @@ function showSlots() {
   }
   const div = document.createElement("div"); div.id = "pcard";
   div.innerHTML = `<div class="pcBox" style="max-width:520px"><button class="pcClose" onclick="__gm.closePcard()">✕</button>
-    <b>🗂 FRANCHISES</b><p class="dim small" style="margin:6px 0 10px">Three dynasties, one browser. Each slot saves on its own.</p>${cards.join("")}</div>`;
+    <b>FRANCHISES</b><p class="dim small" style="margin:6px 0 10px">Three dynasties, one browser. Each slot saves on its own.</p>${cards.join("")}</div>`;
   div.onclick = (e) => { if (e.target === div) closePcard(); };
   document.body.appendChild(div);
 }
