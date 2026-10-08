@@ -22,6 +22,9 @@
     padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
   nav button.active, nav button:hover { background: #232a36; color: #fff; }
   #resetBtn { margin-top: auto; color: #7d8593; font-size: 12px; }
+  .slotcard { border: 2px solid #334; border-radius: 10px; padding: 10px 12px; margin: 8px 0; text-align: left; background: rgba(255,255,255,0.03); }
+  .slotcard.cur { background: rgba(201,162,39,0.08); } .slotcard.empty { border-style: dashed; }
+  .slothead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; } .slotbtns { margin-top: 8px; display: flex; gap: 8px; }
   #content { flex: 1; padding: 16px 20px; max-width: 1100px; }
   table { border-collapse: collapse; margin: 8px 0 16px; width: 100%; max-width: 680px;
     background: #14171dcc; border-radius: 8px; overflow: hidden; }
@@ -156,7 +159,8 @@
       <button data-view="freeagency">Free Agency</button>
       <button data-view="draft">Draft / Scout</button>
       <button data-view="playoffs">History & Awards</button>
-      <button id="exportBtn" style="margin-top:auto;color:#7d8593;font-size:12px">💾 Backup / restore save</button>
+      <button id="slotsBtn" style="margin-top:auto;color:#c9a227;font-size:12px">🗂 Franchises (3 slots)</button>
+      <button id="exportBtn" style="margin-top:0;color:#7d8593;font-size:12px">💾 Backup / restore save</button>
       <button id="resetBtn" style="margin-top:0">Reset franchise</button>
     </nav>
     <div id="content"></div>
@@ -169,6 +173,6 @@
       <button id="tickerBox" class="hidden">BOX SCORE ▶</button>
     </div>
   </div>
-  <script type="module" src="./src/app.mjs?v=20261007a"></script>
+  <script type="module" src="./src/app.mjs?v=20261007b"></script>
 </body>
 </html>

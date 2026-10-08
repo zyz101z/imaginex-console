@@ -15,7 +15,20 @@ import { ensureContracts, ageAndRetire, expireContracts, aiResign, aiFreeAgencyR
   evalTrade, execTrade, freshPicks, legalAfterLoss, applyTraining, scoutProspect,
   genAIOffer, updateRecords, RECORD_KEYS, hofScore, seedStreetFA } from "./gm.mjs";
 
-const SAVE_KEY = "gridiron_gm_save_v1";
+const SAVE_KEY = "gridiron_gm_save_v1";          // slot 1 keeps the legacy key so existing dynasties survive
+const SLOT_KEY = "gridiron_gm_slot";              // which of the 3 slots is active
+const SLOT_COUNT = 3;
+function slotKeyFor(n) { return n === 1 ? SAVE_KEY : `${SAVE_KEY}_s${n}`; }
+function activeSlot() { const n = parseInt(localStorage.getItem(SLOT_KEY) || "1", 10); return n >= 1 && n <= SLOT_COUNT ? n : 1; }
+function slotKey() { return slotKeyFor(activeSlot()); }
+function slotSummary(n) {
+  try {
+    const raw = localStorage.getItem(slotKeyFor(n)); if (!raw) return null;
+    const g = JSON.parse(raw); const st = g.standings && g.standings[g.teamId];
+    return { teamId: g.teamId, season: g.seasonNum, week: g.week, phase: g.phase, record: st ? `${st.w}-${st.l}` : "", titles: (g.history || []).filter(h => h.champ === g.teamId).length,
+      seasons: (g.history || []).length, score: dynastyScoreOf(g), savedAt: g.savedAt || 0, fired: g.phase === "fired" };
+  } catch (e) { return null; }
+}
 const $ = sel => document.querySelector(sel);
 
 let S = null; // game state
@@ -63,9 +76,10 @@ function setOwnerGoal() {
 // ---- Dynasty Score (ImagineX leaderboard) ----
 // 10 per regular-season win + 100 per season completed + 150 per playoff appearance + 500 per Gridiron Bowl title,
 // summed over the franchise's history. Posted to the console after every season (and on firing).
-export function dynastyScore(history = S && S.history || []) {
+export function dynastyScore(history = S && S.history || []) { return dynastyScoreOf({ teamId: S.teamId, history }); }
+function dynastyScoreOf(g) {
   let sc = 0;
-  for (const h of history) { sc += 100 + 10 * (parseInt(h.record, 10) || 0) + (h.playoffs ? 150 : 0) + (h.champ === S.teamId ? 500 : 0); }
+  for (const h of (g.history || [])) { sc += 100 + 10 * (parseInt(h.record, 10) || 0) + (h.playoffs ? 150 : 0) + (h.champ === g.teamId ? 500 : 0); }
   return sc;
 }
 function postDynastyScore() {
@@ -76,11 +90,11 @@ function postDynastyScore() {
   } catch (e) { /* standalone (not in the console) */ }
 }
 function save() {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* full */ }
+  try { S.savedAt = Date.now(); localStorage.setItem(slotKey(), JSON.stringify(S)); } catch (e) { /* full */ }
 }
 function load() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(slotKey());
     if (raw) {
       S = JSON.parse(raw);
       // migrate pre-P2 saves
@@ -312,7 +326,7 @@ function holdoutBanner() {
     <button class="mini" onclick="__gm.resolveHoldout(false)">LET HIM SIT (3 wks)</button></div>`;
 }
 function viewSchedule() {
-  let html = holdoutBanner();
+  let html = holdoutBanner() + postGameCoachCard();
   if (S.seasonNum === 1 && S.week === 0 && !S.sawIntro) {
     html += `<div class="coachcard intro"><b>Welcome, Coach.</b> The loop: check <b>THIS WEEK</b> below → tweak your
       <b>gameplan slider</b> (My Roster) → hit <b>ADVANCE WEEK</b> and watch the game. Between seasons you'll re-sign,
@@ -1949,6 +1963,24 @@ function scout(prospectId) {
 }
 
 function dismissIntro() { S.sawIntro = true; save(); render(); }
+function dismissPostGame() { S.postGameSeen = true; save(); render(); }
+// After the Quick Start kickoff: one card that turns what they just watched into their first decision.
+function postGameCoachCard() {
+  if (!S.quickStart || S.postGameSeen || !S.lastBox || S.week !== 1) return "";
+  const b = S.lastBox; const home = b.home === S.teamId; const my = home ? b.scoreHome : b.scoreAway, their = home ? b.scoreAway : b.scoreHome;
+  const opp = home ? b.away : b.home; const won = my > their;
+  const u = teamUnits(S.league[S.teamId]);
+  const ranks = {};
+  for (const k of ["offPass", "offRun", "defPass", "defRun"]) ranks[k] = [...TEAMS].map(t => teamUnits(S.league[t.id])[k]).sort((a, c) => c - a).findIndex(v => v <= u[k]) + 1;
+  const names = { offPass: "passing attack", offRun: "run game", defPass: "pass defense", defRun: "run defense" };
+  const fixes = { offPass: "a better QB or WR (Free Agency / Trade Center), or raise the pass lean on the gameplan slider",
+    offRun: "an OL or RB upgrade, or lower the pass lean so you run more", defPass: "a CB or S (shop the Trade Center), or dial up the Blitz rate", defRun: "a DL or LB, or dial down the Blitz rate and sit back" };
+  const worst = Object.keys(ranks).sort((a, c) => ranks[c] - ranks[a])[0];
+  return `<div class="coachcard intro" style="border-left:4px solid #c9a227"><b>${won ? "Nice start" : "Tough one"}, Coach.</b> ${won ? "You beat" : "You lost to"} ${logo(opp)} <b>${teamName(opp)}</b> ${my}-${their}.
+    Here's what the tape says: your <b>${names[worst]}</b> ranks <b>#${ranks[worst]}</b> of 32 — that's the first thing to fix.
+    Fix it with ${fixes[worst]}. The owner wants <b>${S.goal.text.toLowerCase()}</b>; Job security is <b>${S.security}%</b> and every result moves it.
+    <button class="mini" onclick="__gm.goRoster()">OPEN MY ROSTER</button> <button class="mini" onclick="__gm.dismissPostGame()">GOT IT</button></div>`;
+}
 
 // ---------------------------------------------------------------- save backup
 // localStorage is one cleared-cache from oblivion — give the franchise an exit.
@@ -1958,7 +1990,7 @@ function backupModal(mode) {
   const old = document.getElementById("pcard");
   if (old) old.remove();
   const isExport = mode === "export";
-  const raw = isExport ? (localStorage.getItem(SAVE_KEY) || "") : "";
+  const raw = isExport ? (localStorage.getItem(slotKey()) || "") : "";
   const div = document.createElement("div");
   div.id = "pcard";
   div.innerHTML = `<div class="pcBox" style="width:min(560px,94vw)">
@@ -1991,7 +2023,7 @@ function backupModal(mode) {
       try {
         const parsed = JSON.parse(ta.value.trim());
         if (!parsed || !parsed.league || !parsed.seasonNum) throw new Error("bad");
-        localStorage.setItem(SAVE_KEY, ta.value.trim());
+        localStorage.setItem(slotKey(), ta.value.trim());
         location.reload();
       } catch (e) {
         msg.textContent = "❌ That doesn't look like a Gridiron GM franchise code.";
@@ -2129,7 +2161,7 @@ function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, setDefAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
   tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard, acceptPickTrade, declinePickTrade,
-  exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag };
+  exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag, showSlots, switchSlot, newInSlot, deleteSlot, dismissPostGame };
 
 function startOffseasonPipeline() {
     const rng = weekRng();
@@ -2323,17 +2355,72 @@ function finishOffseason() {
   activeView = "schedule";
 }
 
+// ---------------------------------------------------------------- franchises (3 save slots)
+function showSlots() {
+  closePcard();
+  const cur = activeSlot();
+  const ago = t => { if (!t) return ""; const h = (Date.now() - t) / 3.6e6; return h < 1 ? "just now" : h < 48 ? `${Math.round(h)}h ago` : `${Math.round(h / 24)}d ago`; };
+  const cards = [];
+  for (let n = 1; n <= SLOT_COUNT; n++) {
+    const g = slotSummary(n); const here = n === cur;
+    if (g) {
+      const t = TEAM_BY_ID[g.teamId];
+      cards.push(`<div class="slotcard ${here ? "cur" : ""}" style="border-color:${t.color}">
+        <div class="slothead">${logo(g.teamId, 36)} <b>${teamName(g.teamId)}</b>${here ? ' <span class="dim small">(open)</span>' : ""}</div>
+        <div class="dim small">Season ${g.season} · ${g.fired ? "FIRED" : g.phase === "season" ? "Week " + (g.week + 1) + " · " + g.record : g.phase}
+          · ${g.seasons} season${g.seasons === 1 ? "" : "s"} played · ${g.titles} title${g.titles === 1 ? "" : "s"}
+          · 🏆 <b style="color:#c9a227">${g.score.toLocaleString()}</b> · ${ago(g.savedAt)}</div>
+        <div class="slotbtns">${here ? '<button class="mini" onclick="__gm.closePcard()">CONTINUE</button>' : `<button class="mini" onclick="__gm.switchSlot(${n})">OPEN</button>`}
+          <button class="mini" style="color:#ff8f9f" onclick="__gm.deleteSlot(${n}, this)">DELETE</button></div></div>`);
+    } else {
+      cards.push(`<div class="slotcard empty"><div class="slothead"><b>Slot ${n}</b> <span class="dim small">empty</span></div>
+        <div class="slotbtns"><button class="mini" onclick="__gm.newInSlot(${n})">NEW FRANCHISE</button></div></div>`);
+    }
+  }
+  const div = document.createElement("div"); div.id = "pcard";
+  div.innerHTML = `<div class="pcBox" style="max-width:520px"><button class="pcClose" onclick="__gm.closePcard()">✕</button>
+    <b>🗂 FRANCHISES</b><p class="dim small" style="margin:6px 0 10px">Three dynasties, one browser. Each slot saves on its own.</p>${cards.join("")}</div>`;
+  div.onclick = (e) => { if (e.target === div) closePcard(); };
+  document.body.appendChild(div);
+}
+function switchSlot(n) { if (S) save(); localStorage.setItem(SLOT_KEY, String(n)); location.reload(); }
+function newInSlot(n) { if (S) save(); localStorage.setItem(SLOT_KEY, String(n)); location.reload(); }   // boots into the team picker (slot is empty)
+function deleteSlot(n, btn) {
+  if (!btn.dataset.armed) { btn.dataset.armed = "1"; btn.textContent = "⚠️ CLICK AGAIN"; setTimeout(() => { delete btn.dataset.armed; btn.textContent = "DELETE"; }, 4000); return; }
+  localStorage.removeItem(slotKeyFor(n));
+  if (n === activeSlot()) location.reload(); else showSlots();
+}
+
 // ---------------------------------------------------------------- boot
+// Quick Start: a recommended mid-table team (real QB, something to fix), strict cap, straight to the Week 1 kickoff.
+// The strategy comes AFTER the first game, as the answer to what the player just watched (see postGameCoachCard).
+function quickStartTeam() {
+  const ranked = [...TEAMS].map(t => { const u = teamUnits(buildLeagueOnce()[t.id]); return { t, v: (u.offPass + u.offRun + u.defPass + u.defRun) / 4 }; })
+    .sort((a, b) => b.v - a.v);
+  return ranked[8 + Math.floor(Math.random() * 8)].t.id;   // ranks 9-16: competitive, not a juggernaut
+}
+let _leaguePreview = null;
+function buildLeagueOnce() { if (!_leaguePreview) _leaguePreview = buildLeague(makeRng(12345)); return _leaguePreview; }
+function quickStart() {
+  const id = quickStartTeam();
+  newFranchise(id, "strict");
+  S.quickStart = true; S.sawIntro = true;   // the welcome wall is replaced by the post-game card
+  save(); activeView = "schedule"; render();
+  setTimeout(() => { sfx.tick(); advance(); }, 350);
+}
 function showTeamPicker() {
   const grid = TEAMS.map(t =>
     `<button class="pick" data-id="${t.id}" style="border-color:${t.color}">
       ${logo(t.id, 34)} <b style="color:${t.color2 === '#FFFFFF' ? t.color : t.color2}">${t.id}</b> ${t.city} ${t.name}</button>`).join("");
   $("#content").innerHTML = `<h2>Choose your franchise</h2>
-    <p class="dim">Salary cap:
+    <div class="coachcard" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="advance" id="quickBtn" style="margin:0">⚡ QUICK START</button>
+      <span class="dim">New here? We pick you a competitive team and kick off Week 1 right now. You'll make your first real decision after you've seen your team play.</span></div>
+    <p class="dim">…or choose your own team. Salary cap:
       <label><input type="radio" name="capmode" value="strict" checked> Strict ($${CAP_LIMIT}M hard)</label>
       <label><input type="radio" name="capmode" value="soft"> Soft (+15% overage allowed)</label>
       <label><input type="radio" name="capmode" value="none"> No cap</label></p>
     <div class="pickgrid">${grid}</div>`;
+  $("#quickBtn").onclick = () => { sfx.tick(); quickStart(); };
   document.querySelectorAll(".pick").forEach(b => b.onclick = () => {
     const mode = document.querySelector("input[name=capmode]:checked").value;
     newFranchise(b.dataset.id, mode);
@@ -2346,6 +2433,7 @@ function showTeamPicker() {
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   activeView = b.dataset.view; render();
 });
+$("#slotsBtn").onclick = () => showSlots();   // after the generic nav binding, so it is not treated as a view button
 $("#exportBtn").onclick = () => {
   // chooser modal: export or import from one place (lives next to Reset — save-level actions together)
   closePcard();
@@ -2363,7 +2451,7 @@ $("#exportBtn").onclick = () => {
 };
 $("#resetBtn").onclick = () => {
   const b = $("#resetBtn");
-  if (b.dataset.armed) { localStorage.removeItem(SAVE_KEY); location.reload(); return; }
+  if (b.dataset.armed) { localStorage.removeItem(slotKey()); location.reload(); return; }
   b.dataset.armed = "1";
   b.textContent = "⚠️ CLICK AGAIN TO DELETE";
   b.style.color = "#ff8f9f";

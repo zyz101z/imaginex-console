@@ -1,5 +1,16 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-07 (later) — 🗂 3 SAVE SLOTS + ⚡ QUICK START (first-session design)
+- SAVE SLOTS: `gridiron_gm_slot` picks the active slot; slot 1 keeps the legacy key (existing dynasties untouched), slots 2-3 =
+  `gridiron_gm_save_v1_s2/_s3`. New nav button 🗂 Franchises opens a chooser (team, season/week, record, seasons, titles,
+  Dynasty Score, last saved) with OPEN / NEW FRANCHISE / DELETE (arm-click). save/load/export/import/reset all go through `slotKey()`.
+- QUICK START (team picker): picks a rank-9..16 team on a fixed preview league, strict cap, kicks off Week 1 immediately. The
+  welcome wall is skipped; after the game a POST-GAME COACH CARD reads the tape (worst unit by league rank + the concrete
+  fix + owner goal + job %) with OPEN MY ROSTER — strategy as the answer to what they just watched, not homework first.
+  Design call (user): don't speed the game up; the fun is the strategy. Reorder, don't remove.
+- Fix: nav-button generic binding also grabbed the new footer button (VIEWS[undefined]) → bind after the nav loop.
+- Headless check (scratchpad gm_slots_check.js): 9/9. Batteries gm 18,851 / sim 3,016 green. ?v=20261007b.
+
 ## 2026-10-07 — 🏆 DYNASTY SCORE leaderboard (first real players: one 5-hour session, Louisiana/Alabama cluster)
 - NEW `dynastyScore()` in app.mjs: 10/win + 100/season + 150/playoff trip + 500/title, summed over `S.history`. Posted to the
   ImagineX console (`imaginex-score`, gameId `gridiron-gm`) after every completed season and on firing; console attaches the
