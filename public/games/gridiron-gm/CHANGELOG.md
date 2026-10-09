@@ -1,5 +1,13 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-08 (later) — 📺 BROADCAST TICKER (visual item 4; user skipped avatars: "won't look like the real players")
+- Score bug: two panels in team colours (text colour picked by luminance, color2 underline), abbr + big tabular score,
+  centre pill with quarter/clock and "Away at Home"; a glowing possession dot under the offense. PREGAME / FINAL states.
+- Field strip (#field): 100-yd gradient turf, yard numbers, end zones in team colours (away attacks right, home attacks left),
+  a translucent DRIVE BAR that grows from `d.start` by `d.yards` (green on TD, red on TO) and a BALL that glides to the
+  drive's end; big centre FLASH (TOUCHDOWN / FIELD GOAL / TURNOVER / SAFETY / ONSIDE!) with a 0.35 s shake on TD/TO.
+  All CSS transitions — no canvas, no engine changes; the log list stays below. ?v=20261008b. Batteries green.
+
 ## 2026-10-08 — 🎨 VISUAL PASS 1 (user: "make it more visually appealing"; items 1/2/5/7 of the audit)
 - LAYOUT: content column 1100→1560 px, tables no longer capped at 680 px, coach cards 820 px; standings divisions fill 3-wide.
 - TEAM THEME: `applyTheme()` on every render sets CSS vars --team/--team2/--accent/--teamText from TEAM_BY_ID colours

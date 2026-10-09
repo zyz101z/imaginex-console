@@ -1493,6 +1493,29 @@ function runTicker(myGame, results, done) {
   }
   const scoreEl = $("#tickerScore");
   $("#tickerBox").classList.add("hidden");
+  // --- broadcast score bug + field strip ---
+  const T = id => TEAM_BY_ID[id];
+  const txtOn = hex => { const n = parseInt(hex.slice(1), 16); const l = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; return l > 0.6 ? "#0b0d12" : "#fff"; };
+  const bug = (poss, label) => {
+    const side = (id, pts) => `<div class="sbTeam ${poss === id ? "poss" : ""}" style="background:${T(id).color};color:${txtOn(T(id).color)};border-bottom:3px solid ${T(id).color2}">${logo(id, 30)}<span class="abbr">${id}</span><span class="pts">${pts}</span></div>`;
+    scoreEl.innerHTML = side(away, as) + `<div class="sbMid"><b>${label}</b><span class="dim small">${T(away).name} at ${T(home).name}</span></div>` + side(home, hs);
+  };
+  const field = $("#field");
+  field.innerHTML = `<div class="ez l" style="background:${T(away).color};color:${txtOn(T(away).color)}">${away}</div><div class="ez r" style="background:${T(home).color};color:${txtOn(T(home).color)}">${home}</div>` +
+    [10, 20, 30, 40, 50, 40, 30, 20, 10].map((n, k) => { const x = 8 + (k + 1) * 8.4; return `<div class="yl" style="left:${x}%"></div><div class="yn" style="left:${x}%">${n}</div>`; }).join("") +
+    `<div class="mid"></div><div class="drive" id="fDrive" style="left:50%;width:0"></div><div class="ball" id="fBall" style="left:50%"></div><div class="flash" id="fFlash"></div>`;
+  // yard line -> % across the strip: the offense always drives toward the opponent's end zone (away drives right → left? no:
+  // keep it simple and readable: away attacks the HOME end zone on the right, home attacks the AWAY end zone on the left).
+  const xFor = (off, yd) => { const f = 8 + Math.max(0, Math.min(100, yd)) * 0.84; return off === away ? f : 100 - f; };
+  const showDrive = (d) => {
+    const start = d.start != null ? d.start : 25; const end = Math.min(100, start + (d.yards || 0));
+    const x0 = xFor(d.off, start), x1 = xFor(d.off, end); const dr = $("#fDrive"), ball = $("#fBall");
+    dr.className = "drive" + (d.result === "TD" ? " td" : d.result === "TO" ? " to" : ""); dr.style.left = Math.min(x0, x1) + "%"; dr.style.width = Math.abs(x1 - x0) + "%";
+    ball.style.left = x1 + "%";
+    const big = d.result === "TD" ? "TOUCHDOWN" : d.result === "FG" ? "FIELD GOAL" : d.result === "TO" ? (d.downs ? "TURNOVER ON DOWNS" : "TURNOVER") : d.result === "SAFETY" ? "SAFETY" : d.result === "OT-WIN" ? "GAME OVER" : d.result === "ONSIDE" ? "ONSIDE!" : "";
+    if (big) { const f = $("#fFlash"); f.textContent = big; f.style.color = d.result === "TO" ? "#ff7b72" : "#fff"; f.classList.remove("on"); void f.offsetWidth; f.classList.add("on"); if (d.result === "TD" || d.result === "TO") { field.classList.remove("shake"); void field.offsetWidth; field.classList.add("shake"); } }
+  };
+  bug(null, "PREGAME");
   // one drive row: text, then full render (score update + log line). Factored out
   // so an onside ask can reveal its scoring drive BEFORE the question.
   const rowText = (d) => {
@@ -1519,9 +1542,8 @@ function runTicker(myGame, results, done) {
   const renderRow = (d) => {
     if (d.off === home) hs += d.points; else as += d.points;
     if (d.defPoints) { if (d.off === home) as += d.defPoints; else hs += d.defPoints; }
-    const clockTxt = d.q === 5 ? "OVERTIME" : `Q${d.q} · ${d.clock || ""}`;
-    scoreEl.innerHTML = `${logo(away, 34)} <b>${as}</b> <span class="dim">—</span> <b>${hs}</b> ${logo(home, 34)}
-      &nbsp;<span class="qpill">${clockTxt}</span>`;
+    const clockTxt = d.q === 5 ? "OT" : `Q${d.q} ${d.clock || ""}`;
+    bug(d.off, clockTxt); showDrive(d);
     playDrive(d);
     const line = document.createElement("div");
     line.className = "tline" + (d.result === "TD" ? " td" : d.result === "TO" ? " to" : "");
@@ -1562,7 +1584,7 @@ function runTicker(myGame, results, done) {
     if (i >= log.length) {
       $("#tickerSkip").textContent = "CONTINUE ▶";
       $("#tickerBox").classList.remove("hidden");
-      scoreEl.innerHTML = `<span class="qpill">FINAL</span> &nbsp; ${logo(away, 34)} <b>${as}</b> <span class="dim">—</span> <b>${hs}</b> ${logo(home, 34)}`;
+      bug(null, "FINAL");
       const potg = playerOfTheGame(myGame, hs, as);
       if (potg) {
         const pl = document.createElement("div");
