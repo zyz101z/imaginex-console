@@ -1,5 +1,11 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-20 — 🎮 quiet "More free games" link
+- Menu footer (under Reset franchise) gets "🎮 More free games", shown ONLY inside the ImagineX console iframe.
+  Click → postMessage {type:"imaginex-nav", to:"games"} → console closes the game and shows the shelf. No pop-ups,
+  nothing mid-game. Why: every outside player since 10/05 played Gridiron only (arriving via /play/gridiron-gm).
+  ?v=20261020a.
+
 ## 2026-10-08 (later) — 📺 BROADCAST TICKER (visual item 4; user skipped avatars: "won't look like the real players")
 - Score bug: two panels in team colours (text colour picked by luminance, color2 underline), abbr + big tabular score,
   centre pill with quarter/clock and "Away at Home"; a glowing possession dot under the offense. PREGAME / FINAL states.

@@ -14,6 +14,7 @@ import {
   addLeaderboardEntry,
 } from "@/lib/storage";
 import { containsProfanity } from "@/lib/profanity";
+import { getArrival } from "@/lib/arrival";
 
 // --- Icons (inline SVGs) ---
 function IconHome({ className }: { className?: string }) {
@@ -217,14 +218,23 @@ function Cartridge({ game, onClick }: { game: Game; onClick: () => void }) {
 }
 
 // --- Game Detail with Cartridge Insert ---
+// Cross-promo order: the most polished games first, everything else after.
+const PROMO_ORDER = ["crazy-golf-kingdom", "tank-wars", "divided-states", "gridiron-gm", "pig-merge-tycoon", "freight-nation", "creature-cove", "x-bros"];
+function promoGames(excludeId: string, n = 6): Game[] {
+  const rank = (id: string) => { const i = PROMO_ORDER.indexOf(id); return i < 0 ? 99 : i; };
+  return games.filter((g) => g.status === "available" && g.id !== excludeId).sort((a, b) => rank(a.id) - rank(b.id)).slice(0, n);
+}
+
 function GameDetail({
   game,
   onPlay,
   onBack,
+  onPick,
 }: {
   game: Game;
   onPlay: () => void;
   onBack: () => void;
+  onPick: (g: Game) => void;
 }) {
   const [save, setSave] = useState<{ totalPlayTime: number } | null>(null);
   // Phases: idle -> lifting -> dropping (tilts + slides INTO the slot) -> seated (thunk, dust) -> reading (LED chase) -> launching (push-in + colour wash)
@@ -493,6 +503,22 @@ function GameDetail({
             Insert & Play
           </button>
         )}
+
+        {/* Quiet cross-promo: a static row under the game info. No pop-ups, no timers. */}
+        {phase === "idle" && (
+          <div className="mt-10 pt-6 border-t border-gray-800">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">More free games</p>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {promoGames(game.id).map((g) => (
+                <button key={g.id} onClick={() => onPick(g)} className="shrink-0 w-24 text-left group" title={g.title}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={g.cover} alt="" className="w-24 h-36 object-cover rounded-lg opacity-80 group-hover:opacity-100 transition" loading="lazy" />
+                  <span className="block mt-1 text-xs text-gray-400 group-hover:text-white truncate">{g.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -502,9 +528,11 @@ function GameDetail({
 function GamePlayer({
   game,
   onExit,
+  onMoreGames,
 }: {
   game: Game;
   onExit: () => void;
+  onMoreGames: () => void;
 }) {
   const startTimeRef = useRef(Date.now());
   const [showExit, setShowExit] = useState(false);
@@ -545,10 +573,12 @@ function GamePlayer({
   useEffect(() => {
     // Play counter (see /api/play and /stats): one ping per game launch, fire-and-forget.
     try {
-      void fetch("/api/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id }), keepalive: true }).catch(() => {});
+      void fetch("/api/play", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gameId: game.id, src: getArrival()?.src }), keepalive: true }).catch(() => {});
     } catch {}
     const handler = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return;
+      // a game's own quiet "More free games" link (e.g. Gridiron GM's menu) asks for the shelf
+      if (e.data && e.data.type === "imaginex-nav" && e.data.to === "games") { onMoreGames(); return; }
       if (e.data && e.data.type === "imaginex-score" && e.data.gameId === game.id) {
         const profile = getProfile();
         void addLeaderboardEntry({
@@ -561,7 +591,7 @@ function GamePlayer({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [game.id]);
+  }, [game.id, onMoreGames]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
@@ -586,6 +616,12 @@ function GamePlayer({
               className="flex items-center gap-2 bg-gray-800/80 hover:bg-gray-700 px-4 py-2 rounded-lg text-sm transition"
             >
               <IconBack /> Exit Game
+            </button>
+            <button
+              onClick={onMoreGames}
+              className="flex items-center gap-2 bg-gray-800/60 hover:bg-gray-700 px-3 py-2 rounded-lg text-sm text-gray-300 transition"
+            >
+              <IconGames /> More games
             </button>
             <span className="text-gray-400 text-sm">{game.title}</span>
           </div>
@@ -872,7 +908,7 @@ export default function Console() {
   if (!booted) return <BootScreen onDone={handleBootDone} />;
   if (profileLoaded && !profile) return <ProfileSetup onSave={handleProfileSave} />;
   if (!profileLoaded || !profile) return null;
-  if (view === "playing" && selectedGame) return <GamePlayer game={selectedGame} onExit={handleExitGame} />;
+  if (view === "playing" && selectedGame) return <GamePlayer game={selectedGame} onExit={handleExitGame} onMoreGames={handleNavBack} />;
 
   const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
     { id: "home", label: "Home", icon: <IconHome /> },
@@ -928,7 +964,7 @@ export default function Console() {
           {view === "home" && <HomeView profile={profile} onSelectGame={handleSelectGame} />}
           {view === "games" && !selectedGame && <HomeView profile={profile} onSelectGame={handleSelectGame} />}
           {view === "game-detail" && selectedGame && (
-            <GameDetail game={selectedGame} onPlay={handlePlayGame} onBack={handleNavBack} />
+            <GameDetail game={selectedGame} onPlay={handlePlayGame} onBack={handleNavBack} onPick={handleSelectGame} />
           )}
           {view === "leaderboard" && <LeaderboardView />}
           {view === "profile" && <ProfileView profile={profile} />}

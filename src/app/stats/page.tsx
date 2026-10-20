@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { games } from "@/lib/games";
 
-type Stats = { total: Record<string, number>; days: { day: string; plays: Record<string, number> }[]; countries: Record<string, number>; places: Record<string, number>; gameCountry: Record<string, number>; generatedAt: number };
+type Stats = { total: Record<string, number>; days: { day: string; plays: Record<string, number>; visits?: Record<string, number> }[]; visitSources?: Record<string, number>; landings?: Record<string, number>; playSources?: Record<string, number>; countries: Record<string, number>; places: Record<string, number>; gameCountry: Record<string, number>; generatedAt: number };
 
 const fmtDay = (d: string) => `${d.slice(4, 6)}/${d.slice(6, 8)}`;
 
@@ -29,12 +29,17 @@ export default function StatsPage() {
   const topCountries = stats ? byDesc(stats.countries).slice(0, 15) : [];
   const topPlaces = stats ? byDesc(stats.places).slice(0, 20) : [];
   const countryIds = topCountries.map(([cc]) => cc).slice(0, 6);
+  const srcLabel = (s: string) => ({ direct: "Direct / typed / bookmark", internal: "Internal link" } as Record<string, string>)[s] ?? s;
+  const visitSrc = stats ? byDesc(stats.visitSources || {}) : [];
+  const landingRows = stats ? byDesc(stats.landings || {}).slice(0, 15) : [];
+  const srcGame = stats ? byDesc(stats.playSources || {}).slice(0, 20) : [];
+  const visits7 = stats ? stats.days.slice(0, 7).reduce((a, d) => a + sum(d.visits || {}), 0) : 0;
 
   return (
     <main className="h-full overflow-auto bg-[#0b0f1a] text-gray-100 p-6 md:p-10 font-sans">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-1">ImagineX — plays</h1>
-        <p className="text-gray-400 mb-6 text-sm">Counts one play each time a cartridge is inserted. Counting started 2026-10-05. Page views, visitors and referrers live in Vercel Analytics.</p>
+        <p className="text-gray-400 mb-6 text-sm">Counts one play each time a cartridge is inserted. Counting started 2026-10-05. Page views also live in Vercel Analytics.</p>
         {err && <p className="text-red-400">Could not load stats: {err}</p>}
         {!stats && !err && <p className="text-gray-400">Loading…</p>}
         {stats && (
@@ -57,6 +62,25 @@ export default function StatsPage() {
                   </div>
                 );
               })}
+            </div>
+            <h2 className="font-semibold mb-2">How visitors arrive</h2>
+            <p className="text-gray-400 text-xs mb-2">One visit per browser tab session: the site that sent them (name only) and the first page they landed on. Tracked from 2026-10-20 · {visits7} visits in the last 7 days.</p>
+            <div className="grid md:grid-cols-3 gap-4 mb-8">
+              <div className="rounded-xl bg-white/5 p-3">
+                <div className="text-xs text-gray-400 uppercase tracking-wide mb-2">Visits by source</div>
+                {visitSrc.length === 0 && <div className="text-gray-400 text-sm">No visits recorded yet.</div>}
+                {visitSrc.map(([k, n]) => <div key={k} className="flex justify-between py-1 border-t border-white/10 text-sm"><span>{srcLabel(k)}</span><b>{n}</b></div>)}
+              </div>
+              <div className="rounded-xl bg-white/5 p-3">
+                <div className="text-xs text-gray-400 uppercase tracking-wide mb-2">Landing pages</div>
+                {landingRows.length === 0 && <div className="text-gray-400 text-sm">No visits recorded yet.</div>}
+                {landingRows.map(([k, n]) => <div key={k} className="flex justify-between gap-2 py-1 border-t border-white/10 text-sm"><span className="truncate">{k}</span><b>{n}</b></div>)}
+              </div>
+              <div className="rounded-xl bg-white/5 p-3">
+                <div className="text-xs text-gray-400 uppercase tracking-wide mb-2">Plays by source → game</div>
+                {srcGame.length === 0 && <div className="text-gray-400 text-sm">No plays recorded yet.</div>}
+                {srcGame.map(([k, n]) => { const [src, id] = k.split("|"); return <div key={k} className="flex justify-between gap-2 py-1 border-t border-white/10 text-sm"><span className="truncate">{srcLabel(src)} → {name(id)}</span><b>{n}</b></div>; })}
+              </div>
             </div>
             <h2 className="font-semibold mb-2">Where plays come from</h2>
             <p className="text-gray-400 text-xs mb-2">Country, region and city from the visitor&apos;s IP at the edge. Tracked from 2026-10-05.</p>

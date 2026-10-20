@@ -1,3 +1,4 @@
+import { getArrival } from "./arrival";
 // Local storage based save system for ImagineX
 // Can be upgraded to a backend DB later
 
@@ -159,7 +160,7 @@ export function syncProfile(force = false): void {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
-      body: JSON.stringify({ pid: getPlayerId(), nickname: profile.nickname, avatarColor: profile.avatarColor, createdAt: profile.createdAt, games: collectGameStats() }),
+      body: JSON.stringify({ pid: getPlayerId(), nickname: profile.nickname, avatarColor: profile.avatarColor, createdAt: profile.createdAt, games: collectGameStats(), arrival: getArrival() }),
     }).catch(() => {});
   } catch {}
 }

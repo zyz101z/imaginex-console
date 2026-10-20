@@ -125,14 +125,19 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
 
         <section className="mt-12 border-t border-gray-800 pt-8">
           <h2 className="text-xl font-bold text-white">More free games on ImagineX</h2>
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-4 grid grid-cols-3 sm:grid-cols-6 gap-3">
             {others.map((o) => {
               const og = games.find((g) => g.id === o.id);
               return (
-                <Link key={o.id} href={`/play/${o.id}`}
-                  className="px-4 py-2 rounded-lg bg-gray-800/60 hover:bg-gray-700 text-sm font-semibold"
-                  style={{ color: og?.color || "#fff" }}>
-                  {og?.title || o.id}
+                <Link key={o.id} href={`/play/${o.id}`} className="group">
+                  {og?.cover && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={og.cover} alt={`${og.title} cover art`} loading="lazy"
+                      className="w-full aspect-[401/660] object-cover rounded-lg opacity-85 group-hover:opacity-100 transition" />
+                  )}
+                  <span className="block mt-1 text-xs font-semibold truncate" style={{ color: og?.color || "#fff" }}>
+                    {og?.title || o.id}
+                  </span>
                 </Link>
               );
             })}

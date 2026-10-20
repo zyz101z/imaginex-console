@@ -20,11 +20,13 @@ export type PlayerRecord = {
   country: string;
   place: string;
   games: Record<string, GameStat>;
+  source?: string; // where they first arrived from (google, reddit, direct...) — first value wins
+  landing?: string; // the first page they landed on
 };
 
 // POST — the console syncs the local profile here (on load, after a game, on profile save).
 export async function POST(req: NextRequest) {
-  let body: Partial<PlayerRecord>;
+  let body: Partial<PlayerRecord> & { arrival?: { src?: string; landing?: string } | null };
   try {
     body = await req.json();
   } catch {
@@ -61,6 +63,10 @@ export async function POST(req: NextRequest) {
     country: country || prev?.country || "", place: [country, region, city].filter(Boolean).join("/") || prev?.place || "",
     games: merged,
   };
+  const src = String(body.arrival?.src ?? "");
+  const landing = String(body.arrival?.landing ?? "");
+  rec.source = prev?.source || (/^[a-z0-9._:-]{1,48}$/.test(src) ? src : undefined);
+  rec.landing = prev?.landing || (/^\/[\w\-/?=]{0,60}$/.test(landing) ? landing : undefined);
   await redis.hset(KEY, { [pid]: JSON.stringify(rec) });
   return NextResponse.json({ ok: true });
 }

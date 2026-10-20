@@ -2479,6 +2479,13 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   activeView = b.dataset.view; render();
 });
 $("#slotsBtn").onclick = () => showSlots();   // after the generic nav binding, so it is not treated as a view button
+// Quiet link to the rest of ImagineX: only shown when running inside the console, sits with the
+// save-level buttons at the bottom of the menu, and never pops up on its own.
+if (window.parent !== window) {
+  const mg = $("#moreGamesBtn");
+  mg.style.display = "";
+  mg.onclick = () => { try { window.parent.postMessage({ type: "imaginex-nav", to: "games" }, location.origin); } catch (_) {} };
+}
 $("#exportBtn").onclick = () => {
   // chooser modal: export or import from one place (lives next to Reset — save-level actions together)
   closePcard();
