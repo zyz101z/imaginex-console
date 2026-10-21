@@ -149,10 +149,33 @@ export function collectGameStats(): Record<string, { playTime: number; lastPlaye
   return out;
 }
 
+// ---- Guests: visitors who arrive on a /play/<id> deep link start playing before making a profile.
+// They sync as "Guest" (same per-browser pid, so the row is renamed when they pick a nickname), and any
+// score a game posts meanwhile waits in localStorage until they do.
+export function isGuest(): boolean {
+  return !getProfile() && localStorage.getItem(`${STORAGE_PREFIX}guest`) === "1";
+}
+
+export function markGuest(): void {
+  localStorage.setItem(`${STORAGE_PREFIX}guest`, "1");
+}
+
+export function queuePendingScore(entry: Omit<LeaderboardEntry, "nickname">): void {
+  const list = safeParse<Omit<LeaderboardEntry, "nickname">[]>(localStorage.getItem(`${STORAGE_PREFIX}pending_scores`), []);
+  list.push(entry);
+  localStorage.setItem(`${STORAGE_PREFIX}pending_scores`, JSON.stringify(list.slice(-20)));
+}
+
+export function flushPendingScores(nickname: string): void {
+  const list = safeParse<Omit<LeaderboardEntry, "nickname">[]>(localStorage.getItem(`${STORAGE_PREFIX}pending_scores`), []);
+  localStorage.removeItem(`${STORAGE_PREFIX}pending_scores`);
+  for (const e of list) void addLeaderboardEntry({ ...e, nickname });
+}
+
 let lastSync = 0;
 export function syncProfile(force = false): void {
   try {
-    const profile = getProfile();
+    const profile = getProfile() ?? (isGuest() ? { nickname: "Guest", avatarColor: "#666666", createdAt: Date.now() } : null);
     if (!profile || !profile.nickname) return;
     if (!force && Date.now() - lastSync < 60_000) return; // at most once a minute unless forced
     lastSync = Date.now();

@@ -1,5 +1,24 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-21 — 🏈 2026 ROSTERS + 🎬 MOMENT CARDS + 📇 SHAREABLE SEASON CARD
+- ROSTERS → 2026 season (data_rosters.mjs). Research from dated 2026 sources (scratchpad roster_moves.json /
+  rookies_2026.json): 221 moves (offseason trades/FA/releases/retirements + in-season trades thru Oct 11), 60 rookies
+  (all of Round 1 + notable R2-3; 44 Madden 27 launch ratings, rest estimated), all ages +1. Fixes: Bynum dup (MIN/IND),
+  Ragnow/Koo/Moody gone, Pineiro SF K. Starting QBs match reality except season-ending IR (Hurts PHI, Dart NYG) — they stay
+  on their team healthy (a new franchise starts fresh). Judgement calls: Tua 84→79 (Penix starts ATL), Cousins 73→76 (starts
+  LV over rookie Mendoza 74), Watson added CLE 75, Wentz added MIN backup. 809 → 845 real players. EXISTING SAVES KEEP their
+  league; new franchises get 2026 rosters.
+- SIM: receiver BRACKET — WR past 1,600 season yds gets a tapering share (×1 → ×0.6 by 2,500). No rng draw (replay-safe).
+  Why: Murray→Jefferson produced a 191-catch / 2,301-yd test season after the roster update.
+- MOMENT CARDS (#moment, generic showMoment): PLAYOFFS CLINCHED (seed, bye) / Missed the playoffs after week 18;
+  "Season over" when your playoff run ends; 🏆 CHAMPIONS after a Gridiron Bowl win. Awards Night waits while a moment is up.
+- SEASON CARD at the season verdict (and 📇 button in History + on the fired screen): record, playoff finish
+  (playoffFinish()), team leaders, your awards, All-Pros, Dynasty Score; 📋 Copy summary (text + link) and 🖼 Save image
+  (1200×630 canvas PNG w/ logo when CORS allows). History rows now store teamId + finish.
+- Yearbook fix: category leaders show the category's line (a QB leading in rushing showed his passing line).
+- Batteries: sim 3,043 / gm 18,713 / league probe 44 / balance probe 30 — all green. Headless season run: clinch →
+  Wild Card loss → season card + PNG verified. ?v=20261021a.
+
 ## 2026-10-20 — 🎮 quiet "More free games" link
 - Menu footer (under Reset franchise) gets "🎮 More free games", shown ONLY inside the ImagineX console iframe.
   Click → postMessage {type:"imaginex-nav", to:"games"} → console closes the game and shows the shelf. No pop-ups,

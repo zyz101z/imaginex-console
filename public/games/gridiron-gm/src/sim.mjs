@@ -112,8 +112,10 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
   for (let i = 0; i < targets.length && remaining > 0; i++) {
     // a mismatch WR1 sees more targets (edge 12 → ~+20% share), capped by the pie itself
     const mismatchBoost = (i === 0 && mu && mu.wrEdge > 4) ? 1 + Math.min(0.15, mu.wrEdge * 0.010) : 1;
+    // a receiver already past 1,600 yds gets bracketed: his share tapers (no rng draw — replay-safe)
+    const bracket = targets[i].stats.recYd > 1600 ? Math.max(0.6, 1 - (targets[i].stats.recYd - 1600) / 1500) : 1;
     const share = i === targets.length - 1 ? remaining
-      : Math.round(remaining * (0.42 - i * 0.07) * mismatchBoost * (0.7 + rng.f() * 0.6));
+      : Math.round(remaining * (0.42 - i * 0.07) * mismatchBoost * bracket * (0.7 + rng.f() * 0.6));
     const got = Math.max(0, Math.min(remaining, share));
     targets[i].stats.rec += touches(targets[i].stats, "recYd", got, YPC[Math.min(i, YPC.length - 1)]);
     remaining -= got;

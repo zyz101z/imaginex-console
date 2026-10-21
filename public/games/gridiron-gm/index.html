@@ -76,6 +76,16 @@
   .pcSec { margin: 10px 0 2px; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #5f7099; }
   .pcBadge { display: inline-block; border: 1px solid #ffd166; color: #ffd166; border-radius: 6px;
     padding: 2px 8px; font-size: 11px; font-weight: 800; margin-right: 4px; }
+  #moment { position: fixed; inset: 0; z-index: 31; display: flex; align-items: center; justify-content: center;
+    background-color: #0a0c10; background-size: cover; background-position: center; animation: momentIn .35s ease-out; }
+  #moment h2 { border: 0; padding: 0; }
+  #moment .revealcard { animation: momentPop .45s cubic-bezier(.2, 1.4, .4, 1); }
+  @keyframes momentIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes momentPop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .sharebtn { background: #1d2433; color: #e8ecf4; border: 1px solid #3a4a6a; border-radius: 8px; padding: 9px 16px;
+    font-size: 14px; font-weight: bold; cursor: pointer; }
+  .sharebtn:hover { border-color: #ffc62f; }
+  @media (max-width: 640px) { .revealcard { padding: 22px 18px; margin: 0 10px; } }
   #pickReveal, #awardsNight { position: fixed; inset: 0; z-index: 30;
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(rgba(8, 10, 16, .72), rgba(8, 10, 16, .88)),
@@ -207,6 +217,6 @@
       <button id="tickerBox" class="hidden">BOX SCORE ▶</button>
     </div>
   </div>
-  <script type="module" src="./src/app.mjs?v=20261020a"></script>
+  <script type="module" src="./src/app.mjs?v=20261021a"></script>
 </body>
 </html>

@@ -9,6 +9,9 @@ import {
   PlayerProfile,
   updatePlayTime,
   syncProfile,
+  markGuest,
+  queuePendingScore,
+  flushPendingScores,
   getStats,
   getLeaderboard,
   addLeaderboardEntry,
@@ -119,7 +122,7 @@ function BootScreen({ onDone }: { onDone: () => void }) {
 }
 
 // --- Profile Setup Modal ---
-function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) {
+function ProfileSetup({ onSave, subtitle = "Create your player profile", onCancel }: { onSave: (profile: PlayerProfile) => void; subtitle?: string; onCancel?: () => void }) {
   const [nickname, setNickname] = useState("");
   const [error, setError] = useState("");
   const colors = ["#4fc3f7", "#f44336", "#66bb6a", "#ffa726", "#ab47bc", "#26c6da", "#ef5350", "#8d6e63"];
@@ -141,7 +144,7 @@ function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) 
         <h2 className="text-2xl font-bold mb-2 glow-text text-[var(--accent)]">
           Welcome to ImagineX
         </h2>
-        <p className="text-gray-400 mb-6 text-sm">Create your player profile</p>
+        <p className="text-gray-400 mb-6 text-sm">{subtitle}</p>
 
         <label className="block text-sm text-gray-300 mb-2">Nickname</label>
         <input
@@ -175,6 +178,11 @@ function ProfileSetup({ onSave }: { onSave: (profile: PlayerProfile) => void }) 
         >
           Start Playing
         </button>
+        {onCancel && (
+          <button onClick={onCancel} className="w-full mt-3 py-2 text-sm text-gray-400 hover:text-gray-200 transition">
+            Not now
+          </button>
+        )}
       </div>
     </div>
   );
@@ -529,13 +537,18 @@ function GamePlayer({
   game,
   onExit,
   onMoreGames,
+  onProfileSave,
 }: {
   game: Game;
   onExit: () => void;
   onMoreGames: () => void;
+  onProfileSave: (p: PlayerProfile) => void;
 }) {
   const startTimeRef = useRef(Date.now());
   const [showExit, setShowExit] = useState(false);
+  // guest (deep-link) players: a score waits until they pick a nickname; offered once per score, never mid-play
+  const [scoreWaiting, setScoreWaiting] = useState(false);
+  const [askName, setAskName] = useState(false);
 
   useEffect(() => {
     startTimeRef.current = Date.now();
@@ -581,6 +594,11 @@ function GamePlayer({
       if (e.data && e.data.type === "imaginex-nav" && e.data.to === "games") { onMoreGames(); return; }
       if (e.data && e.data.type === "imaginex-score" && e.data.gameId === game.id) {
         const profile = getProfile();
+        if (!profile) {
+          queuePendingScore({ gameId: e.data.gameId, score: e.data.score, date: Date.now() });
+          setScoreWaiting(true);
+          return;
+        }
         void addLeaderboardEntry({
           nickname: profile?.nickname || e.data.nickname || "Player",
           gameId: e.data.gameId,
@@ -629,6 +647,22 @@ function GamePlayer({
         </div>
         <div className="glow-line" />
       </div>
+      {scoreWaiting && !askName && (
+        <div className="absolute bottom-4 right-4 z-30 flex items-center gap-3 bg-gray-900/95 border border-[var(--accent)]/40 rounded-xl px-4 py-3 text-sm shadow-lg slide-up">
+          <span>🏆 Score saved. Add a nickname to put it on the leaderboard.</span>
+          <button onClick={() => setAskName(true)} className="px-3 py-1.5 rounded-lg font-bold text-black bg-[var(--accent)] hover:brightness-110">Pick nickname</button>
+          <button onClick={() => setScoreWaiting(false)} className="text-gray-400 hover:text-white px-1" aria-label="Dismiss">✕</button>
+        </div>
+      )}
+      {askName && (
+        <div className="absolute inset-0 z-[60]">
+          <ProfileSetup
+            subtitle="Pick a nickname for the leaderboard. Your game keeps going."
+            onSave={(p) => { onProfileSave(p); setAskName(false); setScoreWaiting(false); }}
+            onCancel={() => setAskName(false)}
+          />
+        </div>
+      )}
       <iframe
         ref={(el) => { if (el) setTimeout(() => el.focus(), 100); }}
         src={game.url}
@@ -868,6 +902,7 @@ export default function Console() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [view, setView] = useState<View>("home");
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [guest, setGuest] = useState(false);
 
   useEffect(() => {
     setProfile(getProfile());
@@ -881,6 +916,9 @@ export default function Console() {
       if (g) {
         setSelectedGame(g);
         setView("playing");
+        // straight into the game: no boot animation, and the nickname can wait until after they've played
+        setBooted(true);
+        if (!getProfile()) { markGuest(); setGuest(true); syncProfile(true); }
       }
     } catch {}
   }, []);
@@ -890,6 +928,8 @@ export default function Console() {
   const handleProfileSave = useCallback((p: PlayerProfile) => {
     saveProfile(p);
     setProfile(p);
+    setGuest(false);
+    flushPendingScores(p.nickname);
     syncProfile(true);
   }, []);
 
@@ -906,9 +946,10 @@ export default function Console() {
   }, []);
 
   if (!booted) return <BootScreen onDone={handleBootDone} />;
-  if (profileLoaded && !profile) return <ProfileSetup onSave={handleProfileSave} />;
+  if (view === "playing" && selectedGame && (profile || guest))
+    return <GamePlayer game={selectedGame} onExit={handleExitGame} onMoreGames={handleNavBack} onProfileSave={handleProfileSave} />;
+  if (profileLoaded && !profile) return <ProfileSetup onSave={handleProfileSave} subtitle={guest ? "Pick a nickname to keep your stats and scores" : undefined} />;
   if (!profileLoaded || !profile) return null;
-  if (view === "playing" && selectedGame) return <GamePlayer game={selectedGame} onExit={handleExitGame} onMoreGames={handleNavBack} />;
 
   const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
     { id: "home", label: "Home", icon: <IconHome /> },

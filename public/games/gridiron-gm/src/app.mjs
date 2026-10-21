@@ -542,12 +542,13 @@ function buildYearbook(standing) {
   const roster = S.league[S.teamId];
   const active = roster.filter(p => p.stats.gp > 0);
   const top = score => active.reduce((b, p) => (!b || score(p.stats) > score(b.stats)) ? p : b, null);
-  const mk = (label, p) => p && { label, id: p.id, name: p.name, pos: p.pos, line: statLine(p.pos, p.stats) };
+  // the line follows the CATEGORY, not the position (a scrambling QB leading in rushing shows his rushing line)
+  const mk = (label, p, as) => p && { label, id: p.id, name: p.name, pos: p.pos, line: statLine(as || p.pos, p.stats) };
   const leaders = [
-    mk("Passing", top(x => x.passYd || 0)),
-    mk("Rushing", top(x => x.rushYd || 0)),
-    mk("Receiving", top(x => x.recYd || 0)),
-    mk("Defense", top(x => (x.sacks || 0) * 45 + (x.defInts || 0) * 55 + (x.tackles || 0) * 1.5)),
+    mk("Passing", top(x => x.passYd || 0), "QB"),
+    mk("Rushing", top(x => x.rushYd || 0), "RB"),
+    mk("Receiving", top(x => x.recYd || 0), "WR"),
+    mk("Defense", top(x => (x.sacks || 0) * 45 + (x.defInts || 0) * 55 + (x.tackles || 0) * 1.5), "LB"),
   ].filter(Boolean);
   // the season's story, read from the schedule
   let bigWin = null, toughLoss = null, bestStreak = 0, run = 0;
@@ -766,6 +767,7 @@ function viewBracket() {
       <b class="${titles ? "champ" : ""}">${titles}</b> title${titles === 1 ? "" : "s"} ·
       best <b>${best.h.record}</b> (S${best.h.season}) · avg <b>${avgW}</b> wins</p>
       <p class="dim"><span class="tt" title="10 per win + 100 per season + 150 per playoff trip + 500 per Gridiron Bowl. Posted to the ImagineX leaderboard after every season.">🏆 Dynasty Score: <b style="color:#c9a227">${dynastyScore().toLocaleString()}</b></span></p>`;
+    html += `<p><button class="sharebtn" onclick="__gm.seasonCard()">📇 Season ${S.history[S.history.length - 1].season} card (share)</button></p>`;
     html += "<table><tr class='hdr'><td>Season</td><td>Your record</td><td>Champion</td></tr>";
     for (const h of S.history) html += `<tr><td>${h.season}</td><td>${h.record}</td><td>${chip(h.champ)} ${teamName(h.champ)}</td></tr>`;
     html += "</table>";
@@ -1351,7 +1353,7 @@ function render() {
   applyTheme();
   updateMusic();
   if (S && S.phase === "offseason" && S.lastAwards && S.awardsCeremonySeason !== S.seasonNum
-      && !document.getElementById("awardsNight")) {
+      && !document.getElementById("awardsNight") && !document.getElementById("moment")) {
     runAwardsNight();
   }
   if (S && S.phase === "fired") {
@@ -1363,6 +1365,7 @@ function render() {
     $("#content").innerHTML = `<h2 class="loss">YOU'RE FIRED.</h2>
       <p>After ${S.seasonNum} season${S.seasonNum > 1 ? "s" : ""}, ${teamName(S.teamId)} ownership has moved on.
       Your record: ${S.history.map(h => h.record).join(", ")}. Final Dynasty Score: <b style="color:#c9a227">${dynastyScore().toLocaleString()}</b> (posted to the leaderboard).</p>
+      <p><button class="sharebtn" onclick="__gm.seasonCard()">📇 Last season's card (share)</button></p>
       <h3>Rebuild elsewhere — these franchises will take your call:</h3>
       <div class="pickgrid">` + candidates.map(c =>
         `<button class="pick" data-id="${c.t.id}" style="border-color:${c.t.color}" onclick="__gm.takeOver('${c.t.id}')">
@@ -1683,6 +1686,7 @@ function advance() {
       }
       S.lastResults = results.map(({ log, box, ...g }) => g);
       save(); render();
+      if (S.phase === "postseason") clinchMoment();
     };
     if (myGame) runTicker(myGame, results, finish);
     else finish(); // bye week
@@ -1703,8 +1707,10 @@ function advance() {
     if (champion) delta += 30;
     S.security = Math.max(0, Math.min(100, S.security + delta));
     S.yearbook = buildYearbook(s);
-    S.history.push({ season: S.seasonNum, record: `${s.w}-${s.l}`, champ: S.bracket.champion,
-      awards: S.lastAwards, security: S.security, playoffs: madePlayoffs });
+    const row = { season: S.seasonNum, record: `${s.w}-${s.l}`, champ: S.bracket.champion,
+      awards: S.lastAwards, security: S.security, playoffs: madePlayoffs, teamId: S.teamId,
+      finish: playoffFinish() || "Missed the playoffs" };
+    S.history.push(row);
     postDynastyScore();
     if (S.security <= 20 && S.seasonNum >= 2 && !champion) {
       S.phase = "fired";
@@ -1712,6 +1718,7 @@ function advance() {
       return;
     }
     startOffseasonPipeline();
+    showSeasonCard(row);
   } else if (S.phase === "freeagency") {
     const rng = weekRng();
     if (S.fa.round < 3) {
@@ -1846,6 +1853,156 @@ function showPickReveal(p, slot, pickNo) {
     <button class="revealbtn">WELCOME ABOARD ▶</button></div>`;
   div.querySelector(".revealbtn").onclick = () => div.remove();
   document.body.appendChild(div);
+}
+
+// ---------------------------------------------------------------- moment cards
+// Full-screen beats for the big franchise moments (clinch, elimination, Gridiron Bowl, season review).
+// One at a time: Awards Night waits while a moment is up, and closing a moment re-renders so it can run.
+function showMoment({ bg = "stadium_bowl.png", kicker, title, titleClass = "champ", body = "", btn = "CONTINUE ▶", extra = "", onClose = null }) {
+  document.getElementById("moment")?.remove();
+  const div = document.createElement("div");
+  div.id = "moment";
+  div.style.backgroundImage = `linear-gradient(rgba(8, 10, 16, .55), rgba(8, 10, 16, .85)), url('img/${bg}')`;
+  div.innerHTML = `<div class="revealcard">
+    <div class="dim" style="letter-spacing:3px">${kicker}</div>
+    <h2 class="${titleClass}" style="margin:12px 0 6px;font-size:34px">${title}</h2>
+    ${body}${extra}
+    <div><button class="revealbtn">${btn}</button></div></div>`;
+  div.querySelector(".revealbtn").onclick = () => { div.remove(); if (onClose) onClose(); render(); };
+  document.body.appendChild(div);
+  return div;
+}
+
+// how far the user's team got this postseason, read from the finished bracket
+function playoffFinish(bracket = S.bracket, teamId = S.teamId) {
+  if (!bracket || !bracket.rounds) return null;
+  if (bracket.champion === teamId) return "Won the Gridiron Bowl";
+  let last = null;
+  for (const r of bracket.rounds) if ((r.games || []).some(g => g.home === teamId || g.away === teamId)) last = r.name;
+  return last ? `Lost in the ${last.replace(/^(NFC|AFC) /, "$1 ")}` : null;
+}
+
+function clinchMoment() {
+  const conf = TEAM_BY_ID[S.teamId].conf;
+  const seed = seeds(S.standings, conf).indexOf(S.teamId) + 1;
+  const st = S.standings[S.teamId];
+  if (seed > 0) {
+    sfx.fanfare();
+    showMoment({ bg: "stadium_clear.png", kicker: `SEASON ${S.seasonNum} — WEEK 18 FINAL`,
+      title: "PLAYOFFS CLINCHED!",
+      body: `<p style="font-size:24px;margin:10px 0">${logo(S.teamId, 40)} <b>${teamName(S.teamId)}</b></p>
+        <p style="margin:4px 0">${st.w}-${st.l}${st.t ? `-${st.t}` : ""} · <b>#${seed} seed</b> in the ${conf}${seed === 1 ? " · first-round BYE" : ""}</p>`,
+      btn: "ON TO THE PLAYOFFS ▶" });
+  } else {
+    showMoment({ bg: "stadium_cold.png", kicker: `SEASON ${S.seasonNum} — WEEK 18 FINAL`,
+      title: "Missed the playoffs", titleClass: "loss",
+      body: `<p style="margin:10px 0">${logo(S.teamId, 32)} ${teamName(S.teamId)} finish ${st.w}-${st.l}${st.t ? `-${st.t}` : ""}.</p>
+        <p class="dim" style="margin:4px 0">Watch the playoffs, then fix it this offseason: free agency, the draft and training camp.</p>`,
+      btn: "WATCH THE PLAYOFFS ▶" });
+  }
+}
+
+function eliminatedMoment(stageName, score) {
+  showMoment({ bg: "stadium_rain.png", kicker: `SEASON ${S.seasonNum} — ${stageName.toUpperCase()}`,
+    title: "Season over", titleClass: "loss",
+    body: `<p style="margin:10px 0">${logo(S.teamId, 32)} ${teamName(S.teamId)} fall ${score}.</p>
+      <p class="dim" style="margin:4px 0">Final record ${S.standings[S.teamId].w}-${S.standings[S.teamId].l}. Awards Night and the offseason are next.</p>`,
+    btn: "CONTINUE ▶" });
+}
+
+function championMoment(score) {
+  sfx.fanfare();
+  const titles = S.history.filter(h => h.champ === S.teamId).length + 1;   // history row for this season isn't written yet
+  showMoment({ bg: "trophy.png", kicker: `SEASON ${S.seasonNum} — GRIDIRON BOWL`,
+    title: "🏆 CHAMPIONS! 🏆",
+    body: `<p style="font-size:26px;margin:10px 0">${logo(S.teamId, 46)} <b>${teamName(S.teamId)}</b></p>
+      <p style="margin:4px 0">Won the Gridiron Bowl ${score}${titles > 1 ? ` · title #${titles} of your run` : ""}</p>`,
+    btn: "RAISE THE TROPHY ▶" });
+}
+
+// ---------------------------------------------------------------- shareable season card
+function seasonCardData(row) {
+  const yb = S.yearbook && S.yearbook.season === row.season ? S.yearbook : null;
+  return {
+    season: row.season, teamId: row.teamId || S.teamId, record: row.record,
+    finish: row.finish || (row.champ === (row.teamId || S.teamId) ? "Won the Gridiron Bowl" : row.playoffs ? "Made the playoffs" : "Missed the playoffs"),
+    leaders: yb ? yb.leaders.slice(0, 3) : [],
+    awards: yb ? yb.myAwards : [],
+    allPro: yb ? yb.allProMine.length : 0,
+    score: dynastyScore(), security: row.security,
+  };
+}
+
+function seasonCardText(d) {
+  const t = TEAM_BY_ID[d.teamId];
+  return [`🏈 Gridiron GM: ${t.city} ${t.name}, Season ${d.season}`,
+    `${d.record} · ${d.finish}`,
+    ...d.leaders.map(l => `${l.label}: ${l.name} (${l.line})`),
+    d.awards.length ? `Awards: ${d.awards.join(", ")}` : "",
+    `Dynasty Score ${d.score.toLocaleString()}`,
+    "Play free: https://www.imaginex.games/play/gridiron-gm"].filter(Boolean).join("\n");
+}
+
+// 1200x630 PNG, drawn on a canvas (team colours + text; the logo is added only if its server allows it)
+async function seasonCardImage(d) {
+  const t = TEAM_BY_ID[d.teamId];
+  const c = document.createElement("canvas"); c.width = 1200; c.height = 630;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 1200, 630);
+  grad.addColorStop(0, t.color); grad.addColorStop(1, "#0b0e14");
+  g.fillStyle = grad; g.fillRect(0, 0, 1200, 630);
+  g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(40, 40, 1120, 550);
+  g.strokeStyle = "#ffc62f"; g.lineWidth = 4; g.strokeRect(40, 40, 1120, 550);
+  try {
+    const img = new Image(); img.crossOrigin = "anonymous"; img.src = logoUrl(d.teamId);
+    await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; setTimeout(bad, 2500); });
+    g.drawImage(img, 880, 90, 230, 230);
+    c.toDataURL();   // throws if the logo tainted the canvas
+  } catch {
+    g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(880, 90, 230, 230);   // cover any partial draw, keep the layout
+  }
+  g.fillStyle = "#ffc62f"; g.font = "bold 26px system-ui, sans-serif"; g.fillText(`GRIDIRON GM · SEASON ${d.season}`, 80, 105);
+  g.fillStyle = "#fff"; g.font = "900 64px system-ui, sans-serif"; g.fillText(`${t.city} ${t.name}`.toUpperCase().slice(0, 24), 80, 185);
+  g.font = "bold 46px system-ui, sans-serif"; g.fillText(d.record, 80, 255);
+  g.fillStyle = d.finish.startsWith("Won") ? "#ffc62f" : "#cfd6e6"; g.font = "bold 34px system-ui, sans-serif";
+  g.fillText((d.finish.startsWith("Won") ? "🏆 " : "") + d.finish, 80, 305);
+  g.fillStyle = "#e8ecf4"; g.font = "26px system-ui, sans-serif";
+  d.leaders.forEach((l, i) => g.fillText(`${l.label}: ${l.name} · ${l.line}`.slice(0, 70), 80, 375 + i * 40));
+  if (d.awards.length) { g.fillStyle = "#ffd166"; g.fillText(`🏅 ${d.awards.join(" · ")}`.slice(0, 70), 80, 375 + d.leaders.length * 40); }
+  g.fillStyle = "#ffc62f"; g.font = "bold 30px system-ui, sans-serif"; g.fillText(`Dynasty Score ${d.score.toLocaleString()}`, 80, 560);
+  g.fillStyle = "#9fb0d0"; g.font = "22px system-ui, sans-serif"; g.textAlign = "right";
+  g.fillText("imaginex.games/play/gridiron-gm", 1120, 560);
+  return c;
+}
+
+function showSeasonCard(row, onClose = null) {
+  const d = seasonCardData(row);
+  const won = d.finish.startsWith("Won");
+  const div = showMoment({ bg: won ? "trophy.png" : "stadium_clear.png", kicker: `SEASON ${d.season} IN REVIEW`,
+    title: `${logo(d.teamId, 40)} ${d.record}`, titleClass: won ? "champ" : "",
+    body: `<p style="font-size:20px;margin:6px 0"><b>${d.finish}</b></p>
+      ${d.leaders.map(l => `<p style="margin:3px 0">${l.label}: <b>${l.name}</b> <span class="dim">${l.line}</span></p>`).join("")}
+      ${d.awards.length ? `<p class="win" style="margin:6px 0">🏅 ${d.awards.join(" · ")}</p>` : ""}
+      ${d.allPro ? `<p style="margin:3px 0">★ ${d.allPro} All-Pro${d.allPro > 1 ? "s" : ""}</p>` : ""}
+      <p style="margin:10px 0 0">Dynasty Score <b style="color:#ffc62f">${d.score.toLocaleString()}</b> · Job ${d.security}%</p>`,
+    extra: `<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="sharebtn" data-act="copy">📋 Copy summary</button>
+      <button class="sharebtn" data-act="img">🖼 Save image</button></div>
+      <p class="dim small sharemsg" style="min-height:1.2em;margin:6px 0 0"></p>`,
+    btn: "ON TO THE OFFSEASON ▶", onClose });
+  const msg = t => { div.querySelector(".sharemsg").textContent = t; };
+  div.querySelector('[data-act="copy"]').onclick = async () => {
+    try { await navigator.clipboard.writeText(seasonCardText(d)); msg("Copied. Paste it anywhere."); }
+    catch { msg("Copy blocked by the browser. Try Save image instead."); }
+  };
+  div.querySelector('[data-act="img"]').onclick = async () => {
+    try {
+      const c = await seasonCardImage(d);
+      const a = document.createElement("a");
+      a.download = `gridiron-gm-season-${d.season}.png`; a.href = c.toDataURL("image/png"); a.click();
+      msg("Saved to your downloads.");
+    } catch { msg("Couldn't build the image in this browser."); }
+  };
 }
 
 function userSignFA(playerId) {
@@ -2206,7 +2363,7 @@ function prospectFilter(x) { prospectPos = x; render(); }
 
 window.__gm = { userDraftPick, userDraftPickById, userSignFA, userCut, setLean, setAgg, setDefAgg, hireCoach, promote, train, scout, dismissIntro, leadersFilter, prospectFilter, signStreet, acceptOffer, rejectOffer, userExtend, goRoster,
   tradePartner, tradeToggle, tradeTogglePick, tradePropose, pcard, pcardByName, closePcard, hofCard, acceptPickTrade, declinePickTrade,
-  exportSave, importSave, shopPlayer, resolveHoldout, setFranchiseTag, showSlots, switchSlot, newInSlot, deleteSlot, dismissPostGame };
+  exportSave, importSave, shopPlayer, seasonCard: () => showSeasonCard(S.history[S.history.length - 1]), resolveHoldout, setFranchiseTag, showSlots, switchSlot, newInSlot, deleteSlot, dismissPostGame };
 
 function startOffseasonPipeline() {
     const rng = weekRng();
@@ -2292,7 +2449,7 @@ function advancePlayoffs() {
       text: `PLAYOFFS (${PLAYOFF_STAGES[P.stage]}): ${teamName(w)} eliminate the ${TEAM_BY_ID[l].name} ${Math.max(r.scoreA, r.scoreB)}-${Math.min(r.scoreA, r.scoreB)}` });
     if (g.home === S.teamId || g.away === S.teamId) {
       myGame = { home: g.home, away: g.away, log: r.log, box: r.box,
-        scoreHome: r.scoreA, scoreAway: r.scoreB, weather: wx, bowl: P.stage === 3 };
+        scoreHome: r.scoreA, scoreAway: r.scoreB, weather: wx, bowl: P.stage === 3, stage: PLAYOFF_STAGES[P.stage] };
     }
   }
   if (P.stage === 3) {
@@ -2319,7 +2476,13 @@ function advancePlayoffs() {
   if (myGame) {
     S.lastBox = { week: 18 + (S.playoffs ? S.playoffs.stage : 4), home: myGame.home, away: myGame.away,
       scoreHome: myGame.scoreHome, scoreAway: myGame.scoreAway, box: myGame.box };
-    runTicker(myGame, [], () => { save(); render(); });
+    runTicker(myGame, [], () => {
+      save(); render();
+      const my = myGame.home === S.teamId ? myGame.scoreHome : myGame.scoreAway;
+      const their = myGame.home === S.teamId ? myGame.scoreAway : myGame.scoreHome;
+      if (my > their && myGame.bowl) championMoment(`${my}-${their}`);
+      else if (my < their) eliminatedMoment(myGame.stage, `${their}-${my}`);
+    });
     save();
     return;
   }
