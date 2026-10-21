@@ -336,8 +336,9 @@ const band = (name, val, lo, hi) =>
   // (a) back-compat: explicit 0.5 dial === no dial at all, bit for bit
   const g1 = simGame(makeRng(5), { id: A, players: league[A], strategy: { passLean: 0.55, aggression: 0.5 } },
     { id: B, players: league[B] }, A);
-  const g2 = simGame(makeRng(5), { id: A, players: league[A], strategy: { passLean: 0.55, aggression: 0.5, defAggression: 0.5 } },
-    { id: B, players: league[B], strategy: { passLean: 0.55, defAggression: 0.5 } }, A);
+  const league2 = mk(31337);   // fresh copy: g1's injuries/stats must not leak into g2
+  const g2 = simGame(makeRng(5), { id: A, players: league2[A], strategy: { passLean: 0.55, aggression: 0.5, defAggression: 0.5 } },
+    { id: B, players: league2[B], strategy: { passLean: 0.55, defAggression: 0.5 } }, A);
   check("blitz: 50% dial is EXACTLY legacy behavior", g1.scoreA === g2.scoreA && g1.scoreB === g2.scoreB,
     `${g1.scoreA}-${g1.scoreB} vs ${g2.scoreA}-${g2.scoreB}`);
   // (b) paired-seed A/B: blitz-happy defense forces more sacks + turnovers

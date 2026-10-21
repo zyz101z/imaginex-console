@@ -419,7 +419,8 @@ export function coachFit(coach, units) {
 // returns additive unit modifiers; apply after teamUnits()
 export function coachMods(coach, units) {
   if (!coach) return { offPass: 0, offRun: 0, defPass: 0, defRun: 0 };
-  const b = coach.quality * (0.5 + coachFit(coach, units) * 0.8); // 0.5 .. 3.9
+  // 2026-10-21: coaches matter more (a 3★ coach with a fitting roster ≈ +1-1.5 wins)
+  const b = coach.quality * (0.7 + coachFit(coach, units) * 1.5); // 0.7 .. 6.6
   switch (coach.scheme) {
     case "AIR": return { offPass: b, offRun: -b * 0.3, defPass: 0, defRun: 0 };
     case "GROUND": return { offPass: -b * 0.3, offRun: b, defPass: 0, defRun: 0 };

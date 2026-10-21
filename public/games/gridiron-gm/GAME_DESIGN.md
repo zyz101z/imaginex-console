@@ -124,6 +124,7 @@ Set weekly (or set-and-forget):
 2. ✅ Owner firing: **ON** — job security is real, with a forgiving early grace period.
 3. ✅ **Tooltip glossary: yes** (dead money, franchise tag, etc.) — build in P3.
 4. ⏳ Upset rate: explained to user, awaiting pick — Realistic (~65% favorite wins, real-NFL chaos) vs Chalkier (~72-75%, roster quality more reliably rewarded). Fallback: ship as a new-game "chaos" option (Realistic / Balanced) next to cap mode.
+   → 2026-10-21 STRATEGY PASS: talent dial +15% with soft-capped mismatches + 🎯 best-shot vs unbeaten 8-0+ teams; QB/star/OL-weak-link unit math; opponent-specific gameplan curve + OC's read; stronger coaches. Talent ≈57% of season wins, 17-0 ≈1 in 200 seasons. Measure with test/strategy.probe.mjs (see CHANGELOG).
 5. ✅ Roster snapshot (~2025-26, authored from knowledge) is **good enough to start**; rosters are editable JSON for hand-fixes.
 6. ✅ User's team: **MINNESOTA VIKINGS** — highest authoring care on their roster/depth chart; "does my team feel right" = the realism benchmark.
 7. ✅ Cap: **three new-game modes — Strict / Soft (luxury-tax style) / No cap** (see §6).

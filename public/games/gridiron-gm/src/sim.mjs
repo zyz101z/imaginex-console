@@ -4,7 +4,7 @@ import { teamUnits, depthChart, attr } from "./players.mjs";
 
 export const TUNE = {
   DRIVES_PER_TEAM: 11,
-  EDGE_SCALE: 0.0175,      // how strongly unit-rating gaps move drive outcomes (chalk dial; retuned after FG-range realism 2026-08-29)
+  EDGE_SCALE: 0.0201,      // how strongly unit-rating gaps move drive outcomes (chalk dial; +15% 2026-10-21 so roster building pays more)
   BASE_TD: 0.210,         // league-average per-drive TD prob
   BASE_FG_ATT: 0.21,      // per-drive FG attempt prob
   BASE_TO: 0.115,         // per-drive turnover prob
@@ -15,7 +15,40 @@ export const TUNE = {
   FIELD_POS_SCALE: 0.004, // TD-prob shift per yard of field position off the 25
   MATCHUP_CAP: 2.6,       // max rating-point swing from an individual matchup edge
   SAFETY_BASE: 0.055,     // safety chance when pinned inside the 8
+  EDGE_SOFTCAP: 16,       // huge mismatches flatten (C·tanh(x/C)): even powerhouses lay an egg now and then, so 17-0 stays rare
+  BEST_SHOT: 3.0,         // rating points an opponent finds vs. an UNBEATEN team from 8-0 on ("everyone's Super Bowl")
+  BEST_SHOT_FROM: 8,      // unbeaten win count where the target appears
+  PLAN_GAIN: 2.0,         // gameplan payoff: attacking the softer side of a defense is worth double the old linear slope...
+  PLAN_KEY: 25,           // ...but going one-dimensional lets the defense key on you (quadratic cost off the 55% base)
+  QB_TO: 0.012,           // per point of QB decision off 75: a smart QB protects the ball, a reckless one gives it away
 };
+
+// ---------------------------------------------------------------- gameplan
+// Pass lean 0.55 = the league-normal mix (bit-for-bit the old engine). Moving off it
+// earns PLAN_GAIN x the gap between your pass and run edges, minus a quadratic
+// "they key on it" cost, so the BEST lean depends on this week's opponent instead of
+// always being a slider extreme. A better offensive coach disguises tendencies (lower cost).
+export function planKey(coach) {
+  const q = coach ? coach.quality : 1;
+  return TUNE.PLAN_KEY * (1.15 - 0.15 * q);   // 1★ 25 · 2★ 21.3 · 3★ 17.5
+}
+export function planEdge(lean, passEdge, runEdge, key = TUNE.PLAN_KEY) {
+  const d = lean - 0.55;
+  return 0.55 * passEdge + 0.45 * runEdge + TUNE.PLAN_GAIN * (d * (passEdge - runEdge) - key * d * d);
+}
+export function bestLean(passEdge, runEdge, key = TUNE.PLAN_KEY) {
+  return Math.max(0.3, Math.min(0.75, 0.55 + (passEdge - runEdge) / (2 * key)));
+}
+// AI play-callers game-plan each opponent; better coaches read the matchup more sharply.
+// Scheme identity still tugs the call (AIR throws, GROUND runs).
+const SCHEME_LEAN = { AIR: 0.66, GROUND: 0.44, DEFENSE: 0.55, BALANCED: 0.55 };
+export function aiLean(coach, passEdge, runEdge) {
+  const q = coach ? coach.quality : 1;
+  const read = [0, 0.4, 0.65, 0.9][q];
+  const ideal = bestLean(passEdge, runEdge, planKey(coach));
+  const lean = 0.55 + (ideal - 0.55) * read + ((SCHEME_LEAN[coach && coach.scheme] ?? 0.55) - 0.55) * 0.4;
+  return Math.max(0.3, Math.min(0.75, lean));
+}
 
 // ---------------------------------------------------------------- weather & stadiums
 // Domes never see weather. Cold-city teams live in it late season — and are built for it
@@ -68,11 +101,22 @@ export function matchupEdges(offChart, defChart) {
   return { wrEdge, rushEdge, wr1, cb1, topRusher, weakOL };
 }
 
-function drivePlan(rng, offUnits, defUnits, passLean) {
+// individual matchups nudge the passing unit every drive (capped): a burner WR1 vs a slow
+// CB helps, a turnstile tackle vs an elite edge hurts. Shared by the sim, the AI play-callers
+// and the OC's read so the "best mix" is the real one.
+export function passMatchupAdj(mu) {
+  const wrBoost = Math.max(-TUNE.MATCHUP_CAP, Math.min(TUNE.MATCHUP_CAP, mu.wrEdge * 0.13));
+  const rushHit = Math.max(-TUNE.MATCHUP_CAP, Math.min(TUNE.MATCHUP_CAP, mu.rushEdge > 0 ? -mu.rushEdge * 0.16 : -mu.rushEdge * 0.06));
+  return wrBoost + rushHit;
+}
+
+function drivePlan(rng, offUnits, defUnits, passLean, key) {
   // Returns probabilities for this drive given matchup edges and gameplan
   const passEdge = offUnits.offPass - defUnits.defPass;
   const runEdge = offUnits.offRun - defUnits.defRun;
-  const blendedEdge = passLean * passEdge + (1 - passLean) * runEdge;
+  const raw = planEdge(passLean, passEdge, runEdge, key);
+  const C = TUNE.EDGE_SOFTCAP;
+  const blendedEdge = C ? C * Math.tanh(raw / C) : raw;
   const e = blendedEdge * TUNE.EDGE_SCALE;
   let td = TUNE.BASE_TD + e * 0.55;
   let fgAtt = TUNE.BASE_FG_ATT + e * 0.15;
@@ -97,12 +141,13 @@ function attributeDrive(rng, off, result, yards, chart, mu) {
   // The old per-drive floor handed a receiver 1 catch for a 3-yard scrap on
   // nearly every drive — box scores showed 10+ catches for under 30 yards, and
   // team totals read like 50 pass attempts + 40 rushes a game (user report).
-  // floor(post/rate) - floor(pre/rate) is deterministic (no rng draws) and
-  // converges every player to ~rate yards per touch across a season.
+  // ceil(post/rate) - ceil(pre/rate) is deterministic (no rng draws) and
+  // converges every player to ~rate yards per touch across a season — and a
+  // player's FIRST yards always come with a touch (floor allowed "9 yds, 0 rec").
   const touches = (stats, key, got, rate) => {
     const pre = stats[key];
     stats[key] += got;
-    return Math.floor(stats[key] / rate) - Math.floor(pre / rate);
+    return Math.ceil(Math.max(0, stats[key]) / rate) - Math.ceil(Math.max(0, pre) / rate);
   };
   // receivers — yds/catch grades by role: WR1s work downfield, slot guys and the
   // TE live short (a flat rate let a 2,100-yd mismatch monster rack up 180+ catches)
@@ -237,6 +282,24 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
   ];
   if (homeId === teamA.id) { ua.offPass += TUNE.HOME_EDGE / 2; ua.offRun += TUNE.HOME_EDGE / 2; }
   if (homeId === teamB.id) { ub.offPass += TUNE.HOME_EDGE / 2; ub.offRun += TUNE.HOME_EDGE / 2; }
+  // TARGET ON YOUR BACK: playWeek flags a team facing an unbeaten 8-0+ opponent (bestShot) —
+  // they bring their best game. Keeps 17-0 legendary without touching normal games.
+  for (const [t, u] of [[teamA, ua], [teamB, ub]]) {
+    if (t.bestShot) { u.offPass += TUNE.BEST_SHOT; u.offRun += TUNE.BEST_SHOT; u.defPass += TUNE.BEST_SHOT; u.defRun += TUNE.BEST_SHOT; }
+  }
+  // gameplan: the human's slider as set; AI play-callers (strategy.auto) read this matchup.
+  // No rng draws here — replay determinism untouched.
+  for (const side of sides) side.mAdj = passMatchupAdj(side.mu);
+  for (const [side, opp] of [[sides[0], sides[1]], [sides[1], sides[0]]]) {
+    const st = side.t.strategy;
+    side.key = planKey(side.t.coach);
+    side.lean = st && st.auto
+      ? aiLean(side.t.coach, side.u.offPass + side.mAdj - opp.u.defPass, side.u.offRun - opp.u.defRun)
+      : (st && st.passLean != null ? st.passLean : 0.55);
+    // QB decision-making feeds the turnover column (75 = league-normal)
+    const qb1 = side.chart.QB[0];
+    side.toMul = Math.max(0.75, Math.min(1.25, 1 - ((qb1 ? attr(qb1, "decision") : 75) - 75) * TUNE.QB_TO));
+  }
 
   const log = [];
   let scorerText = null;
@@ -249,17 +312,16 @@ export function simGame(rng, teamA, teamB, homeId, coachModsFn, weather = null, 
     const offIdx = d % 2, defIdx = 1 - offIdx;
     const off = sides[offIdx], def = sides[defIdx];
     const quarter = Math.min(4, 1 + Math.floor(d / (totalDrives / 4)));
-    const passLean = off.t.strategy ? off.t.strategy.passLean : 0.55;
+    const passLean = off.lean;
     const start = nextStart[offIdx];
     nextStart[offIdx] = 25; // consumed; scores/normal exchanges reset below
 
     // momentum as temp rating shift + individual-matchup edges (capped havoc)
-    const wrBoost = Math.max(-TUNE.MATCHUP_CAP, Math.min(TUNE.MATCHUP_CAP, off.mu.wrEdge * 0.13));
-    const rushHit = Math.max(-TUNE.MATCHUP_CAP, Math.min(TUNE.MATCHUP_CAP, off.mu.rushEdge > 0 ? -off.mu.rushEdge * 0.16 : -off.mu.rushEdge * 0.06));
     const offU = { ...off.u,
-      offPass: off.u.offPass + off.momentum + wrBoost + rushHit,
+      offPass: off.u.offPass + off.momentum + off.mAdj,
       offRun: off.u.offRun + off.momentum };
-    const p = drivePlan(rng, offU, def.u, passLean);
+    const p = drivePlan(rng, offU, def.u, passLean, off.key);
+    p.to = Math.max(0.03, p.to * off.toMul);
     // pressure mismatch also cooks up turnovers (strip sacks, hurried throws)
     if (off.mu.rushEdge > 5) p.to = Math.min(0.28, p.to + off.mu.rushEdge * 0.0028);
     // slick ball, numb hands: weather feeds the turnover column

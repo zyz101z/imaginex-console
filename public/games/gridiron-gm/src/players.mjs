@@ -201,23 +201,35 @@ export function depthChart(players) {
 function avgTopBy(list, n, fn) {
   const top = list.filter(p => p.injuredWeeks === 0).slice(0, n);
   if (top.length === 0) return 55;
-  return top.reduce((s, p) => s + fn(p), 0) / top.length;
+  return top.reduce((s, p) => s + star(fn(p)), 0) / top.length;
+}
+// STAR POWER: past 86, every rating point counts extra, so a 95 is worth more than
+// two 85s averaged. Elite players (and the scouting hit that finds one) move the needle.
+export const STAR_KNEE = 88, STAR_BONUS = 0.4;
+const star = v => v + Math.max(0, v - STAR_KNEE) * STAR_BONUS;
+// the offensive line is only as good as its weakest man: 70% the group, 30% the worst starter
+function lineBy(list, fn) {
+  const top = list.filter(p => p.injuredWeeks === 0).slice(0, 5);
+  if (top.length === 0) return 55;
+  const vals = top.map(fn);
+  return 0.7 * vals.reduce((s, v) => s + v, 0) / vals.length + 0.3 * Math.min(...vals);
 }
 
 // Unit strengths consumed by the sim — built from position ATTRIBUTES so lineup
 // choices (e.g. starting the better RUN BLOCKER over the higher overall) matter.
+// The QB is the biggest single lever (55% of the passing unit, plus turnovers in the sim).
 export function teamUnits(players) {
   const d = depthChart(players);
   const qb1 = d.QB[0];
-  const qbPass = qb1 ? 0.4 * attr(qb1, "accuracy") + 0.35 * attr(qb1, "arm") + 0.25 * attr(qb1, "decision") : 55;
+  const qbPass = qb1 ? star(0.4 * attr(qb1, "accuracy") + 0.35 * attr(qb1, "arm") + 0.25 * attr(qb1, "decision")) : 55;
   return {
     qb: qb1 ? qb1.ovr : 55,
-    offPass: 0.45 * qbPass
-      + 0.30 * avgTopBy(d.WR, 3, p => 0.4 * attr(p, "hands") + 0.35 * attr(p, "route") + 0.25 * attr(p, "speed"))
-      + 0.10 * avgTopBy(d.TE, 1, p => attr(p, "catching"))
-      + 0.15 * avgTopBy(d.OL, 5, p => attr(p, "passBlock")),
+    offPass: 0.55 * qbPass
+      + 0.25 * avgTopBy(d.WR, 3, p => 0.4 * attr(p, "hands") + 0.35 * attr(p, "route") + 0.25 * attr(p, "speed"))
+      + 0.08 * avgTopBy(d.TE, 1, p => attr(p, "catching"))
+      + 0.12 * lineBy(d.OL, p => attr(p, "passBlock")),
     offRun: 0.40 * avgTopBy(d.RB, 2, p => 0.55 * attr(p, "power") + 0.45 * attr(p, "speed"))
-      + 0.42 * avgTopBy(d.OL, 5, p => attr(p, "runBlock"))
+      + 0.42 * lineBy(d.OL, p => attr(p, "runBlock"))
       + 0.08 * avgTopBy(d.TE, 1, p => attr(p, "blocking"))
       + 0.10 * (qb1 ? attr(qb1, "mobility") : 55),
     defPass: 0.40 * avgTopBy(d.CB, 3, p => attr(p, "coverage"))
@@ -226,7 +238,8 @@ export function teamUnits(players) {
     defRun: 0.45 * avgTopBy(d.DL, 4, p => attr(p, "runStop"))
       + 0.40 * avgTopBy(d.LB, 3, p => 0.6 * attr(p, "runStop") + 0.2 * attr(p, "blitz") + 0.2 * attr(p, "coverage"))
       + 0.15 * avgTopBy(d.S, 2, p => attr(p, "runSupport")),
-    kicker: avgTopBy(d.K, 1, p => 0.6 * attr(p, "kickAcc") + 0.4 * attr(p, "kickPower")),
+    // kicking feeds FG range/make% directly — no star curve (it would stretch range)
+    kicker: (k => k ? 0.6 * attr(k, "kickAcc") + 0.4 * attr(k, "kickPower") : 55)(d.K.find(p => p.injuredWeeks === 0)),
   };
 }
 

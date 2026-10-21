@@ -1,7 +1,7 @@
 // Season scaffolding: schedule, standings, playoffs. (P0: simplified 17-game schedule —
 // 6 divisional + 11 cross-slate; real NFL formula fidelity is a P1 nicety.)
 import { TEAMS } from "./data_teams.mjs";
-import { simGame } from "./sim.mjs";
+import { simGame, TUNE } from "./sim.mjs";
 import { makeRng } from "./rng.mjs";
 
 export function makeSchedule(rng, seasonNum = 1) {
@@ -172,6 +172,10 @@ export function playWeek(rng, league, schedule, week, standings, strategies = {}
     if (game.played) continue;
     const home = { id: game.home, players: league[game.home], strategy: strategies[game.home], coach: coaches[game.home] };
     const away = { id: game.away, players: league[game.away], strategy: strategies[game.away], coach: coaches[game.away] };
+    // an unbeaten 8-0+ team gets everyone's best shot (sim reads team.bestShot)
+    const unbeaten = id => standings[id] && standings[id].l === 0 && standings[id].w >= TUNE.BEST_SHOT_FROM;
+    if (unbeaten(game.away)) home.bestShot = true;
+    if (unbeaten(game.home)) away.bestShot = true;
     const wx = weatherFn ? weatherFn(game.home, week) : null;
     const isUsers = hooks && (game.home === hooks.teamId || game.away === hooks.teamId);
     if (isUsers) {

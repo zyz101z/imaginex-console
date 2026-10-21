@@ -1,5 +1,34 @@
 # GRIDIRON GM — Changelog / State of the Game
 
+## 2026-10-21 (later) — 🧠 STRATEGY PASS: stars, QBs, gameplan, coaches, talent dial
+Why: user — "players who strategize with a good team build, or draft really well, should benefit; sometimes it feels
+pretty random" (keep upsets; no easy 17-0s). Measured first with NEW test/strategy.probe.mjs (pass an old src/ dir to
+compare engines): talent explained 52% of season wins, +10 QB ≈ +10 CB (~0.3-0.9 wins), the pass-lean slider was linear
+(best answer always an extreme), a 3★ coach ≈ +0.5 wins.
+- TALENT DIAL: EDGE_SCALE 0.0175 → 0.0201 (+15%).
+- QB = biggest lever: 55% of the pass unit (was 45%; WR 25 / TE 8 / OL 12), and QB decision scales the turnover rate
+  (TUNE.QB_TO, ×0.75-1.25). +10 QB now ≈ +1.6-1.8 wins.
+- STAR POWER (players.mjs): unit ratings past 88 count 1.4× (STAR_KNEE/STAR_BONUS) — elite players and sleeper hits
+  matter more. Kicker excluded (it feeds FG range directly).
+- OL WEAK LINK: line units = 70% group average + 30% worst starter. Fixing your worst lineman beats upgrading your best.
+- GAMEPLAN CURVE (planEdge): lean 0.55 is bit-for-bit the old engine; off it you earn PLAN_GAIN(2)× the pass-vs-run edge
+  gap minus a quadratic "they key on it" cost (PLAN_KEY 25, lowered by coach stars) → best lean = bestLean(), different
+  per opponent. passMatchupAdj() (WR/CB + pass-rush matchups) shared by sim, AI and UI. AI play-callers (strategy.auto,
+  set in aiStrategies) game-plan each opponent via aiLean(): 1★ reads 40% of the ideal, 3★ 90%, scheme tugs the call.
+- 📋 OC's READ on THIS WEEK (replaces the one-line hint): pass/run edges + best mix, fogged by your coach's stars
+  (±12/±7/±3, seeded per week), USE button, ⚠️ when you're 20+ pts off.
+- COACHES: bonus = stars × (0.7 + fit×1.5) (was 0.5 + fit×0.8; max 6.6). A fitting 3★ ≈ +1-1.2 wins; stars also sharpen
+  the OC read and disguise lopsided gameplans.
+- ANTI-17-0: EDGE_SOFTCAP 16 (C·tanh(x/C) on the drive edge — giant mismatches flatten) + 🎯 BEST SHOT: an unbeaten
+  8-0+ team's opponents get +3 all units (season.mjs flags team.bestShot; THIS WEEK card says so).
+- Fixes found on the way: touch counting floor→ceil (a fringe WR could log "9 yds, 0 rec"); blitz back-compat test
+  leaked game-1 injuries into game 2 (fresh league per game).
+- RESULTS (old → new): talent share of wins 0.52 → 0.57; best roster 12.7 → 13.0 avg wins; 17-0 seasons 1/200 →
+  2/400; super-team (+6 every starter) 17-0 15.5% → 10%; gap-5 favorite 75% → 79%, gap 0-1 still a coin flip.
+  All rng-draw-neutral (no new draws) — Coach's Call replays unaffected.
+- Batteries: sim 3,026 / gm 18,709 (coach band 4.5 → 7) / league probe 44 / balance probe 30 (Spearman 0.75 → 0.83).
+  Headless season: OC read + USE verified, full season → playoffs → season card, no errors. ?v=20261021b.
+
 ## 2026-10-21 — 🏈 2026 ROSTERS + 🎬 MOMENT CARDS + 📇 SHAREABLE SEASON CARD
 - ROSTERS → 2026 season (data_rosters.mjs). Research from dated 2026 sources (scratchpad roster_moves.json /
   rookies_2026.json): 221 moves (offseason trades/FA/releases/retirements + in-season trades thru Oct 11), 60 rookies

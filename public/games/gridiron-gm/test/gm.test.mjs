@@ -156,7 +156,7 @@ check("all contracts valid", badC === 0, badC);
   check("air coach boosts pass", coachMods(airCoach, uGood).offPass > 0);
   check("air coach taxes run", coachMods(airCoach, uGood).offRun < 0);
   check("fit scales bonus", coachMods(airCoach, uGood).offPass > coachMods(airCoach, uBad).offPass);
-  band("max coach bonus sane", coachMods(airCoach, { offPass: 99, offRun: 78, defPass: 78, defRun: 78 }).offPass, 1, 4.5);
+  band("max coach bonus sane", coachMods(airCoach, { offPass: 99, offRun: 78, defPass: 78, defRun: 78 }).offPass, 1, 7);
   const dCoach = { name: "D", scheme: "DEFENSE", quality: 2 };
   check("defense coach boosts both def units", coachMods(dCoach, uGood).defPass > 0 && coachMods(dCoach, uGood).defRun > 0);
   // sim accepts coaches without exploding

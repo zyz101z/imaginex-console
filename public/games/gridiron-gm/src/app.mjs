@@ -2,7 +2,7 @@
 // on a ~30s drive ticker, standings/roster/leaders/schedule views, localStorage saves.
 import { makeRng } from "./rng.mjs";
 import { buildLeague, emptyStats, depthChart, teamUnits, TEMPLATE, ATTR_DEFS, attr, ensureAttrs, bumpNextId } from "./players.mjs";
-import { simGame, matchupEdges, gameWeather, STADIUM } from "./sim.mjs";
+import { simGame, matchupEdges, gameWeather, STADIUM, TUNE, planKey, bestLean, passMatchupAdj } from "./sim.mjs";
 import { makeSchedule, emptyStandings, playWeek, simPlayoffs, seeds, nextPlayoffRound, replayUserGame } from "./season.mjs";
 import { TEAMS, TEAM_BY_ID } from "./data_teams.mjs";
 import { sfx, playDrive, setMuted, isMuted, startCrowd, stopCrowd, playMusic, stopMusic, setDuck } from "./sfx.mjs";
@@ -238,6 +238,34 @@ function viewStandings() {
   return html;
 }
 
+// 📋 OC's weekly read: the pass lean that best attacks THIS defense. The ideal comes from
+// the same math the sim uses (planEdge), seen through your coach's eyes: a 3★ staff
+// reads it within a few points, a 1★ staff can be well off (seeded per week, no rerolls).
+function gameplanRead(g, opp, mu, ou, oc, myAtk) {
+  const myC = S.coaches[S.teamId];
+  const withMods = (u, c) => { const m = coachMods(c, u); return { ...u, offPass: u.offPass + m.offPass, offRun: u.offRun + m.offRun, defPass: u.defPass + m.defPass, defRun: u.defRun + m.defRun }; };
+  const me = withMods(mu, myC), them = withMods(ou, oc);
+  const h = g.home === S.teamId ? TUNE.HOME_EDGE / 2 : 0;
+  const pE = me.offPass + h + passMatchupAdj(myAtk) - them.defPass, rE = me.offRun + h - them.defRun;
+  const q = myC ? myC.quality : 1;
+  const ideal = bestLean(pE, rE, planKey(myC)) * 100;
+  let hsh = (S.seed ^ Math.imul(S.seasonNum, 2654435761) ^ Math.imul(S.week + 7, 40503)) >>> 0;
+  hsh = Math.imul(hsh ^ (hsh >>> 15), 2246822519) >>> 0;
+  const fog = [0, 12, 7, 3][q];
+  const read = Math.max(30, Math.min(75, Math.round((ideal + ((hsh % 2001) / 1000 - 1) * fog) / 5) * 5));
+  const yours = Math.round((S.strategy ? S.strategy.passLean : 0.55) * 100);
+  const sg = v => (v >= 0 ? "+" : "") + v.toFixed(0);
+  let out = `<span class="win tt" title="Edges = your offense (with coach, home field and this week's individual matchups) minus their defense (with their coach). Attack the bigger edge — but lean too hard one way and they key on it. Your coach's stars decide how sharp this read is (★★★ within a few points) and how well your play-calling disguises a lopsided mix.">📋 OC's read: pass edge <b>${sg(pE)}</b> · run edge <b>${sg(rE)}</b> → best mix ≈ <b>${read}% pass</b> (${"★".repeat(q)} staff, ±${fog}).</span> `
+    + `<span class="dim">Yours: ${yours}%</span>`
+    + (Math.abs(yours - read) >= 10 ? ` <button class="mini" onclick="__gm.setLean(${read})">USE ${read}%</button>` : " ✓");
+  if (Math.abs(yours - read) >= 20) out += `<br><span class="loss">⚠️ ${yours > read ? "Pass" : "Run"}-heavy by ${Math.abs(yours - read)} pts — they'll key on it.</span>`;
+  // TARGET ON YOUR BACK (season.mjs/sim.mjs): unbeaten 8-0+ teams get everyone's best shot
+  const unbeaten = id => { const st = S.standings[id]; return st && st.l === 0 && st.w >= TUNE.BEST_SHOT_FROM; };
+  if (unbeaten(S.teamId)) out += `<br><span class="loss tt" title="Every opponent plays an unbeaten team like it's their Super Bowl: +${TUNE.BEST_SHOT} to all their units. Perfect seasons are supposed to be legendary.">🎯 You're unbeaten — ${teamName(opp)} will bring their best shot.</span>`;
+  else if (unbeaten(opp)) out += `<br><span class="win tt" title="Your guys get up for an unbeaten opponent: +${TUNE.BEST_SHOT} to all your units this week.">🎯 They're unbeaten — your locker room is fired up for this one.</span>`;
+  return out;
+}
+
 function viewRoster() {
   const chart = depthChart(S.league[S.teamId]);
   const u = teamUnits(S.league[S.teamId]);
@@ -245,7 +273,7 @@ function viewRoster() {
   const agg = Math.round(((S.strategy && S.strategy.aggression != null) ? S.strategy.aggression : 0.5) * 100);
   const defAgg = Math.round(((S.strategy && S.strategy.defAggression != null) ? S.strategy.defAggression : 0.5) * 100);
   let html = `<div class="units dim">Off Pass ${u.offPass.toFixed(0)} · Off Run ${u.offRun.toFixed(0)} · Def Pass ${u.defPass.toFixed(0)} · Def Run ${u.defRun.toFixed(0)}</div>
-  <div class="units"><label class="tt" title="Gameplan: how pass-heavy your offense plays. Lean toward your stronger unit and your opponent's weaker defense.">Gameplan — Pass lean: <b id="leanVal">${lean}%</b></label>
+  <div class="units"><label class="tt" title="Gameplan: how pass-heavy your offense plays. Attack the softer side of THIS week's defense (see the OC's read on the Season page) — but going too one-dimensional lets them key on it, so the best mix changes opponent to opponent.">Gameplan — Pass lean: <b id="leanVal">${lean}%</b></label>
     <input type="range" min="30" max="75" value="${lean}" style="width:220px;vertical-align:middle"
       oninput="document.getElementById('leanVal').textContent=this.value+'%'"
       onchange="__gm.setLean(this.value)">
@@ -342,7 +370,6 @@ function viewSchedule() {
       const ou = teamUnits(S.league[opp]);
       const mu = teamUnits(S.league[S.teamId]);
       const oc = S.coaches[opp];
-      const weakRun = ou.defRun <= ou.defPass;
       const myChart = depthChart(S.league[S.teamId]);
       const oppChart = depthChart(S.league[opp]);
       const myAtk = matchupEdges(myChart, oppChart);
@@ -385,7 +412,7 @@ function viewSchedule() {
         : `<br><span class="loss">🧊 ${streak} straight losses — this one has to stop the bleeding.</span>`;
       html += `<div class="coachcard"><b>THIS WEEK:</b> ${g.home === S.teamId ? "vs" : "@"} ${logo(opp)} <b>${teamName(opp)}</b> (${rec(opp)}) — ${SCHEMES[oc.scheme].name} team<br>
         <span class="dim">Their D: pass ${ou.defPass.toFixed(0)} / run ${ou.defRun.toFixed(0)} · Your O: pass ${mu.offPass.toFixed(0)} / run ${mu.offRun.toFixed(0)}</span>${mmHtml}${wxHtml}${nHtml}<br>
-        <span class="win">Gameplan hint: they're softer against the ${weakRun ? "RUN — lean your slider down" : "PASS — let it fly"}.</span></div>`;
+        ${gameplanRead(g, opp, mu, ou, oc, myAtk)}</div>`;
     }
   }
   html += "<table><tr class='hdr'><td>Wk</td><td>Matchup</td><td>Result</td></tr>";
@@ -991,7 +1018,8 @@ function viewCoach() {
   let html = `<h2>Coaching & Team Identity</h2>` + coachCard(c,
     `<br><span class="tt" title="How well your roster suits the scheme. Build the right units and the identity bonus grows.">Roster fit: <b>${Math.round(fit * 100)}%</b></span>
      · Effect: <span class="dim">Pass off ${fmt(m.offPass)} · Run off ${fmt(m.offRun)} · Pass def ${fmt(m.defPass)} · Run def ${fmt(m.defRun)}</span>`);
-  html += `<p class="dim small">Your coach's scheme is your team identity. Want a "defense team"? Hire a Defense First coach and stack defenders — the fit bonus amplifies them. Identity changes are offseason-only (free agency window).</p>`;
+  html += `<p class="dim small">Your coach's scheme is your team identity. Want a "defense team"? Hire a Defense First coach and stack defenders — the fit bonus amplifies them. Identity changes are offseason-only (free agency window).
+    Stars matter beyond the bonus: a ★★★ staff reads each opponent sharply (OC's read on the Season page) and disguises a lopsided gameplan, so you can lean harder before defenses key on it.</p>`;
   if (S.phase === "freeagency" && S.coachMarket.length) {
     html += `<h3>Available coaches (hire replaces your current coach)</h3>`;
     S.coachMarket.forEach((cand, i) => {
@@ -2034,7 +2062,7 @@ function userCut(playerId) {
 }
 function setLean(v) {
   S.strategy.passLean = Math.max(0.3, Math.min(0.75, (+v) / 100));
-  save();
+  save(); render();
 }
 function setAgg(v) {
   S.strategy.aggression = Math.max(0.2, Math.min(0.8, (+v) / 100));
@@ -2395,7 +2423,7 @@ function aiStrategies() {
     const sch = (S.coaches[t.id] || {}).scheme;
     strategies[t.id] = { passLean: sch === "AIR" ? 0.66 : sch === "GROUND" ? 0.44 : 0.55,
       aggression: sch === "AIR" ? 0.58 : sch === "DEFENSE" ? 0.42 : sch === "GROUND" ? 0.46 : 0.5,
-      defAggression: sch === "DEFENSE" ? 0.62 : sch === "GROUND" ? 0.46 : 0.5 };
+      defAggression: sch === "DEFENSE" ? 0.62 : sch === "GROUND" ? 0.46 : 0.5, auto: true };
   }
   return strategies;
 }
