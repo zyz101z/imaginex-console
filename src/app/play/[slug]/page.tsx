@@ -142,6 +142,7 @@ export default async function PlayPage({ params }: { params: Promise<{ slug: str
               );
             })}
           </div>
+          <p className="mt-4"><Link href="/games" className="text-sm font-semibold hover:underline" style={{ color: game.color }}>Browse all {gameSeo.length} free games →</Link></p>
           <p className="mt-6 text-sm text-gray-500">
             ImagineX is a free web gaming console — every game plays instantly in your browser with
             no downloads, no ads between you and the fun, and leaderboards to fight over.

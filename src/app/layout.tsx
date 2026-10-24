@@ -20,14 +20,14 @@ export const metadata: Metadata = {
   verification: process.env.NEXT_PUBLIC_GSC_TOKEN ? { google: process.env.NEXT_PUBLIC_GSC_TOKEN } : undefined,
   title: "ImagineX — Play Amazing Web Games",
   description:
-    "ImagineX is a free web gaming console. Play Tennis World, Bloot, Froggo Adventure, Divided States and more — right in your browser, no downloads.",
+    "ImagineX is a free web gaming console with 12 games that play instantly in your browser: Gridiron GM football franchise sim, Tank Wars, Crazy Golf Kingdom 3D mini golf, Pig Merge Tycoon, Divided States, Freight Nation, Creature Cove, X-Bros, Froggo Adventure, Tennis World, Bloot and Wilson's Spray World. No downloads.",
   openGraph: {
     type: "website",
     url: "https://www.imaginex.games",
     siteName: "ImagineX",
     title: "ImagineX — Play Amazing Web Games",
     description:
-      "A free web gaming console. Play Tennis World, Bloot, Froggo Adventure, Divided States and more — right in your browser.",
+      "12 free browser games: Gridiron GM, Tank Wars, Crazy Golf Kingdom, Pig Merge Tycoon, Divided States, Freight Nation, Creature Cove, X-Bros and more. No downloads.",
     images: [
       { url: "/og-image.png", width: 1200, height: 630, alt: "ImagineX — web gaming console" },
     ],
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ImagineX — Play Amazing Web Games",
     description:
-      "A free web gaming console. Play Tennis World, Bloot, Froggo, Divided States and more — in your browser.",
+      "12 free browser games: Gridiron GM, Tank Wars, Crazy Golf Kingdom, Pig Merge Tycoon, Divided States and more. No downloads.",
     images: ["/og-image.png"],
   },
 };

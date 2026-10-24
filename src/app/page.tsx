@@ -3,6 +3,7 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { games, Game } from "@/lib/games";
+import { gameSeoById } from "@/lib/gameSeo";
 import {
   getProfile,
   saveProfile,
@@ -92,6 +93,9 @@ function formatPlayTime(seconds: number): string {
 }
 
 // --- Boot Screen ---
+// Launched games with a /play landing page (gameSeo is the public-games source of truth).
+const publicGames = games.filter((g) => g.status === "available" && gameSeoById(g.id));
+
 function BootScreen({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onDone, 3000);
@@ -117,6 +121,39 @@ function BootScreen({ onDone }: { onDone: () => void }) {
       <p className="mt-8 text-sm text-gray-500 animate-pulse">
         Press anywhere to continue
       </p>
+
+      {/* Crawlable catalog. This is the only markup in the home page's server HTML, so it is what
+          search engines and AI assistants see when they read the site as text: every launched game,
+          one sentence each, linking to its server-rendered /play page. Visible, small, and honest. */}
+      <nav aria-label="All games" className="absolute bottom-6 left-0 right-0 px-6 text-center" onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs text-gray-500">
+          Free browser games — no download:{" "}
+          {publicGames.map((g, i) => (
+            <span key={g.id}>
+              {i > 0 && <span className="text-gray-700"> · </span>}
+              <a href={`/play/${g.id}`} className="text-gray-400 hover:text-white" title={g.description}>{g.title}</a>
+            </span>
+          ))}
+          <span className="text-gray-700"> · </span>
+          <a href="/games" className="text-gray-400 hover:text-white">Browse all games →</a>
+        </p>
+      </nav>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            name: "Free browser games on ImagineX",
+            itemListElement: publicGames.map((g, i) => ({
+              "@type": "ListItem",
+              position: i + 1,
+              url: `https://www.imaginex.games/play/${g.id}`,
+              item: { "@type": "VideoGame", name: g.title, description: g.description, genre: g.genre, gamePlatform: "Web browser" },
+            })),
+          }),
+        }}
+      />
     </div>
   );
 }
