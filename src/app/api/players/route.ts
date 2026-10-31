@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const pid = String(body.pid ?? "");
   const nickname = String(body.nickname ?? "").trim().slice(0, 20);
   if (!/^[0-9a-f]{24}$/.test(pid)) return NextResponse.json({ error: "bad pid" }, { status: 400 });
-  if (!nickname || containsProfanity(nickname)) return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
+  if (!nickname || containsProfanity(nickname) || /[<>"`\\]|[\u0000-\u001f\u007f]/.test(nickname)) return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
   const avatarColor = /^#[0-9a-fA-F]{3,8}$/.test(String(body.avatarColor ?? "")) ? String(body.avatarColor) : "#4fc3f7";
   const createdAt = Number(body.createdAt) > 0 ? Number(body.createdAt) : Date.now();
   const gamesIn = (body.games && typeof body.games === "object" ? body.games : {}) as Record<string, Partial<GameStat>>;

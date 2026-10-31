@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
   const score = Number(body.score);
 
   if (!nickname) return NextResponse.json({ error: "nickname required" }, { status: 400 });
+  // Defence in depth: several game UIs render boards via innerHTML — never store markup characters.
+  if (/[<>"`\\]|[\u0000-\u001f\u007f]/.test(nickname))
+    return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
   if (containsProfanity(nickname))
     return NextResponse.json({ error: "nickname rejected" }, { status: 400 });
   if (!validGame(gameId))

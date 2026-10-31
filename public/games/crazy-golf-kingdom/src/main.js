@@ -222,6 +222,7 @@ function finishAce(pts) {
   postAce(isBest ? pts : null);
 }
 function profileName() { try { const p = JSON.parse(localStorage.getItem('imaginex_profile') || 'null'); return p && p.nickname ? String(p.nickname).trim().slice(0, 16) : ''; } catch (e) { return ''; } }
+function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function nameFor() { return profileName() || (save.name || '').trim().slice(0, 16); }
 function dailyId() { return 'crazy-golf-daily-' + aceKey(); }
 // ---------- leaderboards: fetch/post helpers + the in-game screen ----------
@@ -251,7 +252,7 @@ $('lbNameBtn').onclick = () => { const v = ($('lbNameInput').value || '').trim()
 for (const tab of document.querySelectorAll('.lbTab')) tab.onclick = () => { for (const t of document.querySelectorAll('.lbTab')) t.classList.toggle('sel', t === tab); for (const pane of document.querySelectorAll('.lbPane')) pane.classList.toggle('on', pane.id === tab.dataset.pane); };
 function postAce(pts) {
   const box = $('aceBoard'); const render = (rows) => { if (!rows) { box.textContent = 'Board unavailable offline.'; return; }
-    box.innerHTML = `<b style="color:#ffe082">Today's top 10</b><div style="display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;text-align:left;margin:6px auto 0;max-width:320px">` + (rows.slice(0, 10).map((r, i) => `<span>${i + 1}.</span><span style="${r.nickname === nameFor() ? 'color:#ffd166;font-weight:800' : ''}">${String(r.nickname).slice(0, 16)}</span><span>${r.score}</span>`).join('') || '<span></span><span>No aces yet — be first!</span><span></span>') + '</div>' + (nameFor() ? '' : `<div style="margin-top:8px">Post your score: <input id="aceName" maxlength="16" placeholder="your name" style="padding:6px 10px;border-radius:8px;border:1px solid #888;background:#0b1024;color:#fff"> <button class="btn small ghost" id="aceNameBtn">POST</button></div>`); 
+    box.innerHTML = `<b style="color:#ffe082">Today's top 10</b><div style="display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;text-align:left;margin:6px auto 0;max-width:320px">` + (rows.slice(0, 10).map((r, i) => `<span>${i + 1}.</span><span style="${r.nickname === nameFor() ? 'color:#ffd166;font-weight:800' : ''}">${escHtml(String(r.nickname).slice(0, 16))}</span><span>${Number(r.score)}</span>`).join('') || '<span></span><span>No aces yet — be first!</span><span></span>') + '</div>' + (nameFor() ? '' : `<div style="margin-top:8px">Post your score: <input id="aceName" maxlength="16" placeholder="your name" style="padding:6px 10px;border-radius:8px;border:1px solid #888;background:#0b1024;color:#fff"> <button class="btn small ghost" id="aceNameBtn">POST</button></div>`); 
     const nb = $('aceNameBtn'); if (nb) nb.onclick = () => { const v = ($('aceName').value || '').trim().slice(0, 16); if (!v) return; save.name = v; persist(save); postAce(save.aceBest[aceKey()]); }; };
   const fetchBoard = () => fetch('/api/leaderboard?gameId=' + aceId()).then(r => r.ok ? r.json() : []).then(rows => render(Array.isArray(rows) ? rows : [])).catch(() => render(null));
   if (pts != null && nameFor() && pts > 0) postBoard(aceId(), pts).finally(fetchBoard); else fetchBoard();

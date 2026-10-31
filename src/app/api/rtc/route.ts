@@ -40,22 +40,23 @@ export async function POST(req: Request) {
   // key is configured (Vercel env: METERED_TURN_APP + METERED_TURN_KEY). Cached 20 min.
   if (action === "ice") {
     const fallback = [{ urls: "stun:stun.l.google.com:19302" }];
-    // Static Metered TURN credentials (user's account, from the dashboard's ICE-servers
-    // array — these are client-distributable by design). EMPIRICALLY VERIFIED to grant
-    // relay candidates 2026-07-02. The env-key minting path below is preferred when it
-    // works; this static set is the reliable floor.
-    const STATIC_TURN = [
+    // Static Metered TURN credentials come from Vercel env (METERED_TURN_STATIC_USER /
+    // METERED_TURN_STATIC_CRED) — never hard-code them: this repo is public and the old
+    // in-source pair had to be rotated (2026-10-31). Without them we fall back to STUN only.
+    const su = process.env.METERED_TURN_STATIC_USER;
+    const sc = process.env.METERED_TURN_STATIC_CRED;
+    const STATIC_TURN = su && sc ? [
       { urls: "stun:stun.relay.metered.ca:80" },
-      { urls: "turn:global.relay.metered.ca:80", username: "a24403e44cb4c7c34ae4588a", credential: "G2mD7ZeimHzyjn1I" },
-      { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "a24403e44cb4c7c34ae4588a", credential: "G2mD7ZeimHzyjn1I" },
-      { urls: "turn:global.relay.metered.ca:443", username: "a24403e44cb4c7c34ae4588a", credential: "G2mD7ZeimHzyjn1I" },
-      { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "a24403e44cb4c7c34ae4588a", credential: "G2mD7ZeimHzyjn1I" },
-    ];
+      { urls: "turn:global.relay.metered.ca:80", username: su, credential: sc },
+      { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: su, credential: sc },
+      { urls: "turn:global.relay.metered.ca:443", username: su, credential: sc },
+      { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: su, credential: sc },
+    ] : [];
     const staticIce = [...fallback, ...STATIC_TURN];
     const app = process.env.METERED_TURN_APP;
     const key = process.env.METERED_TURN_KEY;
     if (!app || !key) {
-      return NextResponse.json({ iceServers: staticIce, turn: true, mode: "static" });
+      return NextResponse.json({ iceServers: staticIce, turn: STATIC_TURN.length > 0, mode: "static" });
     }
     // tolerate the full domain being pasted as the app name ("foo.metered.live" -> "foo")
     const appName = app.replace(/\.metered\.live.*$/i, "").replace(/^https?:\/\//i, "").trim();
@@ -83,10 +84,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ iceServers: ice, turn: true });
     } catch (e) {
       // minting failed (e.g. the dashboard key mismatch) -> static credentials still work
-      return NextResponse.json({
-        iceServers: staticIce, turn: true, mode: "static",
-        reason: "mint failed at step=" + step + ": " + String(e).slice(0, 160),
-      });
+      console.error("TURN mint failed at step=" + step + ": " + String(e).slice(0, 200));
+      return NextResponse.json({ iceServers: staticIce, turn: STATIC_TURN.length > 0, mode: "static" });
     }
   }
 

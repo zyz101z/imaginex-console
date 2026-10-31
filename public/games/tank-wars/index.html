@@ -1452,8 +1452,10 @@ function boardRowsHtml(rows) {
   return rows.slice(0, 10).map((r, i) =>
     '<div style="display:flex;justify-content:space-between;padding:3px 10px;' +
     (r.nickname === profile.pilot ? 'color:#ffd166;font-weight:800;' : '') + '">' +
-    '<span>' + (i + 1) + '. ' + String(r.nickname).slice(0, 16) + '</span><span>wave ' + r.score + '</span></div>').join('');
+    '<span>' + (i + 1) + '. ' + escHtml(String(r.nickname).slice(0, 16)) + '</span><span>wave ' + Number(r.score) + '</span></div>').join('');
 }
+function escHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
 // victory-overlay board: name entry on first use, then auto-submit + top 10
 function showDailyBoardOnVictory() {
   const box = document.getElementById('dailyBoard');
