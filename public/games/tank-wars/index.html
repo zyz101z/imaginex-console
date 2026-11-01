@@ -4005,7 +4005,9 @@ async function rtcJoin(code) {
     rtcEl('rtcNote').textContent = 'network paths ready: ' + rtcCandSummary(rtcPC.localDescription);
     rtcArmFailTimer();
   } catch (e) {
-    rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).' : ('Error: ' + e.message));
+    rtcSetState(e.message === 'not_found' ? 'No room with that code (codes expire after 5 min).'
+      : e.message === 'room_taken' ? 'Someone already joined that room. Ask the host for a new code.'
+      : ('Error: ' + e.message));
   }
 }
 

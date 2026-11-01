@@ -108,7 +108,12 @@ export async function POST(req: Request) {
   }
   if (action === "answer") {
     if (!code || !sdp) return bad("bad request");
-    await redis.set(`rtc:${code}:answer`, sdp, { ex: TTL });
+    if (!(await redis.exists(`rtc:${code}:offer`))) return bad("not_found", 404);
+    // Write-once: the first guest to answer owns the room. A later "answer" to the same code
+    // (a stale retry or someone scanning 4-char codes) can no longer replace the real guest.
+    const ok = await redis.set(`rtc:${code}:answer`, sdp, { nx: true, ex: TTL });
+    if (!ok) return bad("room_taken", 409);
+    await redis.del(`rtc:${code}:offer`);   // room is paired; stop handing the offer out
     return NextResponse.json({ ok: true });
   }
   if (action === "poll") {
