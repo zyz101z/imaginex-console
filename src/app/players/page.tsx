@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { games } from "@/lib/games";
 
-type Player = { pid: string; nickname: string; avatarColor: string; createdAt: number; firstSeen: number; lastSeen: number; country: string; place: string; games: Record<string, { playTime: number; lastPlayed: number }>; best: Record<string, number>; source?: string; landing?: string };
+type Player = { nickname: string; avatarColor: string; createdAt: number; firstSeen: number; lastSeen: number; country: string; place: string; games: Record<string, { playTime: number; lastPlayed: number }>; best: Record<string, number>; source?: string; landing?: string };
 
 const name = (id: string) => games.find((g) => g.id === id)?.title ?? id;
 const flag = (cc: string) => (/^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : "");
@@ -36,10 +36,10 @@ export default function PlayersPage() {
               <tbody>
                 {players.length === 0 && <tr><td colSpan={8} className="py-3 text-gray-400">No profiles synced yet. They appear the next time a player with a profile opens the site.</td></tr>}
                 {players.map((p) => {
-                  const isOpen = open === p.pid; const [, reg, city] = p.place.split("/");
+                  const rowKey = p.nickname + "|" + p.firstSeen; const isOpen = open === rowKey; const [, reg, city] = p.place.split("/");
                   return (
                     <>
-                      <tr key={p.pid} className="border-t border-white/10 cursor-pointer hover:bg-white/5" onClick={() => setOpen(isOpen ? null : p.pid)}>
+                      <tr key={rowKey} className="border-t border-white/10 cursor-pointer hover:bg-white/5" onClick={() => setOpen(isOpen ? null : rowKey)}>
                         <td className="py-2 flex items-center gap-2"><span className="w-6 h-6 rounded-full inline-flex items-center justify-center text-black font-black text-xs" style={{ background: p.avatarColor }}>{p.nickname.charAt(0).toUpperCase()}</span>{p.nickname}</td>
                         <td>{flag(p.country)} {[city, reg].filter(Boolean).join(", ") || p.country || "—"}</td>
                         <td className="text-gray-400" title={p.landing || ""}>{p.source || "—"}</td>
@@ -50,7 +50,7 @@ export default function PlayersPage() {
                         <td className="text-right">{Object.keys(p.best).length}</td>
                       </tr>
                       {isOpen && (
-                        <tr key={p.pid + "-d"} className="bg-white/5"><td colSpan={8} className="p-3">
+                        <tr key={rowKey + "-d"} className="bg-white/5"><td colSpan={8} className="p-3">
                           <div className="grid md:grid-cols-2 gap-x-8 gap-y-1 text-xs">
                             {Array.from(new Set([...Object.keys(p.games), ...Object.keys(p.best)])).map((id) => (
                               <div key={id} className="flex justify-between border-b border-white/10 py-1"><span>{name(id)}</span><span className="text-gray-300">{p.games[id] ? `${fmtTime(p.games[id].playTime)} · ${ago(p.games[id].lastPlayed)}` : "—"}{p.best[id] != null && <b className="ml-3 text-amber-300">best {p.best[id].toLocaleString()}</b>}</span></div>

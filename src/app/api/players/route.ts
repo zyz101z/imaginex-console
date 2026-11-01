@@ -93,7 +93,9 @@ export async function GET() {
     }
   });
   return NextResponse.json(
-    { players: players.map((pl) => ({ ...pl, best: best[pl.nickname] || {} })), generatedAt: Date.now() },
+    // pid is deliberately omitted: it is the only credential needed to overwrite a profile via POST.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    { players: players.map(({ pid: _pid, ...pl }) => ({ ...pl, best: best[pl.nickname] || {} })), generatedAt: Date.now() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
